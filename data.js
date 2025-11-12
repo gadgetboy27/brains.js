@@ -1,20 +1,83 @@
-function bit() {
-    string = "at cost since owner series responce diamond shadow suit legal mass addict ozone",
-        "1GxYagSsSZssB1H8mjeGzuzAhC1hSEVzVT",
-        "1NhJTvwpS8hZh8JKSeWvBUe1hT5bAg13zj"
-}
-console.log(bit)
+// Training data for brain.js neural network
+// This data can be used to train a classifier to distinguish between software and hardware related text
 
-function mon() {
-    string = "kept website vats smidgen fawns inroads relic unquoted theatrics huddle fall behind maps fancy cigar budget jewels haggled solved olympics evicted navy waxing woken olympics",
-        "Wallet Height restore, 2392857"
+const trainingData = [
+    {
+        text: "my unit test failed",
+        category: "software"
+    },
+    {
+        text: "tried the program, but it was buggy",
+        category: "software"
+    },
+    {
+        text: "i need a new power supply",
+        category: "hardware"
+    },
+    {
+        text: "the drive has a 2TB capacity",
+        category: "hardware"
+    },
+    {
+        text: "unit-tests",
+        category: "software"
+    },
+    {
+        text: "program",
+        category: "software"
+    },
+    {
+        text: "power supply",
+        category: "hardware"
+    },
+    {
+        text: "drive",
+        category: "hardware"
+    },
+    {
+        text: "it needs more memory",
+        category: "hardware"
+    },
+    {
+        text: "code",
+        category: "software"
+    },
+    {
+        text: "i found some bugs in the code",
+        category: "software"
+    },
+    {
+        text: "i swapped the memory",
+        category: "hardware"
+    },
+    {
+        text: "i tested the code",
+        category: "software"
+    },
+    {
+        text: "i love computers",
+        category: "hardware"
+    },
+    {
+        text: "programming",
+        category: "software"
+    },
+    {
+        text: "i broke my pc",
+        category: "hardware"
+    },
+    {
+        text: "computer",
+        category: "hardware"
+    },
+    {
+        text: "buy me a laptop",
+        category: "hardware"
+    },
+    {
+        text: "i love to play games",
+        category: "software"
+    }
+];
 
-}
-
-function poly() {
-    string = '0x37b7017737ec7e186d76fbf971142ca85ac00032'
-}
-
-function cake() {
-    string = "unzip licks fiat zebra cake ruby koala bikini vogue cinema bikini punch soprano sash oscar adrenalin fixate gusts faked ruined identity friendly liar lied unzip"
-}
+module.exports = trainingData;
