@@ -9,10 +9,12 @@ Location-based AR uses your device's GPS and sensors to place virtual objects at
 ## ✨ Features
 
 - 📍 **GPS-based AR experiences** - Virtual objects anchored to real-world coordinates
+- 🧭 **3D Navigation Arrows** - Direction arrows pointing to destinations in AR
 - 🗺️ **Foursquare Integration** - Automatically display nearby places of interest
 - 🎨 **Multiple Demo Implementations** - Different approaches to location-based AR
 - 📱 **Mobile-friendly** - Works on smartphones with GPS and camera access
 - 🔧 **Easy Configuration** - Simple setup with config files
+- 📏 **Distance Calculation** - Real-time distance to destinations
 
 ## 🚀 Quick Start
 
@@ -64,9 +66,14 @@ Location-based AR uses your device's GPS and sensors to place virtual objects at
 5. **Access the demos**
 
    Open your browser and navigate to:
-   - `http://localhost:8000/index.html` - Basic AR demo
-   - `http://localhost:8000/index5.html` - Places demo
-   - `http://localhost:8000/index6.html` - Advanced places demo
+   - `http://localhost:8000/index.html` - Basic AR demo with red box
+   - `http://localhost:8000/navigation.html` - **🧭 Navigation with 3D arrows** (NEW!)
+   - `http://localhost:8000/index2.html` - Foursquare places with links (needs index10.html)
+   - `http://localhost:8000/index3.html` - Foursquare places with images
+   - `http://localhost:8000/index4.html` - Enhanced places demo
+   - `http://localhost:8000/index5.html` - Text-based places demo
+   - `http://localhost:8000/index6.html` - Basic box demo
+   - `http://localhost:8000/google.html` - Google Maps integration
 
 ## 📁 Project Structure
 
@@ -74,23 +81,50 @@ Location-based AR uses your device's GPS and sensors to place virtual objects at
 brains.js/
 ├── index.html          # Basic location-based AR demo
 ├── index.js            # Simple box placement demo
+├── navigation.html     # 🧭 Navigation demo with 3D arrows (NEW!)
+├── navigation.js       # Navigation logic with distance calculation (NEW!)
 ├── index2.js           # Foursquare places with links
+├── index3.html         # Places demo with images (NEW!)
 ├── index3.js           # Foursquare places with images
-├── index4.js           # Additional demo variant
+├── index4.html         # Enhanced places demo (NEW!)
+├── index4.js           # Enhanced places with better error handling
+├── index5.html         # Text-based places demo
+├── index6.html         # Basic box demo
+├── index10.html        # Places demo with 3D models
 ├── google.html         # Google Maps integration demo
 ├── google.js           # Google Maps API integration
-├── config.js           # API configuration (not in git)
+├── config.js           # API configuration (not in git - create from example)
 ├── config.example.js   # Example configuration file
 ├── data.js             # Training data for brain.js
 ├── data.json           # JSON training data
 ├── assets/             # Images and 3D models
 │   ├── map-marker.png  # Location marker icon
 │   └── models/         # 3D model files
+│       └── arrow-model.glb  # 3D arrow model for navigation
 └── styles/             # CSS stylesheets
     └── style.css
 ```
 
 ## 🎮 Usage
+
+### 🧭 Navigation Demo (navigation.html) - NEW!
+
+The navigation demo displays 3D arrow models pointing to destinations. Perfect for wayfinding and navigation!
+
+Features:
+- **Animated 3D arrows** pointing to destinations
+- **Distance calculation** showing how far each location is
+- **Color-coded markers** for easy identification
+- **Interactive** - tap arrows for more info
+- **Smart fallback** - works with or without API
+
+```javascript
+// Automatically creates arrows for nearby places or static destinations
+// Shows distance in real-time
+// Works both with Foursquare API and static coordinates
+```
+
+**Best for:** Navigation, wayfinding, location-based games
 
 ### Basic Demo (index.html)
 
@@ -105,7 +139,9 @@ entity.setAttribute('gps-new-entity-place', {
 });
 ```
 
-### Places Demo (index5.html, index6.html)
+**Best for:** Testing GPS functionality, understanding AR.js basics
+
+### Places Demo (index3.html, index4.html, index10.html)
 
 These demos fetch nearby places from the Foursquare API and display them as AR markers.
 
@@ -194,6 +230,30 @@ Modify the marker appearance:
 icon.setAttribute('scale', '20, 20');  // Size
 icon.setAttribute('src', 'your-icon.png');  // Custom icon
 ```
+
+## 🔧 Recent Fixes & Improvements
+
+### Bug Fixes
+- ✅ **Fixed critical selector bug** in `index.js:20` - Missing closing bracket `]` in `querySelector('[gps-new-camera]')`
+- ✅ **Fixed promise chain** in `index4.js` - Now properly returns venues from API call
+- ✅ **Added config.js integration** - All HTML files now properly load configuration
+- ✅ **Fixed typos**:
+  - `lonitude` → `longitude` in `index.js:19`
+  - `nort` → `north` in comment
+  - Duplicate `latitude` → `longitude` in `index.html:15`
+  - `antialise` → `antialias` in `index.html:13`
+
+### New Features
+- 🎉 **Navigation Demo** - Brand new `navigation.html` with 3D direction arrows
+- 🎉 **Distance Calculation** - Real-time distance to all destinations
+- 🎉 **Better Error Handling** - Clear error messages and fallbacks
+- 🎉 **HTML Files** - Created missing `index3.html` and `index4.html`
+- 🎉 **Improved Documentation** - Enhanced code comments and JSDoc
+
+### Security Improvements
+- 🔒 **Removed hardcoded API keys** - Now use `config.js` (gitignored)
+- 🔒 **Removed sensitive data** - Cryptocurrency seed phrases removed from `data.js`
+- 🔒 **Added .gitignore** - Protects sensitive configuration files
 
 ## 📚 Resources
 

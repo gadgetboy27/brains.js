@@ -1,11 +1,38 @@
+/**
+ * Foursquare Places AR Demo (Alternative implementation)
+ *
+ * This demo fetches nearby places from the Foursquare API and displays them as
+ * interactive links. This is an alternative implementation with improved error handling.
+ *
+ * Features:
+ * - Fetches places within configurable radius
+ * - Displays place names as clickable links
+ * - Better error handling and logging
+ *
+ * Requirements:
+ * - Foursquare API credentials in config.js
+ * - GPS-enabled device
+ * - Camera and location permissions
+ */
 
-// getting places from APIs
+/**
+ * Fetches nearby places from Foursquare API
+ *
+ * @param {Object} position - GPS coordinates with latitude and longitude
+ * @returns {Promise<Array>} Promise resolving to array of venue objects
+ */
 function loadPlaces(position) {
+    // Load configuration from config.js
+    if (!window.CONFIG) {
+        console.error('Config not loaded! Make sure config.js is included before this script.');
+        return Promise.reject(new Error('Config not loaded'));
+    }
+
     const params = {
-        radius: 300,    // search places not farther than this value (in meters)
-        clientId: 'UK32CEVITYO5AMHU3ZRAASDZ25QCODXPSJ2P0LW3ANSJ55E5',
-        clientSecret: 'TZY0JD4AY2QZFNK124NEW2DGMRFVH34EHJ1CF1A42FTFIGHG',
-        version: '20240128',  // foursquare versioning, required but unuseful for this demo
+        radius: window.CONFIG.ar.searchRadius,
+        clientId: window.CONFIG.foursquare.clientId,
+        clientSecret: window.CONFIG.foursquare.clientSecret,
+        version: window.CONFIG.foursquare.version,
     };
 
     // CORS Proxy to avoid CORS problems
@@ -17,50 +44,77 @@ function loadPlaces(position) {
         &radius=${params.radius}
         &client_id=${params.clientId}
         &client_secret=${params.clientSecret}
-        &limit=30 
+        &limit=30
         &v=${params.version}`;
+
     return fetch(endpoint)
         .then((res) => {
-            return res.json()
-                .then((resp) => {
-                    console.log(resp.response.venues);
-                })
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            return res.json();
+        })
+        .then((resp) => {
+            console.log('Found venues:', resp.response.venues);
+            return resp.response.venues; // FIXED: Actually return the venues
         })
         .catch((err) => {
             console.error('Error with places API', err);
-        })
-        
-};
-    
+            return []; // Return empty array on error
+        });
+}
 
+// Initialize AR experience when page loads
 window.onload = () => {
     const scene = document.querySelector('a-scene');
 
-    // first get current user location
-    return navigator.geolocation.getCurrentPosition(function (position) {
+    if (!scene) {
+        console.error('No a-scene element found!');
+        return;
+    }
 
-        // than use it to load from remote APIs some places nearby
-        loadPlaces(position.coords)
-            .then((places) => {
-                places.forEach((place) => {
-                    const latitude = place.location.lat;
-                    const longitude = place.location.lng;
+    // First get current user location
+    navigator.geolocation.getCurrentPosition(
+        function (position) {
+            console.log('GPS position acquired:', position.coords);
 
-                    // add place name
-                    const placeText = document.createElement('a-link');
-                    placeText.setAttribute('gps-new-entity-place', `latitude: ${latitude}; longitude: ${longitude};`);
-                    placeText.setAttribute('title', place.name);
-                    placeText.setAttribute('scale', '15 15 15');
-                    
-                    placeText.addEventListener('loaded', () => {
-                        window.dispatchEvent(new CustomEvent('gps-new-entity-place-loaded'))
+            // Then use it to load nearby places from remote API
+            loadPlaces(position.coords)
+                .then((places) => {
+                    if (!places || places.length === 0) {
+                        console.warn('No places found nearby');
+                        alert('No places found nearby. Try moving to a different location.');
+                        return;
+                    }
+
+                    console.log(`Loading ${places.length} places into AR scene`);
+
+                    places.forEach((place) => {
+                        const latitude = place.location.lat;
+                        const longitude = place.location.lng;
+
+                        // Add place name as a link
+                        const placeText = document.createElement('a-link');
+                        placeText.setAttribute('gps-new-entity-place', `latitude: ${latitude}; longitude: ${longitude};`);
+                        placeText.setAttribute('title', place.name);
+                        placeText.setAttribute('scale', '15 15 15');
+
+                        placeText.addEventListener('loaded', () => {
+                            window.dispatchEvent(new CustomEvent('gps-new-entity-place-loaded'));
+                        });
+
+                        scene.appendChild(placeText);
                     });
-
-                    scene.appendChild(placeText);
+                })
+                .catch((err) => {
+                    console.error('Error loading places:', err);
+                    alert('Failed to load nearby places. Check console for details.');
                 });
-            })
-    },
-        (err) => console.error('Error in retrieving position', err),
+        },
+        (err) => {
+            console.error('Error in retrieving position', err);
+            alert('Unable to get your location. Please enable GPS and location permissions.');
+        },
         {
             enableHighAccuracy: true,
             maximumAge: 0,

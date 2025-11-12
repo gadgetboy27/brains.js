@@ -17,7 +17,7 @@ window.onload = () => {
     let testEntityAdded = false;
 
     // Get the GPS camera element from the AR scene
-    const el = document.querySelector('[gps-new-camera');
+    const el = document.querySelector('[gps-new-camera]');
 
     // Listen for GPS position updates
     el.addEventListener('gps-camera-update-position', e => {
