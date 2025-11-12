@@ -45,3 +45,4 @@ config.js
 tmp/
 temp/
 *.tmp
+deploy.sh
