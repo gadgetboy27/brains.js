@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import sample from './fixtures/sample-venue.json';
 import {
-  ACCESS_LEVELS,
+  ACCESS,
   EDGE_TYPES,
   SCHEMA_VERSION,
   VenueValidationError,
@@ -81,6 +81,23 @@ describe('validateVenue — top level', () => {
     const v = clone();
     v.providers = ['immersal'];
     expectSingleError(v, 'providers', /must be an object, got an array/);
+  });
+
+  it('validates the providers block field by field', () => {
+    const v = clone();
+    v.providers.order = ['qr', 'qr'];
+    expectSingleError(v, 'providers.order[1]', /duplicate "qr"/);
+    v.providers.order = [];
+    expectSingleError(v, 'providers.order', /at least 1 item/);
+    delete v.providers.order;
+    v.providers.immersal.mapId = 0;
+    expectSingleError(v, 'providers.immersal.mapId', /must be >= 1/);
+    v.providers.immersal.mapId = 12345;
+    v.providers.immersal.origin = { x: 0, y: 0 };
+    expectSingleError(v, 'providers.immersal.origin.z', /is required/);
+    delete v.providers.immersal.origin;
+    v.providers.beacons = 'yes';
+    expectSingleError(v, 'providers.beacons', /must be an object/);
   });
 
   it('rejects GPS coordinates at the top level', () => {
@@ -191,7 +208,7 @@ describe('validateVenue — edges', () => {
     expectSingleError(v, 'edges[2].type', new RegExp(`must be one of ${EDGE_TYPES.join(', ')}`));
   });
 
-  it('validates distance, booleans and accessLevel', () => {
+  it('validates distance, booleans and staffOnly', () => {
     const v = clone();
     v.edges[2].distance = -1;
     expectSingleError(v, 'edges[2].distance', /must be >= 0/);
@@ -202,8 +219,19 @@ describe('validateVenue — edges', () => {
     v.edges[2].wheelchair = 1;
     expectSingleError(v, 'edges[2].wheelchair', /true or false/);
     delete v.edges[2].wheelchair;
-    v.edges[2].accessLevel = 'vip';
-    expectSingleError(v, 'edges[2].accessLevel', new RegExp(ACCESS_LEVELS.join(', ')));
+    v.edges[2].staffOnly = 'yes';
+    expectSingleError(v, 'edges[2].staffOnly', /true or false/);
+  });
+
+  it('checks floorChange against the nodes it joins', () => {
+    const v = clone();
+    v.edges[0].floorChange = true; // entrance → atrium, both floor 0
+    expectSingleError(v, 'edges[0].floorChange', /is true but its nodes are on the same floor/);
+    delete v.edges[0].floorChange;
+    v.edges[2].floorChange = false; // atrium (0) → l1-landing (1)
+    expectSingleError(v, 'edges[2].floorChange', /is false but its nodes are on floors 0 and 1/);
+    v.edges[2].floorChange = true;
+    expect(validateVenue(v)).toEqual([]);
   });
 
   it('validates opening hours windows field by field', () => {
@@ -282,13 +310,23 @@ describe('validateVenue — pois', () => {
     expectSingleError(v, 'pois[1].id', /duplicate id "poi-info" \(first used at pois\[0\]\)/);
   });
 
-  it('validates accessLevel and hours', () => {
+  it('validates access and hours', () => {
     const v = clone();
-    v.pois[4].accessLevel = 'secret';
-    expectSingleError(v, 'pois[4].accessLevel', /must be one of public, staffOnly/);
-    v.pois[4].accessLevel = 'staffOnly';
+    v.pois[4].access = 'secret';
+    expectSingleError(v, 'pois[4].access', new RegExp(`must be one of ${ACCESS.join(', ')}`));
+    v.pois[4].access = 'staff';
     v.pois[0].hours = [{ open: '09:00' }];
     expectSingleError(v, 'pois[0].hours[0].close', /is required/);
+  });
+
+  it('accepts a floor that matches the node and rejects one that does not', () => {
+    const v = clone();
+    v.pois[0].floor = 0; // poi-info at n-atrium, floor 0
+    expect(validateVenue(v)).toEqual([]);
+    v.pois[0].floor = 1;
+    expectSingleError(v, 'pois[0].floor', /is 1 but node "n-atrium" is on floor 0/);
+    v.pois[0].floor = 7;
+    expectSingleError(v, 'pois[0].floor', /references undefined floor index 7/);
   });
 
   it('rejects GPS coordinates on a poi', () => {

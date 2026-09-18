@@ -221,17 +221,24 @@ describe('readMapConfig / apiKeyFromEnv', () => {
     });
   });
 
-  it('names the bad field', () => {
+  it('names the bad field (venue validation catches it first; readMapConfig guards the rest)', () => {
     expect(() => readMapConfig(createVenue(structuredClone(sample)))).not.toThrow(); // fixture has mapId
     const noCfg = structuredClone(sample);
     delete noCfg.providers;
     expect(() => readMapConfig(createVenue(noCfg))).toThrow(/has no providers\.immersal config/);
-    expect(() => readMapConfig(venueWith({ mapId: 'abc' }))).toThrow(
-      /mapId must be a positive integer/
+    // These are rejected by createVenue() with the field named in the message.
+    expect(() => venueWith({ mapId: 'abc' })).toThrow(/providers\.immersal\.mapId/);
+    expect(() => venueWith({ origin: { x: 0, y: 'n', z: 0 } })).toThrow(
+      /providers\.immersal\.origin\.y/
     );
-    expect(() => readMapConfig(venueWith({ origin: { x: 0, y: 'n', z: 0 } }))).toThrow(/origin\.y/);
-    expect(() => readMapConfig(venueWith({ rotationDeg: NaN }))).toThrow(/rotationDeg/);
-    expect(() => readMapConfig(venueWith({ floor: 1.5 }))).toThrow(/floor must be an integer/);
+    expect(() => venueWith({ rotationDeg: NaN })).toThrow(/providers\.immersal\.rotationDeg/);
+    expect(() => venueWith({ floor: 1.5 })).toThrow(/providers\.immersal\.floor/);
+    // readMapConfig itself, on a venue-shaped object that skipped validation.
+    const fake = (immersal) => ({ id: 'v', floors: [], providers: { immersal } });
+    expect(() => readMapConfig(fake({ mapId: -1 }))).toThrow(/mapId must be a positive integer/);
+    expect(() => readMapConfig(fake({ mapId: 1, origin: { x: 0, y: 0 } }))).toThrow(/origin\.z/);
+    expect(() => readMapConfig(fake({ mapId: 1, rotationDeg: 'x' }))).toThrow(/rotationDeg/);
+    expect(() => readMapConfig(fake({ mapId: 1, floor: 1.5 }))).toThrow(/floor must be an integer/);
   });
 
   it('reads the API key from IMMERSAL_API_KEY only', () => {

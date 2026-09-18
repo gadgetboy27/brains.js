@@ -1,0 +1,339 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gadgetboy27/brains.js/src/venues/schema.json",
+  "title": "Venue",
+  "description": "A venue description for the indoor AR wayfinding app: metadata, floors, a route graph of nodes and edges, points of interest, physical anchors, and positioning-provider configuration. Authored by the venue operator. All coordinates are venue-local metres in a right-handed frame with x and y in the floor plane and z up; the origin and the direction of +y are fixed by the operator and shared by every floor. The document must not contain GPS coordinates anywhere.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "name", "floors", "nodes", "edges", "pois"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "description": "Version of this schema the document follows. Only 1 is currently defined.",
+      "const": 1
+    },
+    "id": {
+      "description": "Stable identifier for the venue, unique per operator. Encoded into QR anchors, so it should never change once markers are printed.",
+      "$ref": "#/$defs/slug"
+    },
+    "name": {
+      "description": "Human-readable venue name shown in the app.",
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "description": {
+      "description": "Optional longer description of the venue.",
+      "type": "string"
+    },
+    "frame": {
+      "description": "Relates the venue's coordinate frame to the physical world without exposing its location.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "headingOffsetDeg": {
+          "description": "Degrees, clockwise, from the device compass's north to the venue's +y axis. Lets dead reckoning turn compass headings into venue headings. Default 0.",
+          "type": "number"
+        }
+      }
+    },
+    "floors": {
+      "description": "The venue's floors. At least one. Nodes and anchors reference floors by `index`.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/floor" }
+    },
+    "nodes": {
+      "description": "Vertices of the route graph: every place a route can pass through or end at. At least one.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "description": "Walkable connections between nodes. An edge may be excluded from a route by accessibility, access level or opening hours (see src/core/router.js).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" }
+    },
+    "pois": {
+      "description": "Points of interest a user can search for and navigate to. Each is attached to a node, which is where routing delivers the user.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/poi" }
+    },
+    "anchors": {
+      "description": "Physical markers (printed QR codes) with a known standing position and facing, used by the QR positioning provider.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/anchor" }
+    },
+    "providers": {
+      "description": "Configuration for positioning providers. Keys other than `order` are per-provider blocks, keyed by provider name; unknown providers are permitted so that new ones can be configured without a schema change.",
+      "type": "object",
+      "properties": {
+        "order": {
+          "description": "Explicit fallback order of providers to try, first to last. When omitted the app derives it: `immersal` if configured, then `qr` if the venue has anchors, then `mock` if the app allows it.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slug" }
+        },
+        "immersal": { "$ref": "#/$defs/immersalConfig" },
+        "qr": {
+          "description": "QR provider options. The provider needs nothing beyond `anchors`; this block is reserved for future options.",
+          "type": "object"
+        },
+        "mock": {
+          "description": "Mock provider options (development only). Passed through to MockProvider.",
+          "type": "object"
+        }
+      },
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "description": "An identifier: letters, digits, `.`, `_` and `-`, starting with a letter or digit.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "hhmm": {
+      "description": "Time of day as 24-hour `HH:MM`.",
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+    },
+    "openingWindow": {
+      "description": "A window during which something is open. `close` earlier than `open` means the window spans midnight (e.g. 18:00–02:00).",
+      "type": "object",
+      "required": ["open", "close"],
+      "additionalProperties": false,
+      "properties": {
+        "open": { "description": "Start of the window, inclusive.", "$ref": "#/$defs/hhmm" },
+        "close": { "description": "End of the window, exclusive.", "$ref": "#/$defs/hhmm" },
+        "days": {
+          "description": "Days of the week the window applies to, 0 = Sunday … 6 = Saturday (as `Date.prototype.getDay()`). Omit for every day.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 0, "maximum": 6 }
+        }
+      }
+    },
+    "hours": {
+      "description": "Opening windows. Omit when always open. Something with an empty list is never open.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/openingWindow" }
+    },
+    "access": {
+      "description": "Who may use this: `public` (anyone) or `staff` (staff only). Default `public`.",
+      "type": "string",
+      "enum": ["public", "staff"]
+    },
+    "floor": {
+      "type": "object",
+      "required": ["index", "id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "description": "Integer floor index used by nodes, anchors and poses; e.g. 0 = ground, -1 = basement, 1 = first. Unique within the venue.",
+          "type": "integer"
+        },
+        "id": {
+          "description": "Stable identifier for the floor. Unique within the venue.",
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "description": "Display name, e.g. \"Ground\", \"Level 1\", \"Mezzanine\".",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "elevation": {
+          "description": "Height of the floor's walking surface above the venue origin, in metres. Lets a provider that reports height choose the floor. Optional.",
+          "type": "number"
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "x", "y", "floor"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Unique node id, referenced by edges, POIs and routes.",
+          "$ref": "#/$defs/slug"
+        },
+        "x": { "description": "Metres along the venue's +x axis.", "type": "number" },
+        "y": { "description": "Metres along the venue's +y axis.", "type": "number" },
+        "z": {
+          "description": "Height in metres above the venue origin. Defaults to 0; usually the floor's `elevation`.",
+          "type": "number"
+        },
+        "floor": {
+          "description": "Index of the floor this node is on. Must match a `floors[].index`.",
+          "type": "integer"
+        },
+        "name": {
+          "description": "Optional label for the node (e.g. \"Lift lobby\"), for operator tooling and debugging.",
+          "type": "string"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "description": "Id of the node at one end.", "$ref": "#/$defs/slug" },
+        "to": {
+          "description": "Id of the node at the other end. Must differ from `from`.",
+          "$ref": "#/$defs/slug"
+        },
+        "type": {
+          "description": "Kind of connection. Sets the accessibility defaults: `stairs` and `escalator` are not step-free; everything else is. Default `walk`.",
+          "type": "string",
+          "enum": ["walk", "stairs", "escalator", "lift", "ramp", "door", "travelator"]
+        },
+        "distance": {
+          "description": "Walking length of the edge in metres. Defaults to the straight-line distance between its nodes. If given it must not be less than the straight-line distance, or route search is no longer guaranteed optimal.",
+          "type": "number",
+          "minimum": 0
+        },
+        "oneWay": {
+          "description": "True if the edge may only be traversed from `from` to `to` (e.g. a one-way gate or an escalator). Default false.",
+          "type": "boolean"
+        },
+        "stepFree": {
+          "description": "True if the edge can be used without climbing or descending steps. Defaults from `type`: false for `stairs` and `escalator`, true otherwise. Set explicitly to override (e.g. a stair lift).",
+          "type": "boolean"
+        },
+        "wheelchair": {
+          "description": "True if a wheelchair user can use the edge. Defaults to `stepFree`. Set false on step-free edges that are still unusable (narrow door, steep ramp). Cannot be true on a non-step-free edge.",
+          "type": "boolean"
+        },
+        "staffOnly": {
+          "description": "True if only staff may use the edge (staff door, back corridor). Visitors' routes never use it. Default false.",
+          "type": "boolean"
+        },
+        "floorChange": {
+          "description": "True if the edge connects different floors (stairs, lift, escalator, ramp between levels). Defaults to whether its two nodes are on different floors; if given it must agree with them.",
+          "type": "boolean"
+        },
+        "hours": {
+          "description": "When the edge is usable, e.g. a corridor locked at night. Omit when always open.",
+          "$ref": "#/$defs/hours"
+        },
+        "name": {
+          "description": "Optional label for the edge, for operator tooling.",
+          "type": "string"
+        }
+      }
+    },
+    "poi": {
+      "type": "object",
+      "required": ["id", "name", "node"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Unique POI id. Stable; used in links and analytics.",
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "description": "Display name. Need not be unique (e.g. \"Toilets\" on every floor).",
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "aliases": {
+          "description": "Other names users might search for (\"Help desk\", \"Info\", \"WC\"). Matched case- and whitespace-insensitively.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "floor": {
+          "description": "Index of the floor the POI is on. Optional; defaults to its node's floor, and if given must match it.",
+          "type": "integer"
+        },
+        "node": {
+          "description": "Id of the route node routing delivers the user to for this POI.",
+          "$ref": "#/$defs/slug"
+        },
+        "category": {
+          "description": "Free-text category for filtering and icons, e.g. \"retail\", \"food\", \"facility\", \"service\", \"exit\".",
+          "type": "string"
+        },
+        "access": {
+          "description": "`public` (default) or `staff`. Staff-only POIs are hidden from visitors.",
+          "$ref": "#/$defs/access"
+        },
+        "description": {
+          "description": "Optional longer description shown on the POI's detail view.",
+          "type": "string"
+        },
+        "hours": {
+          "description": "The POI's opening hours, for display and \"closed now\" hints. Omit when always open.",
+          "$ref": "#/$defs/hours"
+        }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "required": ["id", "x", "y", "floor"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Unique anchor id, encoded into the printed QR code together with the venue id.",
+          "$ref": "#/$defs/slug"
+        },
+        "x": {
+          "description": "Metres along +x of where the user STANDS when scanning.",
+          "type": "number"
+        },
+        "y": {
+          "description": "Metres along +y of where the user stands when scanning.",
+          "type": "number"
+        },
+        "z": {
+          "description": "Height in metres of the standing position. Default 0.",
+          "type": "number"
+        },
+        "floor": {
+          "description": "Index of the floor the anchor is on. Must match a `floors[].index`.",
+          "type": "integer"
+        },
+        "heading": {
+          "description": "Direction the user faces when scanning, in degrees clockwise from venue +y, in [0, 360). Default 0.",
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        }
+      }
+    },
+    "immersalConfig": {
+      "description": "Immersal VPS provider configuration. The API key is NOT here; it comes from the IMMERSAL_API_KEY environment variable.",
+      "type": "object",
+      "required": ["mapId"],
+      "additionalProperties": false,
+      "properties": {
+        "mapId": {
+          "description": "Id of the Immersal map covering the venue, from the Immersal Mapper app.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "origin": {
+          "description": "Venue-local coordinates of the Immersal map's origin, in metres.",
+          "type": "object",
+          "required": ["x", "y", "z"],
+          "additionalProperties": false,
+          "properties": {
+            "x": { "description": "Venue x of the map origin, metres.", "type": "number" },
+            "y": { "description": "Venue y of the map origin, metres.", "type": "number" },
+            "z": { "description": "Venue z (height) of the map origin, metres.", "type": "number" }
+          }
+        },
+        "rotationDeg": {
+          "description": "Yaw, in degrees counter-clockwise about venue +z, that turns the map's horizontal axes onto the venue's. Default 0.",
+          "type": "number"
+        },
+        "floor": {
+          "description": "Fixed floor index for every pose from this map. Omit to derive the floor from `floors[].elevation`.",
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

@@ -39,7 +39,7 @@ function venue() {
       { from: 'hall', to: 'upper', type: 'lift', distance: 30 },
       { from: 'upper', to: 'office', type: 'walk' },
       // Staff-only door straight up to the office: much shorter than via upper.
-      { from: 'shop', to: 'office', type: 'door', accessLevel: 'staffOnly', distance: 4 },
+      { from: 'shop', to: 'office', type: 'door', staffOnly: true, distance: 4 },
       // Direct corridor, only open in the evening.
       {
         from: 'lobby',
@@ -210,7 +210,7 @@ describe('findRoute — access level', () => {
   it('a visitor route never uses a staffOnly edge', () => {
     const route = findRoute(venue(), 'shop', 'office', { timeOfDay: '14:00' });
     expect(route.found).toBe(true);
-    expect(route.edges.every((e) => (e.accessLevel ?? 'public') !== 'staffOnly')).toBe(true);
+    expect(route.edges.every((e) => e.staffOnly !== true)).toBe(true);
     expect(route.path).toEqual(['shop', 'hall', 'lobby', 'upper', 'office']);
     expect(route.distance).toBe(46); // 10 + 10 + 6 stairs + 20
   });
@@ -218,14 +218,14 @@ describe('findRoute — access level', () => {
   it('is the same when accessLevel is given explicitly as visitor', () => {
     const route = findRoute(venue(), 'shop', 'office', { accessLevel: 'visitor' });
     expect(route.path).not.toContain('office-door');
-    expect(route.edges.some((e) => e.accessLevel === 'staffOnly')).toBe(false);
+    expect(route.edges.some((e) => e.staffOnly === true)).toBe(false);
   });
 
   it('a staff route may use the staffOnly door', () => {
     const route = findRoute(venue(), 'shop', 'office', { accessLevel: 'staff' });
     expect(route.path).toEqual(['shop', 'office']);
     expect(route.distance).toBe(4);
-    expect(route.edges[0].accessLevel).toBe('staffOnly');
+    expect(route.edges[0].staffOnly).toBe(true);
   });
 
   it('reports no-route when the only way is staffOnly', () => {
@@ -234,7 +234,7 @@ describe('findRoute — access level', () => {
         { id: 'a', x: 0, y: 0 },
         { id: 'b', x: 1, y: 0 },
       ],
-      edges: [{ from: 'a', to: 'b', accessLevel: 'staffOnly' }],
+      edges: [{ from: 'a', to: 'b', staffOnly: true }],
     };
     expect(findRoute(graph, 'a', 'b')).toMatchObject({ found: false, edgesExcluded: 1 });
     expect(findRoute(graph, 'a', 'b', { accessLevel: 'staff' }).found).toBe(true);
@@ -362,7 +362,7 @@ describe('edge accessibility defaults', () => {
   it('edgePassesFilter combines all criteria', () => {
     const edge = {
       type: 'walk',
-      accessLevel: 'staffOnly',
+      staffOnly: true,
       hours: [{ open: '09:00', close: '17:00' }],
     };
     expect(edgePassesFilter(edge, {})).toBe(false);

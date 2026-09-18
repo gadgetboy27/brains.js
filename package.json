@@ -26,10 +26,13 @@
   "homepage": "https://github.com/gadgetboy27/brains.js#readme",
   "dependencies": {
     "@ar-js-org/ar.js": "^3.4.5",
-    "barcode-detector": "^3.2.2"
+    "barcode-detector": "^3.2.2",
+    "three": "^0.186.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.12.0",

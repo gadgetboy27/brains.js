@@ -44,7 +44,8 @@
  *       "category": "service",           // free text
  *       "description": "…",              // optional
  *       "hours": [{ "open": "09:00", "close": "21:00" }],   // optional
- *       "accessLevel": "public"          // or "staffOnly"; optional
+ *       "floor": 0,                      // optional; must match the node's floor
+ *       "access": "public"               // or "staff"; optional
  *     }
  *   ],
  *   "providers": {                       // optional, opaque per-provider config
@@ -70,7 +71,7 @@ export const EDGE_TYPES = Object.freeze([
   'travelator',
 ]);
 
-export const ACCESS_LEVELS = Object.freeze(['public', 'staffOnly']);
+export const ACCESS = Object.freeze(['public', 'staff']);
 
 const GPS_KEYS = ['lat', 'lon', 'lng', 'latitude', 'longitude'];
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -236,6 +237,50 @@ function checkUnique(c, items, key, path) {
   });
 }
 
+/** Validate the providers block: `order` plus the known provider configs. */
+function checkProviders(c, providers) {
+  if (
+    providers.order !== undefined &&
+    c.isArray(providers.order, 'providers.order', { minLength: 1 })
+  ) {
+    providers.order.forEach((name, i) => {
+      c.isString(name, `providers.order[${i}]`, {
+        pattern: ID_PATTERN,
+        patternHint: 'must be a slug',
+      });
+    });
+    checkUniqueValues(c, providers.order, 'providers.order');
+  }
+  for (const [name, block] of Object.entries(providers)) {
+    if (name === 'order') continue;
+    c.isObject(block, `providers.${name}`);
+  }
+  const im = providers.immersal;
+  if (im !== undefined && im !== null && typeof im === 'object' && !Array.isArray(im)) {
+    c.isNumber(im.mapId, 'providers.immersal.mapId', { integer: true, min: 1 });
+    if (im.origin !== undefined && c.isObject(im.origin, 'providers.immersal.origin')) {
+      for (const k of ['x', 'y', 'z']) c.isNumber(im.origin[k], `providers.immersal.origin.${k}`);
+    }
+    c.isNumber(im.rotationDeg, 'providers.immersal.rotationDeg', { required: false });
+    c.isNumber(im.floor, 'providers.immersal.floor', { required: false, integer: true });
+  }
+}
+
+/** Report duplicate primitive values in a list. */
+function checkUniqueValues(c, list, path) {
+  const seen = new Map();
+  list.forEach((value, i) => {
+    if (seen.has(value)) {
+      c.add(
+        `${path}[${i}]`,
+        `duplicate ${JSON.stringify(value)} (first used at ${path}[${seen.get(value)}])`
+      );
+    } else {
+      seen.set(value, i);
+    }
+  });
+}
+
 // ---------------------------------------------------------------- validate
 
 /**
@@ -266,7 +311,9 @@ export function validateVenue(venue) {
     c.isNumber(venue.frame.headingOffsetDeg, 'frame.headingOffsetDeg', { required: false });
   }
 
-  if (venue.providers !== undefined) c.isObject(venue.providers, 'providers');
+  if (venue.providers !== undefined && c.isObject(venue.providers, 'providers')) {
+    checkProviders(c, venue.providers);
+  }
 
   // --- floors
   const floorIndexes = new Set();
@@ -286,6 +333,7 @@ export function validateVenue(venue) {
 
   // --- nodes
   const nodeIds = new Set();
+  const nodeFloors = new Map();
   if (c.isArray(venue.nodes, 'nodes', { minLength: 1 })) {
     venue.nodes.forEach((node, i) => {
       const p = `nodes[${i}]`;
@@ -297,11 +345,12 @@ export function validateVenue(venue) {
       c.isNumber(node.x, `${p}.x`);
       c.isNumber(node.y, `${p}.y`);
       c.isNumber(node.z, `${p}.z`, { required: false });
-      if (
-        c.isNumber(node.floor, `${p}.floor`, { integer: true }) &&
-        !floorIndexes.has(node.floor)
-      ) {
-        c.add(`${p}.floor`, `references undefined floor index ${node.floor}`);
+      if (c.isNumber(node.floor, `${p}.floor`, { integer: true })) {
+        if (!floorIndexes.has(node.floor)) {
+          c.add(`${p}.floor`, `references undefined floor index ${node.floor}`);
+        } else if (typeof node.id === 'string') {
+          nodeFloors.set(node.id, node.floor);
+        }
       }
     });
     checkUnique(c, venue.nodes, 'id', 'nodes');
@@ -325,7 +374,17 @@ export function validateVenue(venue) {
       c.isBoolean(edge.oneWay, `${p}.oneWay`);
       c.isBoolean(edge.stepFree, `${p}.stepFree`);
       c.isBoolean(edge.wheelchair, `${p}.wheelchair`);
-      c.isEnum(edge.accessLevel, `${p}.accessLevel`, ACCESS_LEVELS);
+      c.isBoolean(edge.staffOnly, `${p}.staffOnly`);
+      if (c.isBoolean(edge.floorChange, `${p}.floorChange`) && edge.floorChange !== undefined) {
+        const a = nodeFloors.get(edge.from);
+        const b = nodeFloors.get(edge.to);
+        if (a !== undefined && b !== undefined && edge.floorChange !== (a !== b)) {
+          c.add(
+            `${p}.floorChange`,
+            `is ${edge.floorChange} but its nodes are on ${a === b ? 'the same floor' : `floors ${a} and ${b}`}`
+          );
+        }
+      }
       checkHours(c, edge.hours, `${p}.hours`);
     });
   }
@@ -372,7 +431,21 @@ export function validateVenue(venue) {
       }
       c.isString(poi.category, `${p}.category`, { required: false });
       c.isString(poi.description, `${p}.description`, { required: false });
-      c.isEnum(poi.accessLevel, `${p}.accessLevel`, ACCESS_LEVELS);
+      c.isEnum(poi.access, `${p}.access`, ACCESS);
+      if (
+        c.isNumber(poi.floor, `${p}.floor`, { required: false, integer: true }) &&
+        poi.floor !== undefined
+      ) {
+        const nodeFloor = nodeFloors.get(poi.node);
+        if (!floorIndexes.has(poi.floor)) {
+          c.add(`${p}.floor`, `references undefined floor index ${poi.floor}`);
+        } else if (nodeFloor !== undefined && nodeFloor !== poi.floor) {
+          c.add(
+            `${p}.floor`,
+            `is ${poi.floor} but node ${JSON.stringify(poi.node)} is on floor ${nodeFloor}`
+          );
+        }
+      }
       checkHours(c, poi.hours, `${p}.hours`);
     });
     checkUnique(c, venue.pois, 'id', 'pois');

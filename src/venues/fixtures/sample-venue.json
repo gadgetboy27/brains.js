@@ -58,7 +58,7 @@
       "id": "poi-staff-room",
       "name": "Staff room",
       "node": "n-l1-landing",
-      "accessLevel": "staffOnly"
+      "access": "staff"
     }
   ],
   "providers": {

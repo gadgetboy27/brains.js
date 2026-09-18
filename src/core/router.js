@@ -25,7 +25,9 @@
  *   `true` otherwise.
  * - `wheelchair` — boolean; defaults to `stepFree`. Set `false` on step-free
  *   edges a wheelchair still can't use (narrow doors, steep ramps).
- * - `accessLevel` — `'public'` (default) or `'staffOnly'`.
+ * - `staffOnly` — boolean; visitors' routes never use the edge. Default false.
+ * - `floorChange` — boolean; informational, defaults to whether the nodes are on
+ *   different floors.
  * - `hours` — array of opening windows; absent means always open. Each window
  *   is `{ open: 'HH:MM', close: 'HH:MM', days?: number[] }` where `days` are
  *   0 (Sunday) – 6 (Saturday) per `Date.prototype.getDay()`. A window whose
@@ -61,7 +63,8 @@ import { metresBetween } from './distance.js';
  * @property {boolean} [oneWay]
  * @property {boolean} [stepFree]
  * @property {boolean} [wheelchair]
- * @property {'public' | 'staffOnly'} [accessLevel]
+ * @property {boolean} [staffOnly]
+ * @property {boolean} [floorChange]
  * @property {OpeningWindow[]} [hours]
  */
 
@@ -181,7 +184,7 @@ export function edgePassesFilter(edge, filter = {}) {
   if (level !== 'visitor' && level !== 'staff') {
     throw new RangeError(`unknown accessLevel '${level}'`);
   }
-  if ((edge.accessLevel ?? 'public') === 'staffOnly' && level !== 'staff') return false;
+  if (edge.staffOnly === true && level !== 'staff') return false;
 
   if (!isOpenAt(edge.hours, filter.timeOfDay)) return false;
 
