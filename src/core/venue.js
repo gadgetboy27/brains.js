@@ -37,6 +37,7 @@ export class Venue {
   /** @type {{ nodes: object[], edges: object[] }} */ graph;
   /** @type {ReadonlyArray<object>} */ pois;
   /** @type {ReadonlyArray<object>} */ anchors;
+  /** @type {ReadonlyArray<{ code: string, name: string, strings: Record<string, string> }>} */ languages;
 
   #floorsByIndex = new Map();
   #floorsById = new Map();
@@ -57,6 +58,11 @@ export class Venue {
     this.id = json.id;
     this.name = json.name;
     this.headingOffsetDeg = json.frame?.headingOffsetDeg ?? 0;
+    this.languages = Object.freeze(
+      Object.entries(json.languages ?? {}).map(([code, l]) =>
+        Object.freeze({ code, name: l.name, strings: Object.freeze({ ...l.strings }) })
+      )
+    );
     this.providers = Object.freeze({ ...(json.providers ?? {}) });
 
     this.floors = [...json.floors].sort((a, b) => a.index - b.index).map(Object.freeze);

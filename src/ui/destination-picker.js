@@ -20,7 +20,7 @@
  * All text comes from strings.js.
  */
 
-import { categoryName, t } from './strings.js';
+import { availableLanguages, categoryName, getLanguage, t } from './strings/index.js';
 import { ensureStyle } from './tokens.js';
 
 /** @typedef {import('../core/venue.js').Venue} Venue */
@@ -47,7 +47,11 @@ const CSS = `
 .picker-option .floor { color: var(--color-text-muted); white-space: nowrap; }
 .picker-option .alias { grid-column: 1 / -1; color: var(--color-text-muted); font-size: 0.9em; }
 .picker-empty { padding: 16px; color: var(--color-text-muted); }
+.picker-settings { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; }
 .picker-contrast { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch-target); cursor: pointer; }
+.picker-lang { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
+.picker-lang select { min-height: var(--touch-target); padding: 6px 10px; border: 2px solid var(--color-accent); border-radius: var(--radius);
+  background: var(--color-surface-solid); color: var(--color-text); font: inherit; }
 .picker-contrast input { width: 24px; height: 24px; }
 `;
 
@@ -77,6 +81,7 @@ export class DestinationPicker {
    * @param {Document} [options.document]
    * @param {boolean} [options.showStaff=false]
    * @param {Storage | null} [options.storage]   For persisting the contrast choice.
+   * @param {(code: string) => void} [options.onLanguageChange]  Called when the user picks a language.
    */
   constructor(options) {
     if (!options?.venue?.searchPois) throw new TypeError('DestinationPicker requires a Venue');
@@ -102,10 +107,16 @@ export class DestinationPicker {
         <h2 id="${this.#listId}-title"></h2>
         <button type="button" class="btn" data-f="close" hidden></button>
       </div>
-      <label class="picker-contrast">
-        <input type="checkbox" data-f="contrast" />
-        <span data-f="contrast-label"></span>
-      </label>
+      <div class="picker-settings">
+        <label class="picker-contrast">
+          <input type="checkbox" data-f="contrast" />
+          <span data-f="contrast-label"></span>
+        </label>
+        <label class="picker-lang">
+          <span data-f="lang-label"></span>
+          <select data-f="lang"></select>
+        </label>
+      </div>
       <div class="picker-search">
         <label class="visually-hidden" for="${this.#listId}-input" data-f="search-label"></label>
         <input id="${this.#listId}-input" type="search" data-f="input" role="combobox" autocomplete="off"
@@ -133,6 +144,17 @@ export class DestinationPicker {
     this.#f('cats-label').textContent = t('picker.categories');
     this.#f('cats').setAttribute('aria-label', t('picker.categories'));
     this.#f('contrast-label').textContent = t('picker.highContrast');
+    this.#f('lang-label').textContent = t('picker.language');
+    const langSel = this.#f('lang');
+    for (const lang of availableLanguages()) {
+      const opt = this.#doc.createElement('option');
+      opt.value = lang.code;
+      opt.textContent = lang.name;
+      opt.lang = lang.code;
+      langSel.appendChild(opt);
+    }
+    langSel.value = getLanguage();
+    langSel.addEventListener('change', () => options.onLanguageChange?.(langSel.value));
 
     const input = this.#f('input');
     input.addEventListener('input', () => this.setQuery(input.value));

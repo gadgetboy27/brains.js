@@ -5,7 +5,7 @@ import { findRoute } from '../core/router.js';
 import { createVenue } from '../core/venue.js';
 import demo from '../venues/demo-venue.json';
 import { createFloorplan } from './floorplan.js';
-import { t } from './strings.js';
+import { t } from './strings/index.js';
 
 const venue = () => createVenue(structuredClone(demo));
 const pose = (x, y, heading = 0, floor = 0) => ({

@@ -33,7 +33,14 @@ import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHud } from './ui/hud.js';
-import { t } from './ui/strings.js';
+import {
+  detectLanguage,
+  registerLanguage,
+  resetLanguages,
+  setLanguage,
+  storeLanguage,
+  t,
+} from './ui/strings/index.js';
 import { ensureStyle } from './ui/tokens.js';
 import demoVenue from './venues/demo-venue.json';
 
@@ -112,10 +119,8 @@ export async function bootApp(options = {}) {
   const caf = options.cancelAnimationFrame ?? ((id) => win.cancelAnimationFrame(id));
   const config = options.config ?? readConfig();
 
-  applyContrastPreference({
-    document: doc,
-    ...(options.storage !== undefined ? { storage: options.storage } : {}),
-  });
+  const storage = options.storage !== undefined ? options.storage : safeStorage();
+  applyContrastPreference({ document: doc, storage });
   ensureStyle('brains-app-style', CSS, doc);
 
   const root = options.root ?? doc.querySelector('#app') ?? doc.body;
@@ -156,6 +161,16 @@ export async function bootApp(options = {}) {
     }
   }
 
+  // --- languages: built-in + the venue's community languages, then choose one.
+  resetLanguages();
+  for (const lang of venue.languages ?? []) registerLanguage(lang);
+  const langCode = detectLanguage({
+    search: options.search ?? globalThis.location?.search ?? '',
+    storage,
+    navigatorLanguages: options.navigatorLanguages ?? globalThis.navigator?.languages ?? [],
+  });
+  doc.documentElement.lang = langCode;
+
   // --- positioning
   const chain = createProviderChain(venue, {
     allowMock: config.allowMock,
@@ -181,7 +196,14 @@ export async function bootApp(options = {}) {
     document: doc,
     mount: root,
     showStaff: config.filter.accessLevel === 'staff',
-    ...(options.storage !== undefined ? { storage: options.storage } : {}),
+    storage,
+    onLanguageChange: (code) => {
+      storeLanguage(code, storage);
+      setLanguage(code);
+      // Components render with the language current at construction: rebuild.
+      if (options.onLanguageChange) options.onLanguageChange(code);
+      else restart();
+    },
     onSelect: (poi) => {
       picker.close();
       setDestination(poi);
@@ -328,7 +350,15 @@ export async function bootApp(options = {}) {
   picker.open();
   await chain.start();
 
-  return {
+  async function restart() {
+    const dest = destination;
+    await api.destroy();
+    const next = await bootApp({ ...options, venue, config });
+    if (dest) next.setDestination(dest);
+    return next;
+  }
+
+  const api = {
     venue,
     chain,
     hud,
@@ -347,6 +377,7 @@ export async function bootApp(options = {}) {
     clearDestination,
     async destroy() {
       if (frame !== null) caf(frame);
+      frame = null;
       win?.removeEventListener?.('resize', fit);
       win?.removeEventListener?.('deviceorientation', onOrientation);
       offPose();
@@ -361,6 +392,15 @@ export async function bootApp(options = {}) {
       root.textContent = '';
     },
   };
+  return api;
+}
+
+function safeStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** The graph node closest to a pose on the same floor (else overall). */

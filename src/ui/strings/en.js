@@ -1,13 +1,13 @@
 /**
- * Every user-facing string in the app. Components never inline text; they
- * call `t(key, params)`. Keeping them here makes translation, tone review and
- * accessibility copy edits a single-file change.
+ * English — the reference language. Every key used anywhere in the UI must
+ * exist here; other languages fall back to it key by key.
  *
- * `{name}`-style placeholders are interpolated from `params`.
+ * `{name}`-style placeholders are interpolated by `t()`.
  */
-
-export const STRINGS = Object.freeze({
-  en: Object.freeze({
+export default {
+  code: 'en',
+  name: 'English',
+  strings: {
     'app.title': 'Indoor wayfinding',
 
     // HUD
@@ -56,6 +56,7 @@ export const STRINGS = Object.freeze({
     'picker.select': 'Navigate to {name}',
     'picker.highContrast': 'High contrast',
     'picker.close': 'Close',
+    'picker.language': 'Language',
 
     // Floor plan view
     'floorplan.title': 'Floor plan',
@@ -67,6 +68,9 @@ export const STRINGS = Object.freeze({
     'floorplan.otherFloor': 'Your destination is on {name}.',
     'floorplan.summary':
       'Floor plan of {floor}. You are at {x}, {y} metres, facing {heading} degrees.',
+    'floorplan.rotation': 'Map orientation',
+    'floorplan.headingUp': 'Heading up',
+    'floorplan.northUp': 'North up',
 
     // View switcher
     'view.ar': 'Camera view',
@@ -88,53 +92,5 @@ export const STRINGS = Object.freeze({
 
     // Floors
     'floor.unknown': 'Unknown floor',
-  }),
-});
-
-let currentLang = 'en';
-
-/**
- * Select the active language. Falls back to English for missing keys.
- * @param {string} lang
- */
-export function setLanguage(lang) {
-  if (!STRINGS[lang]) throw new RangeError(`no strings for language "${lang}"`);
-  currentLang = lang;
-}
-
-export function getLanguage() {
-  return currentLang;
-}
-
-/**
- * Look up a string and interpolate `{param}` placeholders.
- *
- * Unknown keys return the key itself (never throw in a render path) so a
- * missing string is visible in the UI rather than crashing it.
- *
- * @param {string} key
- * @param {Record<string, string | number>} [params]
- * @returns {string}
- */
-export function t(key, params = {}) {
-  const table = STRINGS[currentLang] ?? STRINGS.en;
-  const template = table[key] ?? STRINGS.en[key] ?? key;
-  return template.replace(/\{(\w+)\}/g, (m, name) => (name in params ? String(params[name]) : m));
-}
-
-/**
- * Display name for a venue category key; unknown keys are title-cased.
- * @param {string | undefined} category
- */
-export function categoryName(category) {
-  if (!category) return t('category.other');
-  const key = `category.${category}`;
-  const table = STRINGS[currentLang] ?? STRINGS.en;
-  if (key in table || key in STRINGS.en) return t(key);
-  return category.charAt(0).toUpperCase() + category.slice(1);
-}
-
-/** Format metres for display: whole metres, never negative. */
-export function formatMetres(metres) {
-  return String(Math.max(0, Math.round(metres)));
-}
+  },
+};

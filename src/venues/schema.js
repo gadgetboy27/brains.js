@@ -48,6 +48,9 @@
  *       "access": "public"               // or "staff"; optional
  *     }
  *   ],
+ *   "languages": {                       // optional community languages (see src/ui/strings/)
+ *     "sm": { "name": "Gagana Sāmoa", "strings": { "picker.title": "…" } }
+ *   },
  *   "providers": {                       // optional, opaque per-provider config
  *     "immersal": { "mapId": 12345 }
  *   }
@@ -309,6 +312,23 @@ export function validateVenue(venue) {
   if (venue.frame !== undefined && c.isObject(venue.frame, 'frame')) {
     c.noGps(venue.frame, 'frame');
     c.isNumber(venue.frame.headingOffsetDeg, 'frame.headingOffsetDeg', { required: false });
+  }
+
+  if (venue.languages !== undefined && c.isObject(venue.languages, 'languages')) {
+    for (const [code, lang] of Object.entries(venue.languages)) {
+      const p = `languages.${code}`;
+      if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(code)) {
+        c.add(p, 'must be keyed by a BCP 47 language code such as "mi" or "en-NZ"');
+      }
+      if (!c.isObject(lang, p)) continue;
+      c.isString(lang.name, `${p}.name`);
+      if (c.isObject(lang.strings, `${p}.strings`)) {
+        for (const [key, value] of Object.entries(lang.strings)) {
+          if (typeof value !== 'string')
+            c.add(`${p}.strings.${key}`, `must be a string, got ${describe(value)}`);
+        }
+      }
+    }
   }
 
   if (venue.providers !== undefined && c.isObject(venue.providers, 'providers')) {

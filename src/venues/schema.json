@@ -61,6 +61,28 @@
       "type": "array",
       "items": { "$ref": "#/$defs/anchor" }
     },
+    "languages": {
+      "description": "Community languages the venue adds or overrides, keyed by BCP 47 language code (e.g. \"sm\", \"to\", \"mi\"). Each provides a display name and a partial or complete set of UI strings keyed as in src/ui/strings/en.js; keys not translated fall back to English. Lets a venue offer its own languages without a code change.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "strings"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "The language's name, in that language, shown in the language menu.",
+            "type": "string",
+            "minLength": 1
+          },
+          "strings": {
+            "description": "UI string overrides keyed by string id. Placeholders such as {name} must be kept.",
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+    },
     "providers": {
       "description": "Configuration for positioning providers. Keys other than `order` are per-provider blocks, keyed by provider name; unknown providers are permitted so that new ones can be configured without a schema change.",
       "type": "object",

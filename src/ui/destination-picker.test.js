@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createVenue } from '../core/venue.js';
 import demo from '../venues/demo-venue.json';
 import { applyContrastPreference, createDestinationPicker } from './destination-picker.js';
-import { t } from './strings.js';
+import { t } from './strings/index.js';
 
 const venue = () => createVenue(structuredClone(demo));
 

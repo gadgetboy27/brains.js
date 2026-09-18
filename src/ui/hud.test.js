@@ -6,7 +6,8 @@ import { findRoute } from '../core/router.js';
 import { createVenue } from '../core/venue.js';
 import demo from '../venues/demo-venue.json';
 import { createHud } from './hud.js';
-import { STRINGS, t } from './strings.js';
+import en from './strings/en.js';
+import { t } from './strings/index.js';
 
 const venue = createVenue(structuredClone(demo));
 const pose = (x, y, floor = 0) => ({
@@ -135,7 +136,7 @@ describe('Hud', () => {
     hud.setDestination(venue.poiById('poi-clinic-a'));
     hud.showRescan();
     hud.showError(t('error.generic', { message: 'x' }), { retry: () => {} });
-    const allStrings = Object.values(STRINGS.en);
+    const allStrings = Object.values(en.strings);
     const texts = [...hud.el.querySelectorAll('button, h3, p')]
       .map((n) => n.textContent.trim())
       .filter(Boolean);

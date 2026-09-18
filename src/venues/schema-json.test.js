@@ -52,6 +52,10 @@ const invalidCases = {
   'providers.order not strings': (v) => (v.providers.order = [1]),
   'floor plan missing image': (v) => (v.floors[0].plan = { widthPx: 1, heightPx: 1 }),
   'floor plan widthPx 0': (v) => (v.floors[0].plan = { image: 'a.png', widthPx: 0, heightPx: 1 }),
+  'language missing name': (v) => (v.languages = { sm: { strings: {} } }),
+  'language string not a string': (v) =>
+    (v.languages = { sm: { name: 'x', strings: { 'picker.title': 1 } } }),
+  'language bad code': (v) => (v.languages = { 'not a code': { name: 'x', strings: {} } }),
   'GPS on venue': (v) => (v.lat = 51.5),
   'GPS on node': (v) => (v.nodes[0].longitude = 0),
   'GPS on poi': (v) => (v.pois[0].lng = 0),
@@ -104,6 +108,11 @@ const validCases = {
       heightPx: 600,
       metresPerPixel: 0.05,
       originPx: { x: 0, y: 600 },
+    };
+  },
+  'community language': (v) => {
+    v.languages = {
+      sm: { name: 'Gagana Sāmoa', strings: { 'picker.title': 'O fea e te alu i ai?' } },
     };
   },
   'negative floor index': (v) => {

@@ -5,7 +5,7 @@ import { Object3D } from 'three';
 import { bootApp, nearestNode, readConfig, viewForTilt } from './app.js';
 import { createVenue } from './core/venue.js';
 import demo from './venues/demo-venue.json';
-import { t } from './ui/strings.js';
+import { availableLanguages, getLanguage, setLanguage, t } from './ui/strings/index.js';
 
 const venue = () => createVenue(structuredClone(demo));
 
@@ -62,6 +62,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  setLanguage('en');
 });
 
 describe('readConfig', () => {
@@ -263,6 +264,58 @@ describe('bootApp', () => {
     const { app } = await boot({ options: { storage } });
     expect(document.documentElement.getAttribute('data-contrast')).toBe('high');
     expect(app.picker.el.querySelector('[data-f="contrast"]').checked).toBe(true);
+    await app.destroy();
+  });
+});
+
+describe('bootApp — languages', () => {
+  it("registers the venue's community languages, offers them in the picker and applies ?lang=", async () => {
+    const json = structuredClone(demo);
+    json.languages = {
+      sm: { name: 'Gagana Sāmoa', strings: { 'picker.title': 'O fea e te alu i ai?' } },
+    };
+    const { app } = await boot({ options: { venue: createVenue(json), search: '?lang=sm' } });
+    expect(getLanguage()).toBe('sm');
+    expect(document.documentElement.lang).toBe('sm');
+    expect(availableLanguages().map((l) => l.code)).toEqual(['en', 'mi', 'sm']);
+    expect(app.picker.el.querySelector('h2').textContent).toBe('O fea e te alu i ai?');
+    expect(app.picker.el.querySelector('[data-f="close"]').textContent).toBe(t('picker.close')); // fallback: English
+    const select = app.picker.el.querySelector('[data-f="lang"]');
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      'English',
+      'Te reo Māori',
+      'Gagana Sāmoa',
+    ]);
+    expect(select.value).toBe('sm');
+    await app.destroy();
+  });
+
+  it('switching language persists the choice and rebuilds the UI in that language', async () => {
+    const storage = {
+      data: {},
+      getItem: (k) => storage.data[k] ?? null,
+      setItem: (k, v) => (storage.data[k] = v),
+    };
+    const onLanguageChange = vi.fn();
+    const { app } = await boot({ options: { storage, onLanguageChange } });
+    const select = app.picker.el.querySelector('[data-f="lang"]');
+    select.value = 'mi';
+    select.dispatchEvent(new Event('change'));
+    expect(storage.data['brains:lang']).toBe('mi');
+    expect(getLanguage()).toBe('mi');
+    expect(onLanguageChange).toHaveBeenCalledWith('mi');
+    await app.destroy();
+
+    // Without an override, the app rebuilds itself and reads the stored language.
+    const { app: app2 } = await boot({ options: { storage } });
+    expect(app2.hud.text.destination).toBe('Kōwhiria he wāhi haere');
+    expect(document.documentElement.lang).toBe('mi');
+    await app2.destroy();
+  });
+
+  it('uses the browser language when nothing else is set', async () => {
+    const { app } = await boot({ options: { storage: null, navigatorLanguages: ['fr', 'mi-NZ'] } });
+    expect(getLanguage()).toBe('mi');
     await app.destroy();
   });
 });

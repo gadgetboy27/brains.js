@@ -20,7 +20,7 @@
  * canvas.
  */
 
-import { t } from './strings.js';
+import { t } from './strings/index.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
 /** @typedef {import('../core/positioning.js').Pose} Pose */

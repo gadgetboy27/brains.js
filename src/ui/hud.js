@@ -12,7 +12,7 @@
  * touch-target token.
  */
 
-import { formatMetres, t } from './strings.js';
+import { formatMetres, t } from './strings/index.js';
 import { ensureStyle } from './tokens.js';
 
 const CSS = `

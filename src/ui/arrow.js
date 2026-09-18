@@ -18,10 +18,10 @@
 
 import { Group, MeshBasicMaterial, Object3D, Vector3 } from 'three';
 
-import { t } from './strings.js';
+import { t } from './strings/index.js';
 import { makeTextSprite, updateTextSprite } from './labels.js';
 import { cssToken } from './tokens.js';
-import { formatMetres } from './strings.js';
+import { formatMetres } from './strings/index.js';
 import { venueToScene } from './ar-scene.js';
 
 /** @typedef {import('../core/positioning.js').Pose} Pose */
