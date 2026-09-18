@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "sample-mall",
+  "name": "Sample Mall",
+  "frame": { "headingOffsetDeg": 12.5 },
+  "floors": [
+    { "index": 0, "id": "g", "name": "Ground", "elevation": 0 },
+    { "index": 1, "id": "l1", "name": "Level 1", "elevation": 4.2 }
+  ],
+  "nodes": [
+    { "id": "n-entrance", "x": 0, "y": 0, "z": 0, "floor": 0 },
+    { "id": "n-atrium", "x": 10, "y": 0, "z": 0, "floor": 0 },
+    { "id": "n-shop-a", "x": 20, "y": 0, "z": 0, "floor": 0 },
+    { "id": "n-l1-landing", "x": 10, "y": 0, "z": 4.2, "floor": 1 },
+    { "id": "n-l1-toilets", "x": 20, "y": 5, "z": 4.2, "floor": 1 }
+  ],
+  "edges": [
+    { "from": "n-entrance", "to": "n-atrium", "type": "walk" },
+    { "from": "n-atrium", "to": "n-shop-a", "type": "walk" },
+    { "from": "n-atrium", "to": "n-l1-landing", "type": "lift", "distance": 20 },
+    { "from": "n-atrium", "to": "n-l1-landing", "type": "stairs", "distance": 6 },
+    { "from": "n-l1-landing", "to": "n-l1-toilets", "type": "walk" }
+  ],
+  "pois": [
+    {
+      "id": "poi-info",
+      "name": "Information desk",
+      "aliases": ["Help desk", "Info"],
+      "node": "n-atrium",
+      "category": "service",
+      "hours": [{ "open": "09:00", "close": "21:00" }]
+    },
+    {
+      "id": "poi-shop-a",
+      "name": "Shop A",
+      "node": "n-shop-a",
+      "category": "retail"
+    },
+    {
+      "id": "poi-toilets-g",
+      "name": "Toilets",
+      "aliases": ["Restrooms", "WC"],
+      "node": "n-entrance",
+      "category": "facility"
+    },
+    {
+      "id": "poi-toilets-l1",
+      "name": "Toilets",
+      "aliases": ["Restrooms", "WC"],
+      "node": "n-l1-toilets",
+      "category": "facility"
+    },
+    {
+      "id": "poi-staff-room",
+      "name": "Staff room",
+      "node": "n-l1-landing",
+      "accessLevel": "staffOnly"
+    }
+  ],
+  "providers": {
+    "immersal": { "mapId": 12345 }
+  }
+}
