@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import basicSsl from '@vitejs/plugin-basic-ssl';
@@ -22,12 +24,31 @@ const entryOutsideRoot = {
   },
 };
 
+/** docs/PRIVACY.md is linked from the first-run screen as /PRIVACY.md. */
+const privacyNotice = {
+  name: 'brains:privacy-notice',
+  configureServer(server) {
+    server.middlewares.use('/PRIVACY.md', async (_req, res) => {
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.end(await readFile(resolve(projectRoot, 'docs/PRIVACY.md'), 'utf8'));
+    });
+  },
+  async generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'PRIVACY.md',
+      source: await readFile(resolve(projectRoot, 'docs/PRIVACY.md'), 'utf8'),
+    });
+  },
+};
+
 export default defineConfig(({ command }) => ({
   // `npm run dev:https` serves a self-signed certificate so a phone on the
   // same network can open the app in a secure context (camera and motion
   // APIs refuse plain HTTP; only localhost is exempt). See docs/deployment.md.
   plugins: [
     entryOutsideRoot,
+    privacyNotice,
     ...(command === 'serve' && process.env.npm_lifecycle_event === 'dev:https' ? [basicSsl()] : []),
   ],
   // The single entry point is public/index.html; static assets (models,
