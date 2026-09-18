@@ -1,14 +1,14 @@
-name: Deploy to Cloudflare Pages
+name: Deploy to Cloudflare
 
 # Production deploy on push to master; a preview deploy for every pull
 # request, with its HTTPS URL posted as a PR comment. Camera, motion and
 # orientation APIs only work in a secure context, so every deployment —
-# preview included — is served over HTTPS by Cloudflare Pages.
+# preview included — is served over HTTPS by Cloudflare (Workers static
+# assets; Pages is now part of Workers).
 #
 # One-time setup (see docs/deployment.md):
-#   - create the Pages project (name below) in the Cloudflare dashboard, or
-#     `npx wrangler pages project create brains-js --production-branch master`
-#   - add repository secrets CLOUDFLARE_API_TOKEN (Pages: Edit) and
+#   - `npx wrangler deploy` once from a logged-in machine creates the Worker
+#   - add repository secrets CLOUDFLARE_API_TOKEN (Workers Scripts: Edit) and
 #     CLOUDFLARE_ACCOUNT_ID
 #   - optionally set IMMERSAL_API_KEY / VENUE_JSON_URL as repository variables
 #     or secrets to bake into the build
@@ -27,9 +27,6 @@ permissions:
 concurrency:
   group: deploy-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
-env:
-  PAGES_PROJECT: brains-js
 
 jobs:
   checks:
@@ -56,7 +53,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     environment:
       name: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
-      url: ${{ steps.deploy.outputs.deployment-url }}
+      url: ${{ github.event_name == 'pull_request' && steps.preview.outputs.url || 'https://brains-js.henrypeti-dev.workers.dev' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -87,6 +84,15 @@ jobs:
           POSITIONING_PROVIDER: ${{ vars.POSITIONING_PROVIDER }}
         run: npm run build
 
+      # Production: `wrangler deploy`. Preview: upload a version with a preview
+      # alias named after the PR branch → https://<alias>-brains-js.<subdomain>.workers.dev
+      - name: Preview alias
+        if: github.event_name == 'pull_request'
+        id: alias
+        run: |
+          alias=$(echo "${{ github.head_ref }}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40)
+          echo "alias=$alias" >> "$GITHUB_OUTPUT"
+
       - name: Deploy
         id: deploy
         if: steps.creds.outputs.configured == 'true'
@@ -94,19 +100,26 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Previews deploy under the PR's branch name; master is production.
           command: >-
-            pages deploy dist
-            --project-name=${{ env.PAGES_PROJECT }}
-            --branch=${{ github.event_name == 'pull_request' && github.head_ref || 'master' }}
-            --commit-hash=${{ github.event.pull_request.head.sha || github.sha }}
-            --commit-dirty=false
+            ${{ github.event_name == 'pull_request'
+              && format('versions upload --preview-alias={0} --message="PR #{1}"', steps.alias.outputs.alias, github.event.pull_request.number)
+              || 'deploy' }}
+
+      - name: Resolve preview URL
+        if: github.event_name == 'pull_request' && steps.creds.outputs.configured == 'true'
+        id: preview
+        env:
+          OUT: ${{ steps.deploy.outputs.command-output }}
+        run: |
+          # wrangler prints "Version Preview Alias URL: https://<alias>-brains-js.<subdomain>.workers.dev"
+          url=$(printf '%s' "$OUT" | grep -o 'Version Preview Alias URL: https://[^ ]*' | head -1 | sed 's/.*: //')
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview URL on the PR
         if: github.event_name == 'pull_request' && steps.creds.outputs.configured == 'true'
         uses: actions/github-script@v7
         env:
-          URL: ${{ steps.deploy.outputs.deployment-url }}
+          URL: ${{ steps.preview.outputs.url }}
         with:
           script: |
             const marker = '<!-- pages-preview -->';

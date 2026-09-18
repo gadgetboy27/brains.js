@@ -1,8 +1,16 @@
 {
-  // Cloudflare Pages project. Deployed by .github/workflows/deploy.yml, or
-  // manually with `npm run deploy` after `npx wrangler login`.
+  // Cloudflare Workers static-assets project (Pages is now part of Workers).
+  // Deployed by .github/workflows/deploy.yml, or manually with `npm run deploy`
+  // after `npx wrangler login`. Previews: `npm run deploy:preview`.
   "$schema": "https://developers.cloudflare.com/schemas/wrangler.json",
   "name": "brains-js",
-  "pages_build_output_dir": "dist",
   "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // Every path serves the app (query strings kept), e.g. /?v=<venue>&anchor=<id>.
+    "not_found_handling": "single-page-application",
+  },
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": { "enabled": false },
 }

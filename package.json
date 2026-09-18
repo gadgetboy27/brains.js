@@ -13,8 +13,8 @@
     "lint:fix": "eslint --fix . && prettier --write .",
     "format": "prettier --write .",
     "dev:https": "vite --host",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name=brains-js",
-    "deploy:preview": "npm run build && wrangler pages deploy dist --project-name=brains-js --branch=preview",
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:preview": "npm run build && wrangler versions upload --preview-alias=preview",
     "privacy:update": "node scripts/privacy-table.mjs --write"
   },
   "repository": {
