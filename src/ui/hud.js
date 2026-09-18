@@ -33,6 +33,9 @@ const CSS = `
 .hud-rescan p, .hud-error p { margin: 0; }
 .hud-error { border: 2px solid var(--color-error); background: var(--color-error-bg); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; }
 .hud-error .hud-actions { margin-top: 4px; }
+.hud-notices { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hud-notices:empty { display: none; }
+.hud-notices li { border: 2px solid var(--color-warn); border-radius: var(--radius); padding: 8px 12px; }
 .hud-speech { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .hud-speech[hidden] { display: none; }
 .hud-speech label { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
@@ -80,6 +83,7 @@ export class Hud {
         <span class="hud-distance" data-f="distance"></span>
         <p class="hud-step" data-f="step" hidden></p>
       </div>
+      <ul class="hud-notices" data-f="notices" role="status" aria-live="polite"></ul>
       <div class="hud-rescan" data-f="rescan" role="status" hidden>
         <h3 data-f="rescan-title"></h3>
         <p data-f="rescan-body"></p>
@@ -159,7 +163,37 @@ export class Hud {
       step: this.#f('step').hidden ? '' : this.#f('step').textContent,
       error: this.#f('error').hidden ? '' : this.#f('error-message').textContent,
       rescan: this.#f('rescan').hidden ? '' : this.#f('rescan-title').textContent,
+      notices: [...this.#f('notices').children].map((li) => li.textContent),
     };
+  }
+
+  // ----------------------------------------------------------------- notices
+
+  /**
+   * Show (or update) a persistent notice, e.g. "You are offline". Notices
+   * stack and are announced politely; use errors for things needing action.
+   * @param {string} id
+   * @param {string} text
+   */
+  showNotice(id, text) {
+    const list = this.#f('notices');
+    let li = list.querySelector(`[data-notice="${id}"]`);
+    if (!li) {
+      li = this.#doc.createElement('li');
+      li.dataset.notice = id;
+      list.appendChild(li);
+    }
+    li.textContent = text;
+  }
+
+  /** @param {string} id */
+  hideNotice(id) {
+    this.#f('notices').querySelector(`[data-notice="${id}"]`)?.remove();
+  }
+
+  /** @param {string} id */
+  hasNotice(id) {
+    return Boolean(this.#f('notices').querySelector(`[data-notice="${id}"]`));
   }
 
   /** The assertive live region spoken guidance is mirrored into. */

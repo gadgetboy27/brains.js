@@ -27,6 +27,7 @@
 import { createNavigator } from './core/navigation.js';
 import { findRoute } from './core/router.js';
 import { createVenue, loadVenue } from './core/venue.js';
+import { loadVenueCache, saveVenueCache } from './core/venue-cache.js';
 import { createProviderChain } from './providers/index.js';
 import { NavigationArrow } from './ui/arrow.js';
 import { ArScene } from './ui/ar-scene.js';
@@ -58,6 +59,10 @@ const FAILURE_MESSAGES = {
   'no-camera': 'error.noCamera',
   unsupported: 'error.unsupported',
 };
+
+/** Providers that need the camera (and therefore the AR view makes sense). */
+const CAMERA_PROVIDERS = new Set(['immersal', 'qr']);
+const LOW_BATTERY_LEVEL = 0.2;
 
 /**
  * Read app config from the URL and environment.
@@ -156,19 +161,35 @@ export async function bootApp(options = {}) {
   hud.setSpeechState({ muted: speech.muted, rate: speech.rate, supported: speech.supported });
   const offSpeech = speech.onChange((state) => hud.setSpeechState(state));
 
-  // --- venue
+  // --- venue (with a cached copy as the fallback, so the floor plan survives
+  // a failed fetch; see docs/handled-states.md)
   let venue = options.venue ?? null;
+  let venueFromCache = false;
   if (!venue) {
-    try {
-      venue = config.venueUrl
-        ? await (options.loadVenue ?? loadVenue)(config.venueUrl)
-        : createVenue(structuredClone(demoVenue));
-    } catch (err) {
-      hud.showError(t('error.venueLoad'), {
-        hint: err.message,
-        retry: () => win.location?.reload?.(),
-      });
-      return { hud, error: err, destroy: () => hud.destroy() };
+    if (!config.venueUrl) {
+      venue = createVenue(structuredClone(demoVenue));
+    } else {
+      try {
+        venue = await (options.loadVenue ?? loadVenue)(config.venueUrl);
+        saveVenueCache(config.venueUrl, venueToJson(venue), storage);
+      } catch (err) {
+        const cached = loadVenueCache(config.venueUrl, storage);
+        if (cached) {
+          try {
+            venue = createVenue(cached.json);
+            venueFromCache = true;
+          } catch {
+            venue = null;
+          }
+        }
+        if (!venue) {
+          hud.showError(t('error.venueLoadNoCache'), {
+            hint: err.message,
+            retry: () => (options.onRetryVenue ? options.onRetryVenue() : win.location?.reload?.()),
+          });
+          return { hud, error: err, state: 'venue-failed', destroy: () => hud.destroy() };
+        }
+      }
     }
   }
 
@@ -182,6 +203,18 @@ export async function bootApp(options = {}) {
   });
   doc.documentElement.lang = langCode;
   speech.setLanguage(langCode);
+  if (venueFromCache) hud.showNotice('venue-cached', t('notice.venueCached'));
+
+  // --- connectivity: a persistent notice; routing and the floor plan are local.
+  const nav = options.navigator ?? globalThis.navigator;
+  const applyOnline = () => {
+    const online = nav?.onLine !== false;
+    if (online) hud.hideNotice('offline');
+    else hud.showNotice('offline', t('notice.offline'));
+  };
+  applyOnline();
+  win?.addEventListener?.('online', applyOnline);
+  win?.addEventListener?.('offline', applyOnline);
 
   // --- positioning
   const chain = createProviderChain(venue, {
@@ -245,6 +278,8 @@ export async function bootApp(options = {}) {
 
   let view = config.view === 'floorplan' ? 'floorplan' : 'ar';
   let autoView = config.view === 'auto';
+  let cameraUsable = true; // false once camera positioning is known to be unavailable
+  let lowPower = false; // true while the battery is low and not charging
   function showView(next, { manual = false } = {}) {
     view = next;
     if (manual) autoView = false;
@@ -260,8 +295,43 @@ export async function bootApp(options = {}) {
   const onOrientation = (e) => {
     if (!autoView) return;
     const next = viewForTilt(e.beta, view);
+    if (next === 'ar' && (!cameraUsable || lowPower)) return; // AR is pointless / too costly
     if (next !== view) showView(next);
   };
+
+  /** Camera positioning is unavailable: fall back to the floor plan and say why. */
+  function cameraUnavailable(noticeKey) {
+    cameraUsable = false;
+    if (noticeKey) hud.showNotice('camera', t(noticeKey));
+    if (view === 'ar') showView('floorplan');
+  }
+
+  // --- battery: on low battery, prefer the floor plan (no WebGL, no camera).
+  let battery = null;
+  const applyBattery = () => {
+    if (!battery) return;
+    const low = battery.level <= LOW_BATTERY_LEVEL && !battery.charging;
+    if (low && !lowPower) {
+      lowPower = true;
+      hud.showNotice('battery', t('notice.lowBattery'));
+      if (view === 'ar') showView('floorplan');
+    } else if (!low && lowPower) {
+      lowPower = false;
+      hud.hideNotice('battery');
+    }
+  };
+  const batteryReady = (async () => {
+    try {
+      const get = options.getBattery ?? nav?.getBattery?.bind(nav);
+      battery = get ? await get() : null;
+    } catch {
+      battery = null;
+    }
+    if (!battery) return;
+    applyBattery();
+    battery.addEventListener?.('levelchange', applyBattery);
+    battery.addEventListener?.('chargingchange', applyBattery);
+  })();
   win?.addEventListener?.('deviceorientation', onOrientation);
 
   let fitted = { w: 0, h: 0 };
@@ -277,6 +347,7 @@ export async function bootApp(options = {}) {
   fit();
 
   // --- navigation state
+  const floorName = (i) => venue.floorByIndex(i)?.name ?? t('floor.unknown');
   let destination = null;
   let navigator = null;
   let lastPose = null;
@@ -284,7 +355,7 @@ export async function bootApp(options = {}) {
   function setDestination(poi) {
     hud.clearError();
     const target = venue.nodeById(poi.node);
-    const from = lastPose ? nearestNode(venue, lastPose) : venue.graph.nodes[0];
+    const from = lastPose ? nearestNode(venue, lastPose) : entranceNode(venue);
     const route = findRoute(venue.graph, from.id, target.id, {
       ...config.filter,
       timeOfDay: new Date(),
@@ -299,10 +370,15 @@ export async function bootApp(options = {}) {
     destination = poi;
     navigator = createNavigator(route);
     hud.setDestination(poi);
-    speech.announceDestination(poi, lastPose ? navigator.update(lastPose) : navigator.update(from));
+    // Seed progress from the current pose, or from the entrance when unknown, so
+    // the HUD shows a distance and speech has something to say even without a fix.
+    const initial = navigator.update(lastPose ?? { ...from, heading: 0 });
+    hud.setProgress(initial, { floorName });
+    speech.announceDestination(poi, initial);
     arScene.setRoute(route);
     floorplan.setRoute(route);
     floorplan.setDestination(poi);
+    if (!lastPose) floorplan.showFloor(from.floor); // no position: show where the route starts
     if (lastPose) onPose(lastPose);
     return true;
   }
@@ -317,8 +393,6 @@ export async function bootApp(options = {}) {
     arrow.setTarget(null);
     speech.announceCancelled();
   }
-
-  const floorName = (i) => venue.floorByIndex(i)?.name ?? t('floor.unknown');
 
   function onPose(pose) {
     lastPose = pose;
@@ -338,13 +412,30 @@ export async function bootApp(options = {}) {
   // Positioning problems → HUD, never alert().
   const offChange = chain.onChange((event) => {
     if (event.type === 'exhausted') {
+      // Provider failed to initialise (all of them): no position at all.
       hud.showError(t('error.positioningExhausted'), { retry: () => chain.start() });
+      hud.showNotice('position', t('notice.noPosition'));
+      cameraUnavailable(null);
       return;
     }
-    if (event.type === 'fallback') {
-      const failed = event.state.failed.at(-1);
-      const key = FAILURE_MESSAGES[failed?.reason];
-      if (key) hud.showError(t(key));
+    if (event.type === 'started' || event.type === 'fallback') {
+      hud.hideNotice('position');
+      const cameraFailure = event.state.failed.find((f) => FAILURE_MESSAGES[f.reason]);
+      if (cameraFailure && !CAMERA_PROVIDERS.has(event.state.active)) {
+        // e.g. QR denied the camera, mock took over: AR has nothing to show.
+        cameraUnavailable(
+          cameraFailure.reason === 'permission-denied'
+            ? 'notice.cameraDenied'
+            : FAILURE_MESSAGES[cameraFailure.reason]
+        );
+      } else if (CAMERA_PROVIDERS.has(event.state.active)) {
+        cameraUsable = true;
+        hud.hideNotice('camera');
+      }
+      if (event.type === 'fallback') {
+        const key = FAILURE_MESSAGES[event.state.failed.at(-1)?.reason];
+        if (key) hud.showError(t(key));
+      }
     }
     // Rescan prompt from the active provider, if it exposes one.
     const active = event.state.provider;
@@ -363,7 +454,7 @@ export async function bootApp(options = {}) {
   const loop = (time) => {
     fit(); // cheap no-op unless the layout size changed (e.g. first frame after boot)
     arrow.update(time ?? 0);
-    if (view === 'ar') arScene.render();
+    if (view === 'ar' && !lowPower) arScene.render();
     frame = raf(loop);
   };
   frame = raf(loop);
@@ -392,6 +483,18 @@ export async function bootApp(options = {}) {
     get view() {
       return view;
     },
+    /** Explicit handled state, for tests and diagnostics. */
+    get state() {
+      return {
+        cameraUsable,
+        lowPower,
+        online: nav?.onLine !== false,
+        venueFromCache,
+        positioning: chain.state.status,
+        hasPose: lastPose !== null,
+      };
+    },
+    batteryReady,
     get destination() {
       return destination;
     },
@@ -403,6 +506,10 @@ export async function bootApp(options = {}) {
       frame = null;
       win?.removeEventListener?.('resize', fit);
       win?.removeEventListener?.('deviceorientation', onOrientation);
+      win?.removeEventListener?.('online', applyOnline);
+      win?.removeEventListener?.('offline', applyOnline);
+      battery?.removeEventListener?.('levelchange', applyBattery);
+      battery?.removeEventListener?.('chargingchange', applyBattery);
       offPose();
       offChange();
       offSpeech();
@@ -426,6 +533,35 @@ function safeStorage() {
   } catch {
     return null;
   }
+}
+
+/** Where routes start when the user's position is unknown: an entrance/exit POI, else the first node. */
+export function entranceNode(venue) {
+  const poi = venue.pois.find((p) => p.category === 'exit' || p.category === 'entrance');
+  return (poi && venue.nodeById(poi.node)) ?? venue.graph.nodes[0];
+}
+
+/** Plain JSON for a Venue, for caching. Reverses createVenue()'s indexing. */
+function venueToJson(venue) {
+  return {
+    schemaVersion: 1,
+    id: venue.id,
+    name: venue.name,
+    frame: { headingOffsetDeg: venue.headingOffsetDeg },
+    floors: venue.floors.map((f) => ({ ...f })),
+    nodes: venue.graph.nodes.map((n) => ({ ...n })),
+    edges: venue.graph.edges.map((e) => ({ ...e })),
+    pois: venue.pois.map((p) => ({ ...p })),
+    ...(venue.anchors.length ? { anchors: venue.anchors.map((a) => ({ ...a })) } : {}),
+    ...(venue.languages.length
+      ? {
+          languages: Object.fromEntries(
+            venue.languages.map((l) => [l.code, { name: l.name, strings: { ...l.strings } }])
+          ),
+        }
+      : {}),
+    ...(Object.keys(venue.providers).length ? { providers: { ...venue.providers } } : {}),
+  };
 }
 
 /** The graph node closest to a pose on the same floor (else overall). */

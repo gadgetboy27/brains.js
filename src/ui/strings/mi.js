@@ -108,6 +108,18 @@ export default {
     'speech.rescan': 'Kāore i te mārama tō wāhi. Tohua te kāmera ki tētahi tohu, waehere QR rānei.',
     'speech.cancelled': 'Kua whakamutua te ārahi.',
 
+    // Handled states
+    'notice.offline':
+      'Kei waho koe i te ipurangi. Ka mahi tonu te mahere papa me ngā ara; tērā pea kāore te tautuhi wāhi.',
+    'notice.lowBattery': 'Kua iti te pākahiko. Kua huri ki te mahere papa hei penapena hiko.',
+    'notice.venueCached':
+      'E whakaatu ana i tētahi kape kua tiakina o te mahere; tērā pea kua tawhito.',
+    'notice.cameraDenied':
+      'Kāore i whakaaetia te kāmera — e whakamahi ana i te mahere papa. Tērā pea he iti te tautuhi wāhi.',
+    'notice.noPosition': 'Kāore tō wāhi e wātea ana. Ka tīmata ngā ara i te tomokanga matua.',
+    'error.venueLoadNoCache':
+      'Kāore i taea te uta i te mahere, kāore hoki he kape kua tiakina. Hono ki te ipurangi, ka ngana anō.',
+
     // Floors
     'floor.unknown': 'Papa tē mōhiotia',
   },

@@ -34,6 +34,7 @@ describe('Hud', () => {
       step: '',
       error: '',
       rescan: '',
+      notices: [],
     });
     expect(hud.el.querySelector('[aria-live="polite"]')).not.toBeNull();
     expect(hud.el.querySelector('[role="alert"]').hidden).toBe(true);

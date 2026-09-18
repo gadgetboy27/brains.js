@@ -107,6 +107,17 @@ export default {
     'speech.rescan': 'Position uncertain. Point the camera at a sign or a QR marker.',
     'speech.cancelled': 'Navigation stopped.',
 
+    // Handled states (persistent notices; the floor plan stays usable)
+    'notice.offline':
+      'You are offline. The floor plan and routes still work; live positioning may not.',
+    'notice.lowBattery': 'Battery is low. Switched to the floor plan to save power.',
+    'notice.venueCached': 'Showing a saved copy of the venue map; it may be out of date.',
+    'notice.cameraDenied':
+      'Camera access was declined — using the floor plan. Positioning may be limited.',
+    'notice.noPosition': 'Your position is not available. Routes start from the main entrance.',
+    'error.venueLoadNoCache':
+      'The venue map could not be loaded and no saved copy exists. Connect to the internet and try again.',
+
     // Floors
     'floor.unknown': 'Unknown floor',
   },

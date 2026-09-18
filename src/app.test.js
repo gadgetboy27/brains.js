@@ -241,24 +241,6 @@ describe('bootApp', () => {
     await app.destroy();
   });
 
-  it('shows a venue load error with retry when the venue cannot be loaded', async () => {
-    const app = await bootApp({
-      config: {
-        venueUrl: '/nope.json',
-        provider: 'mock',
-        allowMock: true,
-        view: 'auto',
-        filter: {},
-      },
-      loadVenue: async () => Promise.reject(new Error('HTTP 404')),
-      requestAnimationFrame: () => 1,
-      cancelAnimationFrame: () => {},
-    });
-    expect(app.error.message).toBe('HTTP 404');
-    expect(app.hud.text.error).toBe(t('error.venueLoad'));
-    app.destroy();
-  });
-
   it('applies the stored contrast preference at boot', async () => {
     const storage = { getItem: () => 'high', setItem: vi.fn() };
     const { app } = await boot({ options: { storage } });
@@ -395,5 +377,197 @@ describe('bootApp — spoken guidance', () => {
     expect(root.querySelector('.hud [role="alert"]')).not.toBeNull();
     expect(root.querySelector('.picker').getAttribute('role')).toBe('dialog');
     await app.destroy();
+  });
+});
+
+describe('bootApp — handled states (floor plan stays usable in every one)', () => {
+  const denied = () => {
+    const e = new Error('no');
+    e.name = 'NotAllowedError';
+    return e;
+  };
+  const qrDenied = () => ({
+    getUserMedia: async () => Promise.reject(denied()),
+    BarcodeDetector: class {},
+  });
+  const usable = (app) => {
+    // The floor plan is mounted, a destination can be chosen, and a route is drawn on it.
+    expect(app.view).toBe('floorplan');
+    expect(document.querySelector('#app-view-plan').hidden).toBe(false);
+    expect(app.setDestination(app.venue.poiById('poi-clinic-b'))).toBe(true);
+    expect(app.hud.text.destination).toBe('To Clinic B');
+    expect(app.hud.text.distance).toMatch(/\d+ m/);
+    expect(app.floorplan.el.querySelector('.floorplan-banner').hidden).toBe(false); // destination floor banner
+  };
+
+  it('camera permission denied: falls back, notices, switches to the floor plan, keeps auto-AR off', async () => {
+    const { app } = await boot({
+      config: { provider: null },
+      providerOptions: { order: ['qr', 'mock'], qr: qrDenied() },
+    });
+    expect(app.chain.state.active).toBe('mock');
+    expect(app.state.cameraUsable).toBe(false);
+    expect(app.hud.text.notices).toContain(t('notice.cameraDenied'));
+    usable(app);
+    // Tilting the phone up must not bring back a camera view that cannot work…
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), { beta: 80 }));
+    expect(app.view).toBe('floorplan');
+    // …but the user may still choose it explicitly.
+    app.showView('ar');
+    expect(app.view).toBe('ar');
+    await app.destroy();
+  });
+
+  it('provider failed to initialise (all of them): error with retry, no-position notice, routes from the entrance', async () => {
+    const { app } = await boot({
+      config: { provider: null, allowMock: false },
+      providerOptions: { order: ['qr'], qr: qrDenied() },
+    });
+    expect(app.chain.state.status).toBe('exhausted');
+    expect(app.state.hasPose).toBe(false);
+    expect(app.hud.text.error).toBe(t('error.positioningExhausted'));
+    expect(app.hud.el.querySelector('[data-f="error-retry"]').hidden).toBe(false);
+    expect(app.hud.text.notices).toContain(t('notice.noPosition'));
+    usable(app);
+    // Route starts at the main entrance (the "exit" POI) when there is no pose.
+    expect(app.hud.text.distance).toBe('46 m'); // entrance → Clinic B via the stairs
+    await app.destroy();
+  });
+
+  it('venue map failed to load: uses the cached copy with a notice…', async () => {
+    const storage = {
+      data: {},
+      getItem: (k) => storage.data[k] ?? null,
+      setItem: (k, v) => (storage.data[k] = v),
+    };
+    // First boot succeeds and populates the cache.
+    const first = await bootApp({
+      config: {
+        venueUrl: '/venue.json',
+        provider: 'mock',
+        allowMock: true,
+        view: 'floorplan',
+        filter: {},
+      },
+      loadVenue: async () => createVenue(structuredClone(demo)),
+      storage,
+      arSceneOptions: { renderer: stubRenderer(), createLabel: fakeLabel },
+      arrowOptions: {
+        loadModel: async () => new Object3D(),
+        createLabel: fakeLabel,
+        updateLabel: () => true,
+      },
+      floorplanOptions: { context: fakeContext() },
+      speechOptions: { synth: null, Utterance: null, storage: null },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+    });
+    expect(Object.keys(storage.data).some((k) => k.startsWith('brains:venue-cache:'))).toBe(true);
+    await first.destroy();
+
+    // Second boot: the fetch fails, the cached copy is used.
+    const second = await bootApp({
+      config: {
+        venueUrl: '/venue.json',
+        provider: 'mock',
+        allowMock: true,
+        view: 'floorplan',
+        filter: {},
+      },
+      loadVenue: async () => Promise.reject(new Error('HTTP 503')),
+      storage,
+      arSceneOptions: { renderer: stubRenderer(), createLabel: fakeLabel },
+      arrowOptions: {
+        loadModel: async () => new Object3D(),
+        createLabel: fakeLabel,
+        updateLabel: () => true,
+      },
+      floorplanOptions: { context: fakeContext() },
+      speechOptions: { synth: null, Utterance: null, storage: null },
+      providerOptions: { mock: { path: [{ x: 0, y: 0, floor: 0 }], speedMps: 0 } },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+    });
+    expect(second.state.venueFromCache).toBe(true);
+    expect(second.venue.id).toBe('demo-health-centre');
+    expect(second.hud.text.notices).toContain(t('notice.venueCached'));
+    usable(second);
+    await second.destroy();
+  });
+
+  it('…and without a cached copy shows an error with retry', async () => {
+    const onRetryVenue = vi.fn();
+    const app = await bootApp({
+      config: {
+        venueUrl: '/venue.json',
+        provider: 'mock',
+        allowMock: true,
+        view: 'auto',
+        filter: {},
+      },
+      loadVenue: async () => Promise.reject(new Error('HTTP 404')),
+      storage: { getItem: () => null, setItem: () => {} },
+      onRetryVenue,
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+    });
+    expect(app.state).toBe('venue-failed');
+    expect(app.error.message).toBe('HTTP 404');
+    expect(app.hud.text.error).toBe(t('error.venueLoadNoCache'));
+    app.hud.el.querySelector('[data-f="error-retry"]').click();
+    expect(onRetryVenue).toHaveBeenCalledOnce();
+    app.destroy();
+  });
+
+  it('offline: a persistent notice that clears when back online; routing still works', async () => {
+    const navigator = { onLine: false, languages: ['en'] };
+    const { app } = await boot({ options: { navigator }, config: { view: 'floorplan' } });
+    expect(app.state.online).toBe(false);
+    expect(app.hud.text.notices).toContain(t('notice.offline'));
+    usable(app);
+
+    navigator.onLine = true;
+    window.dispatchEvent(new Event('online'));
+    expect(app.hud.text.notices).not.toContain(t('notice.offline'));
+    navigator.onLine = false;
+    window.dispatchEvent(new Event('offline'));
+    expect(app.hud.text.notices).toContain(t('notice.offline'));
+    await app.destroy();
+  });
+
+  it('low battery: notice, floor plan, AR rendering paused; recovers when charging', async () => {
+    const listeners = {};
+    const battery = {
+      level: 0.15,
+      charging: false,
+      addEventListener: (type, fn) => (listeners[type] = fn),
+      removeEventListener: vi.fn(),
+    };
+    const renderer = stubRenderer();
+    const { app, frames } = await boot({
+      options: {
+        getBattery: async () => battery,
+        arSceneOptions: { renderer, createLabel: fakeLabel },
+      },
+    });
+    await app.batteryReady;
+    expect(app.state.lowPower).toBe(true);
+    expect(app.hud.text.notices).toContain(t('notice.lowBattery'));
+    usable(app);
+
+    // A frame in low power does not render the 3-D scene, even if AR is chosen manually.
+    app.showView('ar');
+    frames.at(-1)(16);
+    expect(renderer.render).not.toHaveBeenCalled();
+
+    // Plugging in lifts the restriction.
+    battery.charging = true;
+    listeners.chargingchange();
+    expect(app.state.lowPower).toBe(false);
+    expect(app.hud.text.notices).not.toContain(t('notice.lowBattery'));
+    frames.at(-1)(32);
+    expect(renderer.render).toHaveBeenCalled();
+    await app.destroy();
+    expect(battery.removeEventListener).toHaveBeenCalledTimes(2);
   });
 });
