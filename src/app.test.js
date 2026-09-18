@@ -69,6 +69,7 @@ describe('readConfig', () => {
   it('reads query, then env, then defaults', () => {
     expect(readConfig({ search: '', env: {} })).toEqual({
       venueUrl: null,
+      runtimeConfigUrl: null,
       provider: null,
       allowMock: false,
       view: 'auto',
@@ -569,5 +570,130 @@ describe('bootApp — handled states (floor plan stays usable in every one)', ()
     expect(renderer.render).toHaveBeenCalled();
     await app.destroy();
     expect(battery.removeEventListener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('bootApp — runtime config (closures and hidden POIs without a redeploy)', () => {
+  const liftClosed = {
+    version: 1,
+    closures: [{ from: 'n-lift-g', to: 'n-lift-1', reason: 'Lift out of service' }],
+    hiddenPois: ['poi-toilets-g'],
+    notice: 'Ground floor toilets closed for cleaning.',
+  };
+  const ok = (json) => ({ ok: true, status: 200, json: async () => json });
+
+  it('fetches the config at startup and surfaces it in routing, the picker and the HUD', async () => {
+    let current = liftClosed;
+    const fetch = vi.fn(async () => ok(current));
+    const { app } = await boot({
+      config: {
+        runtimeConfigUrl: '/runtime.json',
+        filter: { wheelchair: true, stepFree: false, accessLevel: 'visitor' },
+      },
+      options: { fetch, storage: null, onRuntimeConfigChange: vi.fn(), runtimePollMs: 1000 },
+    });
+    expect(fetch).toHaveBeenCalledWith('/runtime.json', { cache: 'no-store' });
+    expect(app.runtimeConfig.closures).toHaveLength(1);
+
+    // HUD lists the closure and the venue notice.
+    expect(app.hud.text.notices).toContain(
+      'Closed: Passenger lift (out of service overnight) (Lift out of service)'
+    );
+    expect(app.hud.text.notices).toContain('Ground floor toilets closed for cleaning.');
+
+    // Picker hides the POI.
+    expect(app.picker.results.map((p) => p.id)).not.toContain('poi-toilets-g');
+    expect(app.venue.visiblePois.map((p) => p.id)).not.toContain('poi-toilets-g');
+
+    // Routing refuses the closed lift for a wheelchair user, with a closure-specific message.
+    vi.setSystemTime(new Date(2026, 8, 19, 12, 0));
+    expect(app.setDestination(app.venue.poiById('poi-clinic-b'))).toBe(false);
+    expect(app.hud.text.error).toBe('No route to Clinic B: part of the way is closed.');
+    expect(app.hud.el.querySelector('[data-f="error-hint"]').textContent).toBe(
+      t('error.noRouteClosedHint')
+    );
+    await app.destroy();
+  });
+
+  it('re-applies immediately when the polled config changes', async () => {
+    let current = liftClosed;
+    const fetch = vi.fn(async () => ok(current));
+    const onRuntimeConfigChange = vi.fn();
+    const { app } = await boot({
+      config: { runtimeConfigUrl: '/runtime.json' },
+      options: { fetch, storage: null, onRuntimeConfigChange, runtimePollMs: 1000 },
+    });
+    expect(app.hud.text.notices.some((n) => n.startsWith('Closed:'))).toBe(true);
+
+    current = { version: 1, closures: [], hiddenPois: [] }; // operator reopens the lift
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(onRuntimeConfigChange).toHaveBeenCalledOnce();
+    const [, adjusted] = onRuntimeConfigChange.mock.calls[0];
+    expect(adjusted.closedEdges).toHaveLength(0);
+    expect(adjusted.visiblePois.map((p) => p.id)).toContain('poi-toilets-g');
+    expect(app.hud.text.notices.some((n) => n.startsWith('Closed:'))).toBe(false);
+    await app.destroy();
+  });
+
+  it('uses the cached config when the fetch fails, and runs without one when nothing is configured', async () => {
+    const storage = {
+      data: {},
+      getItem: (k) => storage.data[k] ?? null,
+      setItem: (k, v) => (storage.data[k] = v),
+    };
+    const { app: first } = await boot({
+      config: { runtimeConfigUrl: '/runtime.json' },
+      options: { fetch: async () => ok(liftClosed), storage, onRuntimeConfigChange: vi.fn() },
+    });
+    await first.destroy();
+    const { app: second } = await boot({
+      config: { runtimeConfigUrl: '/runtime.json' },
+      options: {
+        fetch: async () => Promise.reject(new Error('offline')),
+        storage,
+        onRuntimeConfigChange: vi.fn(),
+      },
+    });
+    expect(second.runtimeConfig.closures).toHaveLength(1);
+    expect(second.hud.text.notices.some((n) => n.startsWith('Closed:'))).toBe(true);
+    await second.destroy();
+
+    const { app: none } = await boot();
+    expect(none.runtimeConfig).toBeNull();
+    expect(none.venue.closedEdges).toHaveLength(0);
+    await none.destroy();
+  });
+
+  it('the venue JSON can point at its own runtime config, resolved relative to the venue URL', async () => {
+    const json = structuredClone(demo);
+    json.runtimeConfigUrl = 'runtime.json';
+    const fetch = vi.fn(async () => ok({ version: 1 }));
+    const app = await bootApp({
+      config: {
+        venueUrl: '/venues/demo/venue.json',
+        runtimeConfigUrl: null,
+        provider: 'mock',
+        allowMock: true,
+        view: 'floorplan',
+        filter: {},
+      },
+      loadVenue: async () => createVenue(json),
+      fetch,
+      storage: null,
+      arSceneOptions: { renderer: stubRenderer(), createLabel: fakeLabel },
+      arrowOptions: {
+        loadModel: async () => new Object3D(),
+        createLabel: fakeLabel,
+        updateLabel: () => true,
+      },
+      floorplanOptions: { context: fakeContext() },
+      speechOptions: { synth: null, Utterance: null, storage: null },
+      providerOptions: { mock: { path: [{ x: 0, y: 0, floor: 0 }], speedMps: 0 } },
+      onRuntimeConfigChange: vi.fn(),
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+    });
+    expect(fetch).toHaveBeenCalledWith('/venues/demo/runtime.json', { cache: 'no-store' });
+    await app.destroy();
   });
 });

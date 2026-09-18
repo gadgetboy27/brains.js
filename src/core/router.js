@@ -26,6 +26,8 @@
  * - `wheelchair` — boolean; defaults to `stepFree`. Set `false` on step-free
  *   edges a wheelchair still can't use (narrow doors, steep ramps).
  * - `staffOnly` — boolean; visitors' routes never use the edge. Default false.
+ * - `closed` — boolean; the edge is out of use (set by the venue's runtime
+ *   config). Never routed over, whatever the filter.
  * - `floorChange` — boolean; informational, defaults to whether the nodes are on
  *   different floors.
  * - `hours` — array of opening windows; absent means always open. Each window
@@ -64,6 +66,8 @@ import { metresBetween } from './distance.js';
  * @property {boolean} [stepFree]
  * @property {boolean} [wheelchair]
  * @property {boolean} [staffOnly]
+ * @property {boolean} [closed]
+ * @property {string} [closedReason]
  * @property {boolean} [floorChange]
  * @property {OpeningWindow[]} [hours]
  */
@@ -98,6 +102,8 @@ import { metresBetween } from './distance.js';
  * @property {RouteFilter} filter
  * @property {number} edgesExcluded  How many edges the filter removed — a hint
  *                                   that relaxing the filter may help.
+ * @property {number} closedEdgesExcluded  How many of those were closed by the
+ *                                   runtime config (relaxing filters won't help).
  */
 
 const NOT_STEP_FREE_TYPES = new Set(['stairs', 'escalator']);
@@ -177,6 +183,7 @@ export function edgeIsWheelchair(edge) {
  * @returns {boolean}
  */
 export function edgePassesFilter(edge, filter = {}) {
+  if (edge.closed === true) return false;
   if (filter.wheelchair && !edgeIsWheelchair(edge)) return false;
   if (filter.stepFree && !edgeIsStepFree(edge)) return false;
 
@@ -297,9 +304,11 @@ export function findRoute(graph, from, to, filter = {}) {
   /** @type {Map<string, Array<{ to: string, edge: RouteEdge, length: number }>>} */
   const adjacency = new Map();
   let edgesExcluded = 0;
+  let closedEdgesExcluded = 0;
   for (const edge of edges) {
     if (!edgePassesFilter(edge, filter)) {
       edgesExcluded += 1;
+      if (edge.closed === true) closedEdgesExcluded += 1;
       continue;
     }
     const length = edgeLength(edge, nodes);
@@ -338,7 +347,15 @@ export function findRoute(graph, from, to, filter = {}) {
   }
 
   if (!gScore.has(to)) {
-    return { found: false, reason: 'no-route', from, to, filter, edgesExcluded };
+    return {
+      found: false,
+      reason: 'no-route',
+      from,
+      to,
+      filter,
+      edgesExcluded,
+      closedEdgesExcluded,
+    };
   }
 
   const path = [to];

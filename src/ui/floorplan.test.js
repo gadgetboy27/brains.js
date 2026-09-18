@@ -40,6 +40,7 @@ function fakeContext() {
 }
 
 const tokens = {
+  '--color-plan-closed': '#000008',
   '--color-plan-bg': '#000001',
   '--color-plan-route': '#000002',
   '--color-plan-destination': '#000003',
@@ -189,6 +190,23 @@ describe('Floorplan — drawing', () => {
     expect(segs).not.toContain('200,150→300,90');
     expect(segs).toContain('300,150→300,90'); // the public door to Clinic A
     expect(segs).toContain('200,150→300,150'); // lobby → corridor-g-1
+  });
+
+  it('draws closed edges dashed in the closure colour with an X, and skips hidden POIs', () => {
+    const json = structuredClone(demo);
+    const door = json.edges.find((e) => e.name === 'Clinic A public door');
+    door.closed = true;
+    json.pois.find((p) => p.id === 'poi-toilets-g').hidden = true;
+    const { fp, context } = make({ venue: createVenue(json), rotationMode: 'north-up' });
+    fp.setPose(pose(0, 6));
+    expect(sets(context, 'strokeStyle')).toContain('#000008');
+    const dashes = context.calls
+      .filter((c) => c[0] === 'setLineDash')
+      .map((c) => JSON.stringify(c[1]));
+    expect(dashes).toContain('[6,6]');
+    const texts = context.calls.filter((c) => c[0] === 'fillText').map((c) => c[1]);
+    expect(texts).toContain('Clinic A');
+    expect(texts).not.toContain('Toilets');
   });
 
   it('draws the plan image when the floor has one and it loads', async () => {

@@ -319,16 +319,29 @@ export class Floorplan {
       if (!nodesHere.has(a.id) && !nodesHere.has(b.id)) continue;
       if (edge.staffOnly) continue;
       const vertical = a.floor !== b.floor;
-      ctx.strokeStyle = this.#token(
-        vertical ? '--color-plan-edge-stairs' : '--color-plan-edge',
-        'gray'
-      );
+      const closed = edge.closed === true;
+      ctx.strokeStyle = closed
+        ? this.#token('--color-plan-closed', 'red')
+        : this.#token(vertical ? '--color-plan-edge-stairs' : '--color-plan-edge', 'gray');
+      ctx.setLineDash?.(closed ? [6, 6] : []);
       const pa = this.toScreen(a.x, a.y);
       const pb = this.toScreen(b.x, b.y);
       ctx.beginPath();
       ctx.moveTo(pa.x, pa.y);
       ctx.lineTo(pb.x, pb.y);
       ctx.stroke();
+      ctx.setLineDash?.([]);
+      if (closed) {
+        // An X at the midpoint marks the closure.
+        const mx = (pa.x + pb.x) / 2;
+        const my = (pa.y + pb.y) / 2;
+        ctx.beginPath();
+        ctx.moveTo(mx - 6, my - 6);
+        ctx.lineTo(mx + 6, my + 6);
+        ctx.moveTo(mx + 6, my - 6);
+        ctx.lineTo(mx - 6, my + 6);
+        ctx.stroke();
+      }
     }
 
     // POIs on this floor.
@@ -336,7 +349,7 @@ export class Floorplan {
     ctx.font = `${Math.max(12, s * 0.6)}px ${this.#token('--font', 'sans-serif')}`;
     ctx.textBaseline = 'middle';
     for (const poi of this.#venue.poisOnFloor(floorIndex)) {
-      if ((poi.access ?? 'public') !== 'public') continue;
+      if ((poi.access ?? 'public') !== 'public' || poi.hidden === true) continue;
       const node = this.#venue.nodeById(poi.node);
       const p = this.toScreen(node.x, node.y);
       ctx.beginPath();

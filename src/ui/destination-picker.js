@@ -225,7 +225,9 @@ export class DestinationPicker {
   }
 
   #visiblePois() {
-    return this.#venue.pois.filter((p) => this.#showStaff || (p.access ?? 'public') === 'public');
+    return this.#venue.visiblePois.filter(
+      (p) => this.#showStaff || (p.access ?? 'public') === 'public'
+    );
   }
 
   #buildCategories() {

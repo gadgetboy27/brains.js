@@ -331,6 +331,8 @@ export function validateVenue(venue) {
     }
   }
 
+  c.isString(venue.runtimeConfigUrl, 'runtimeConfigUrl', { required: false });
+
   if (venue.providers !== undefined && c.isObject(venue.providers, 'providers')) {
     checkProviders(c, venue.providers);
   }
@@ -408,6 +410,8 @@ export function validateVenue(venue) {
       c.isBoolean(edge.stepFree, `${p}.stepFree`);
       c.isBoolean(edge.wheelchair, `${p}.wheelchair`);
       c.isBoolean(edge.staffOnly, `${p}.staffOnly`);
+      c.isBoolean(edge.closed, `${p}.closed`);
+      c.isString(edge.closedReason, `${p}.closedReason`, { required: false });
       if (c.isBoolean(edge.floorChange, `${p}.floorChange`) && edge.floorChange !== undefined) {
         const a = nodeFloors.get(edge.from);
         const b = nodeFloors.get(edge.to);
@@ -465,6 +469,7 @@ export function validateVenue(venue) {
       c.isString(poi.category, `${p}.category`, { required: false });
       c.isString(poi.description, `${p}.description`, { required: false });
       c.isEnum(poi.access, `${p}.access`, ACCESS);
+      c.isBoolean(poi.hidden, `${p}.hidden`);
       if (
         c.isNumber(poi.floor, `${p}.floor`, { required: false, integer: true }) &&
         poi.floor !== undefined

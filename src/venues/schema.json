@@ -61,6 +61,11 @@
       "type": "array",
       "items": { "$ref": "#/$defs/anchor" }
     },
+    "runtimeConfigUrl": {
+      "description": "URL of the venue's runtime config (see src/venues/runtime-config.js): a small JSON file the operator can edit at any time to close edges or hide points of interest without redeploying. Fetched at startup and polled. Relative URLs resolve against the venue JSON's URL.",
+      "type": "string",
+      "minLength": 1
+    },
     "languages": {
       "description": "Community languages the venue adds or overrides, keyed by BCP 47 language code (e.g. \"sm\", \"to\", \"mi\"). Each provides a display name and a partial or complete set of UI strings keyed as in src/ui/strings/en.js; keys not translated fall back to English. Lets a venue offer its own languages without a code change.",
       "type": "object",
@@ -276,6 +281,14 @@
           "description": "When the edge is usable, e.g. a corridor locked at night. Omit when always open.",
           "$ref": "#/$defs/hours"
         },
+        "closed": {
+          "description": "True while the edge is closed (maintenance, incident). Routing never uses a closed edge. Normally set by the runtime config rather than authored here.",
+          "type": "boolean"
+        },
+        "closedReason": {
+          "description": "Why the edge is closed, shown to users. Optional.",
+          "type": "string"
+        },
         "name": {
           "description": "Optional label for the edge, for operator tooling.",
           "type": "string"
@@ -323,6 +336,10 @@
         "hours": {
           "description": "The POI's opening hours, for display and \"closed now\" hints. Omit when always open.",
           "$ref": "#/$defs/hours"
+        },
+        "hidden": {
+          "description": "True while the POI should not be offered (temporarily closed, relocated). Normally set by the runtime config.",
+          "type": "boolean"
         }
       }
     },

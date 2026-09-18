@@ -112,6 +112,7 @@ describe('findRoute — basics', () => {
       to: 'c',
       filter: { stepFree: true },
       edgesExcluded: 0,
+      closedEdgesExcluded: 0,
     });
   });
 

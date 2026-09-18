@@ -57,6 +57,8 @@ export class Venue {
   constructor(json) {
     this.id = json.id;
     this.name = json.name;
+    this.description = json.description;
+    this.runtimeConfigUrl = json.runtimeConfigUrl;
     this.headingOffsetDeg = json.frame?.headingOffsetDeg ?? 0;
     this.languages = Object.freeze(
       Object.entries(json.languages ?? {}).map(([code, l]) =>
@@ -189,10 +191,44 @@ export class Venue {
   searchPois(term) {
     const q = normaliseName(term);
     if (q === '') return [];
-    return this.pois.filter(
+    return this.visiblePois.filter(
       (poi) =>
         normaliseName(poi.name).includes(q) || poi.aliases.some((a) => normaliseName(a).includes(q))
     );
+  }
+
+  /** POIs not hidden by the runtime config. */
+  get visiblePois() {
+    return this.pois.filter((p) => p.hidden !== true);
+  }
+
+  /** Edges currently closed by the runtime config. */
+  get closedEdges() {
+    return this.graph.edges.filter((e) => e.closed === true);
+  }
+
+  /** Plain JSON in schema shape (reverses the indexing), e.g. for caching or re-creation. */
+  toJSON() {
+    const json = {
+      schemaVersion: 1,
+      id: this.id,
+      name: this.name,
+      frame: { headingOffsetDeg: this.headingOffsetDeg },
+      floors: this.floors.map((f) => ({ ...f })),
+      nodes: this.graph.nodes.map((n) => ({ ...n })),
+      edges: this.graph.edges.map((e) => ({ ...e })),
+      pois: this.pois.map((p) => ({ ...p })),
+    };
+    if (this.description) json.description = this.description;
+    if (this.runtimeConfigUrl) json.runtimeConfigUrl = this.runtimeConfigUrl;
+    if (this.anchors.length) json.anchors = this.anchors.map((a) => ({ ...a }));
+    if (this.languages.length) {
+      json.languages = Object.fromEntries(
+        this.languages.map((l) => [l.code, { name: l.name, strings: { ...l.strings } }])
+      );
+    }
+    if (Object.keys(this.providers).length) json.providers = { ...this.providers };
+    return json;
   }
 
   /**

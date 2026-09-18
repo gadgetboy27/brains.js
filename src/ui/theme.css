@@ -37,6 +37,7 @@
   --color-plan-destination: #22c55e;
   --color-plan-poi: #94a3b8;
   --color-plan-text: #e2e8f0;
+  --color-plan-closed: #f87171;
 
   --touch-target: 48px;
   --radius: 12px;
@@ -79,6 +80,7 @@
   --color-plan-destination: #00ff00;
   --color-plan-poi: #ffffff;
   --color-plan-text: #ffffff;
+  --color-plan-closed: #ff4040;
   --font-size: 19px;
   --font-size-large: 26px;
 }

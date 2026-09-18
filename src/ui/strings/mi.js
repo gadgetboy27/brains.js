@@ -120,6 +120,16 @@ export default {
     'error.venueLoadNoCache':
       'Kāore i taea te uta i te mahere, kāore hoki he kape kua tiakina. Hono ki te ipurangi, ka ngana anō.',
 
+    // Runtime config
+    'closure.notice': 'Kua kati: {list}',
+    'closure.item': '{name} ({reason})',
+    'closure.itemNoReason': '{name}',
+    'closure.edgeName': '{from} ki {to}',
+    'closure.venueNotice': '{text}',
+    'error.noRouteClosed': 'Kāore he ara ki {name}: kua kati tētahi wāhanga o te ara.',
+    'error.noRouteClosedHint':
+      'Kua kati tētahi wāhanga e aukati ana i ngā ara katoa. Pātai ki ngā kaimahi.',
+
     // Floors
     'floor.unknown': 'Papa tē mōhiotia',
   },

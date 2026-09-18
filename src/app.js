@@ -13,6 +13,7 @@
  *  - mock:      `?mock=1` or `provider=mock` allows the mock provider (always allowed in dev builds)
  *  - view:      `?view=ar|floorplan|auto` / default auto (tilt-driven)
  *  - filters:   `?wheelchair=1`, `?stepFree=1`, `?staff=1`
+ *  - runtime:   `?runtime=<url>` / `RUNTIME_CONFIG_URL` / the venue's `runtimeConfigUrl`
  *
  * ## Views
  *
@@ -28,6 +29,12 @@ import { createNavigator } from './core/navigation.js';
 import { findRoute } from './core/router.js';
 import { createVenue, loadVenue } from './core/venue.js';
 import { loadVenueCache, saveVenueCache } from './core/venue-cache.js';
+import {
+  applyRuntimeConfig,
+  fetchRuntimeConfig,
+  pollRuntimeConfig,
+  resolveRuntimeConfigUrl,
+} from './venues/runtime-config.js';
 import { createProviderChain } from './providers/index.js';
 import { NavigationArrow } from './ui/arrow.js';
 import { ArScene } from './ui/ar-scene.js';
@@ -77,6 +84,7 @@ export function readConfig({
   const view = q.get('view') ?? 'auto';
   return {
     venueUrl: q.get('venue') ?? env.VENUE_JSON_URL ?? null,
+    runtimeConfigUrl: q.get('runtime') ?? env.RUNTIME_CONFIG_URL ?? null,
     provider,
     allowMock: q.get('mock') === '1' || provider === 'mock' || Boolean(env.DEV),
     view: ['ar', 'floorplan', 'auto'].includes(view) ? view : 'auto',
@@ -171,7 +179,7 @@ export async function bootApp(options = {}) {
     } else {
       try {
         venue = await (options.loadVenue ?? loadVenue)(config.venueUrl);
-        saveVenueCache(config.venueUrl, venueToJson(venue), storage);
+        saveVenueCache(config.venueUrl, venue.toJSON(), storage);
       } catch (err) {
         const cached = loadVenueCache(config.venueUrl, storage);
         if (cached) {
@@ -204,6 +212,46 @@ export async function bootApp(options = {}) {
   doc.documentElement.lang = langCode;
   speech.setLanguage(langCode);
   if (venueFromCache) hud.showNotice('venue-cached', t('notice.venueCached'));
+
+  // --- runtime config: closures and hidden POIs, fetched now and polled.
+  const baseVenue = venue;
+  const runtimeUrl = resolveRuntimeConfigUrl({
+    explicit: config.runtimeConfigUrl,
+    venue,
+    venueUrl: config.venueUrl,
+  });
+  let runtimeConfig = null;
+  let stopPolling = null;
+  const runtimeFetchOptions = { storage, ...(options.fetch ? { fetch: options.fetch } : {}) };
+  function applyRuntime(result) {
+    runtimeConfig = result.config;
+    venue = applyRuntimeConfig(baseVenue, result.config).venue;
+    showClosures();
+  }
+  function showClosures() {
+    const closed = venue.closedEdges;
+    if (closed.length === 0) hud.hideNotice('closures');
+    else {
+      const list = closed
+        .map((e) => {
+          const name =
+            e.name ??
+            t('closure.edgeName', {
+              from: venue.nodeById(e.from)?.name ?? e.from,
+              to: venue.nodeById(e.to)?.name ?? e.to,
+            });
+          return e.closedReason
+            ? t('closure.item', { name, reason: e.closedReason })
+            : t('closure.itemNoReason', { name });
+        })
+        .join('; ');
+      hud.showNotice('closures', t('closure.notice', { list }));
+    }
+    if (runtimeConfig?.notice) {
+      hud.showNotice('venue-notice', t('closure.venueNotice', { text: runtimeConfig.notice }));
+    } else hud.hideNotice('venue-notice');
+  }
+  if (runtimeUrl) applyRuntime(await fetchRuntimeConfig(runtimeUrl, runtimeFetchOptions));
 
   // --- connectivity: a persistent notice; routing and the floor plan are local.
   const nav = options.navigator ?? globalThis.navigator;
@@ -361,8 +409,9 @@ export async function bootApp(options = {}) {
       timeOfDay: new Date(),
     });
     if (!route.found) {
-      hud.showError(t('error.noRoute', { name: poi.name }), {
-        hint: t('error.noRouteHint'),
+      const closed = route.closedEdgesExcluded > 0;
+      hud.showError(t(closed ? 'error.noRouteClosed' : 'error.noRoute', { name: poi.name }), {
+        hint: t(closed ? 'error.noRouteClosedHint' : 'error.noRouteHint'),
         retry: () => picker.open(),
       });
       return false;
@@ -463,11 +512,28 @@ export async function bootApp(options = {}) {
   picker.open();
   await chain.start();
 
+  // Re-apply on change: a closure must take effect immediately, so rebuild
+  // the UI over the adjusted venue (and re-route if navigating).
+  if (runtimeUrl) {
+    stopPolling = pollRuntimeConfig(runtimeUrl, {
+      ...runtimeFetchOptions,
+      intervalMs: options.runtimePollMs ?? 60_000,
+      initial: runtimeConfig,
+      ...(options.setInterval ? { setInterval: options.setInterval } : {}),
+      ...(options.clearInterval ? { clearInterval: options.clearInterval } : {}),
+      onChange: (result) => {
+        applyRuntime(result);
+        if (options.onRuntimeConfigChange) options.onRuntimeConfigChange(result, venue);
+        else restart();
+      },
+    });
+  }
+
   async function restart() {
     const dest = destination;
     await api.destroy();
-    const next = await bootApp({ ...options, venue, config });
-    if (dest) next.setDestination(dest);
+    const next = await bootApp({ ...options, venue: baseVenue, config });
+    if (dest) next.setDestination(next.venue.poiById(dest.id) ?? dest);
     return next;
   }
 
@@ -482,6 +548,9 @@ export async function bootApp(options = {}) {
     arrow,
     get view() {
       return view;
+    },
+    get runtimeConfig() {
+      return runtimeConfig;
     },
     /** Explicit handled state, for tests and diagnostics. */
     get state() {
@@ -506,6 +575,7 @@ export async function bootApp(options = {}) {
       frame = null;
       win?.removeEventListener?.('resize', fit);
       win?.removeEventListener?.('deviceorientation', onOrientation);
+      stopPolling?.();
       win?.removeEventListener?.('online', applyOnline);
       win?.removeEventListener?.('offline', applyOnline);
       battery?.removeEventListener?.('levelchange', applyBattery);
@@ -539,29 +609,6 @@ function safeStorage() {
 export function entranceNode(venue) {
   const poi = venue.pois.find((p) => p.category === 'exit' || p.category === 'entrance');
   return (poi && venue.nodeById(poi.node)) ?? venue.graph.nodes[0];
-}
-
-/** Plain JSON for a Venue, for caching. Reverses createVenue()'s indexing. */
-function venueToJson(venue) {
-  return {
-    schemaVersion: 1,
-    id: venue.id,
-    name: venue.name,
-    frame: { headingOffsetDeg: venue.headingOffsetDeg },
-    floors: venue.floors.map((f) => ({ ...f })),
-    nodes: venue.graph.nodes.map((n) => ({ ...n })),
-    edges: venue.graph.edges.map((e) => ({ ...e })),
-    pois: venue.pois.map((p) => ({ ...p })),
-    ...(venue.anchors.length ? { anchors: venue.anchors.map((a) => ({ ...a })) } : {}),
-    ...(venue.languages.length
-      ? {
-          languages: Object.fromEntries(
-            venue.languages.map((l) => [l.code, { name: l.name, strings: { ...l.strings } }])
-          ),
-        }
-      : {}),
-    ...(Object.keys(venue.providers).length ? { providers: { ...venue.providers } } : {}),
-  };
 }
 
 /** The graph node closest to a pose on the same floor (else overall). */

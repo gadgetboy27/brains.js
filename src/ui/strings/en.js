@@ -118,6 +118,15 @@ export default {
     'error.venueLoadNoCache':
       'The venue map could not be loaded and no saved copy exists. Connect to the internet and try again.',
 
+    // Runtime config: closures and hidden points of interest
+    'closure.notice': 'Closed: {list}',
+    'closure.item': '{name} ({reason})',
+    'closure.itemNoReason': '{name}',
+    'closure.edgeName': '{from} to {to}',
+    'closure.venueNotice': '{text}',
+    'error.noRouteClosed': 'No route to {name}: part of the way is closed.',
+    'error.noRouteClosedHint': 'A closed section blocks every route. Ask staff for help.',
+
     // Floors
     'floor.unknown': 'Unknown floor',
   },

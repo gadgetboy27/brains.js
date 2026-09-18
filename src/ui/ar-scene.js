@@ -330,7 +330,7 @@ export class ArScene {
     const pois =
       this.#pois.length > 0
         ? this.#pois
-        : this.#venue.pois.filter((p) => (p.access ?? 'public') === 'public');
+        : this.#venue.pois.filter((p) => (p.access ?? 'public') === 'public' && p.hidden !== true);
     for (const poi of pois) {
       const node = this.#venue.nodeById(poi.node);
       if (!node || (poi.floor ?? node.floor) !== this.#floor) continue;
