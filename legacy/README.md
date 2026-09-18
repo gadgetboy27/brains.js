@@ -15,7 +15,7 @@ here **for reference only**.
 
 | File | Notes |
 |---|---|
-| `index.html` / `index.js` | "AR.js Location-based AR" — first entry point using `ar-threex-location-only`. The HTML references a non-existent `index1.js`. |
+| `index.html` / `index.js` | "AR.js Location-based AR" — first entry point using `ar-threex-location-only`. The HTML loads `index1.js`, which was not in the move list and remains at the repo root. |
 | `index2.js` | Foursquare places loader (via cors-anywhere) used by `index10.html`. |
 | `index3.html` / `index3.js` | "AR.js Places with Images" — `gps-camera` + `gps-entity-place` scene, Foursquare-backed, loads `config.js`. |
 | `index4.html` / `index4.js` | "AR.js Places Demo (Enhanced)" — iteration on `index3`. |
