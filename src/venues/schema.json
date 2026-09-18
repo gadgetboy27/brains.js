@@ -148,6 +148,40 @@
         "elevation": {
           "description": "Height of the floor's walking surface above the venue origin, in metres. Lets a provider that reports height choose the floor. Optional.",
           "type": "number"
+        },
+        "plan": {
+          "description": "The floor-plan image this floor was digitised from, and how its pixels map to venue metres. Written by scripts/build-venue.mjs; lets a 2-D map view draw the plan under the route. Optional.",
+          "type": "object",
+          "required": ["image", "widthPx", "heightPx"],
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "description": "File name or URL of the plan image, relative to the venue JSON.",
+              "type": "string",
+              "minLength": 1
+            },
+            "widthPx": { "description": "Image width in pixels.", "type": "integer", "minimum": 1 },
+            "heightPx": {
+              "description": "Image height in pixels.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "metresPerPixel": {
+              "description": "Scale of the plan: venue metres per image pixel.",
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "originPx": {
+              "description": "Image pixel (origin top-left, y down) that corresponds to venue (0, 0). Venue +y points up the image.",
+              "type": "object",
+              "required": ["x", "y"],
+              "additionalProperties": false,
+              "properties": {
+                "x": { "description": "Pixel column of the venue origin.", "type": "number" },
+                "y": { "description": "Pixel row of the venue origin.", "type": "number" }
+              }
+            }
+          }
         }
       }
     },

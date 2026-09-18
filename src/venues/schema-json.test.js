@@ -50,6 +50,8 @@ const invalidCases = {
   'providers.immersal mapId 0': (v) => (v.providers.immersal.mapId = 0),
   'providers.immersal origin missing z': (v) => (v.providers.immersal.origin = { x: 0, y: 0 }),
   'providers.order not strings': (v) => (v.providers.order = [1]),
+  'floor plan missing image': (v) => (v.floors[0].plan = { widthPx: 1, heightPx: 1 }),
+  'floor plan widthPx 0': (v) => (v.floors[0].plan = { image: 'a.png', widthPx: 0, heightPx: 1 }),
   'GPS on venue': (v) => (v.lat = 51.5),
   'GPS on node': (v) => (v.nodes[0].longitude = 0),
   'GPS on poi': (v) => (v.pois[0].lng = 0),
@@ -95,6 +97,15 @@ const validCases = {
   'unknown provider block': (v) => (v.providers.beacons = { uuid: 'x' }),
   'immersal with full transform': (v) =>
     (v.providers.immersal = { mapId: 7, origin: { x: 1, y: 2, z: 3 }, rotationDeg: 90, floor: 0 }),
+  'floor with plan': (v) => {
+    v.floors[0].plan = {
+      image: 'ground.png',
+      widthPx: 800,
+      heightPx: 600,
+      metresPerPixel: 0.05,
+      originPx: { x: 0, y: 600 },
+    };
+  },
   'negative floor index': (v) => {
     v.floors.push({ index: -1, id: 'b1', name: 'Basement', elevation: -3.5 });
   },

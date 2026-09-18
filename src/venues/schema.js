@@ -326,6 +326,19 @@ export function validateVenue(venue) {
       c.isString(floor.id, `${p}.id`, { pattern: ID_PATTERN, patternHint: 'must be a slug' });
       c.isString(floor.name, `${p}.name`);
       c.isNumber(floor.elevation, `${p}.elevation`, { required: false });
+      if (floor.plan !== undefined && c.isObject(floor.plan, `${p}.plan`)) {
+        c.isString(floor.plan.image, `${p}.plan.image`);
+        c.isNumber(floor.plan.widthPx, `${p}.plan.widthPx`, { integer: true, min: 1 });
+        c.isNumber(floor.plan.heightPx, `${p}.plan.heightPx`, { integer: true, min: 1 });
+        c.isNumber(floor.plan.metresPerPixel, `${p}.plan.metresPerPixel`, { required: false });
+        if (
+          floor.plan.originPx !== undefined &&
+          c.isObject(floor.plan.originPx, `${p}.plan.originPx`)
+        ) {
+          c.isNumber(floor.plan.originPx.x, `${p}.plan.originPx.x`);
+          c.isNumber(floor.plan.originPx.y, `${p}.plan.originPx.y`);
+        }
+      }
     });
     checkUnique(c, venue.floors, 'index', 'floors');
     checkUnique(c, venue.floors, 'id', 'floors');
