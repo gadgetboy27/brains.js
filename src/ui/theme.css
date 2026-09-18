@@ -1,0 +1,138 @@
+/*
+ * Design tokens. Every colour in the UI and the 3-D scene comes from these
+ * custom properties — components read them with getComputedStyle, so the
+ * palette (and the high-contrast variant) is defined in exactly one place.
+ */
+:root {
+  --color-bg: #0f172a;
+  --color-surface: rgba(15, 23, 42, 0.85);
+  --color-surface-solid: #1e293b;
+  --color-text: #f8fafc;
+  --color-text-muted: #cbd5e1;
+  --color-accent: #38bdf8;
+  --color-accent-contrast: #0f172a;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-error: #f87171;
+  --color-error-bg: rgba(127, 29, 29, 0.9);
+
+  /* Scene */
+  --color-route: #3b82f6;
+  --color-destination: #22c55e;
+  --color-poi: #ef4444;
+  --color-floor-change: #f59e0b;
+  --color-arrow: #38bdf8;
+  --color-arrow-label-bg: rgba(15, 23, 42, 0.8);
+  --color-arrow-label-text: #ffffff;
+
+  /* Floor plan */
+  --color-plan-bg: #111827;
+  --color-plan-grid: #1f2937;
+  --color-plan-edge: #475569;
+  --color-plan-edge-stairs: #a16207;
+  --color-plan-node: #64748b;
+  --color-plan-position: #38bdf8;
+  --color-plan-position-heading: #f8fafc;
+  --color-plan-route: #3b82f6;
+  --color-plan-destination: #22c55e;
+  --color-plan-poi: #94a3b8;
+  --color-plan-text: #e2e8f0;
+  --color-plan-closed: #f87171;
+
+  --touch-target: 48px;
+  --radius: 12px;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-size: 17px;
+  --font-size-large: 22px;
+}
+
+/* High-contrast mode: black/white/yellow. Enabled by setting
+   data-contrast="high" on <html>. The app also sets it automatically when the
+   OS reports prefers-contrast: more (see src/app.js), so the tokens live here
+   exactly once. */
+:root[data-contrast='high'] {
+  --color-bg: #000000;
+  --color-surface: #000000;
+  --color-surface-solid: #000000;
+  --color-text: #ffffff;
+  --color-text-muted: #ffffff;
+  --color-accent: #ffff00;
+  --color-accent-contrast: #000000;
+  --color-ok: #00ff00;
+  --color-warn: #ffff00;
+  --color-error: #ff4040;
+  --color-error-bg: #000000;
+  --color-route: #ffff00;
+  --color-destination: #00ff00;
+  --color-poi: #ffffff;
+  --color-floor-change: #ffff00;
+  --color-arrow: #ffff00;
+  --color-arrow-label-bg: #000000;
+  --color-arrow-label-text: #ffffff;
+  --color-plan-bg: #000000;
+  --color-plan-grid: #333333;
+  --color-plan-edge: #ffffff;
+  --color-plan-edge-stairs: #ffff00;
+  --color-plan-node: #ffffff;
+  --color-plan-position: #ffff00;
+  --color-plan-position-heading: #ffffff;
+  --color-plan-route: #ffff00;
+  --color-plan-destination: #00ff00;
+  --color-plan-poi: #ffffff;
+  --color-plan-text: #ffffff;
+  --color-plan-closed: #ff4040;
+  --font-size: 19px;
+  --font-size-large: 26px;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font);
+  font-size: var(--font-size);
+  -webkit-text-size-adjust: 100%;
+}
+
+*:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Shared control style: large, high-contrast touch targets. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
+  padding: 10px 18px;
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.btn[aria-pressed='true'],
+.btn.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}

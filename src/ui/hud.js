@@ -1,0 +1,342 @@
+/**
+ * HUD — the always-visible strip of navigation state: destination name,
+ * distance remaining, next step / floor change, arrival, a rescan prompt when
+ * positioning confidence drops, and an inline error surface.
+ *
+ * This is the app's only way to tell the user something. There is no
+ * `alert()` anywhere; errors are rendered here with an optional retry action.
+ * All text comes from src/ui/strings.js.
+ *
+ * Accessibility: the status region is `aria-live="polite"` so changes are
+ * announced; the error region is `role="alert"`; buttons meet the 48 px
+ * touch-target token.
+ */
+
+import { RATES } from './speech.js';
+import { formatMetres, t } from './strings/index.js';
+import { ensureStyle } from './tokens.js';
+
+const CSS = `
+.hud { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--color-surface); color: var(--color-text); font-family: var(--font); font-size: var(--font-size);
+  display: grid; gap: 8px; }
+.hud[hidden] { display: none; }
+.hud-status { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 12px; }
+.hud-destination { font-size: var(--font-size-large); font-weight: 700; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-distance { font-size: var(--font-size-large); font-weight: 700; font-variant-numeric: tabular-nums; }
+.hud-step { grid-column: 1 / -1; color: var(--color-text-muted); margin: 0; }
+.hud-arrived .hud-destination { color: var(--color-ok); }
+.hud-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.hud-rescan { border: 2px solid var(--color-warn); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; }
+.hud-rescan[hidden], .hud-error[hidden], .hud-step[hidden] { display: none; }
+.hud-rescan h3, .hud-error h3 { margin: 0; font-size: 1em; }
+.hud-rescan p, .hud-error p { margin: 0; }
+.hud-error { border: 2px solid var(--color-error); background: var(--color-error-bg); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; }
+.hud-error .hud-actions { margin-top: 4px; }
+.hud-notices { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hud-notices:empty { display: none; }
+.hud-notices li { border: 2px solid var(--color-warn); border-radius: var(--radius); padding: 8px 12px; }
+.hud-speech { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.hud-speech[hidden] { display: none; }
+.hud-speech label { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
+.hud-speech select { min-height: var(--touch-target); padding: 6px 10px; border: 2px solid var(--color-accent); border-radius: var(--radius);
+  background: var(--color-surface-solid); color: var(--color-text); font: inherit; }
+`;
+
+export class Hud {
+  #el;
+  #doc;
+  #f;
+  #destination = null;
+  #onChangeDestination;
+  #onCancel;
+  #onToggleMute;
+  #onRateChange;
+  #errorRetry = null;
+
+  /**
+   * @param {Object} options
+   * @param {HTMLElement} [options.mount]           Default document.body.
+   * @param {Document} [options.document]
+   * @param {() => void} [options.onChangeDestination]
+   * @param {() => void} [options.onCancel]
+   * @param {() => void} [options.onRescanAcknowledged]
+   * @param {() => void} [options.onToggleMute]
+   * @param {(rate: number) => void} [options.onRateChange]
+   */
+  constructor(options = {}) {
+    this.#doc = options.document ?? globalThis.document;
+    const mount = options.mount ?? this.#doc?.body;
+    if (!this.#doc || !mount) throw new TypeError('Hud requires a document and mount element');
+    this.#onChangeDestination = options.onChangeDestination;
+    this.#onCancel = options.onCancel;
+    this.#onToggleMute = options.onToggleMute;
+    this.#onRateChange = options.onRateChange;
+
+    ensureStyle('brains-hud-style', CSS, this.#doc);
+    const el = this.#doc.createElement('section');
+    el.className = 'hud';
+    el.setAttribute('aria-label', t('app.title'));
+    el.innerHTML = `
+      <div class="hud-status" aria-live="polite" aria-atomic="true">
+        <h2 class="hud-destination" data-f="destination"></h2>
+        <span class="hud-distance" data-f="distance"></span>
+        <p class="hud-step" data-f="step" hidden></p>
+      </div>
+      <ul class="hud-notices" data-f="notices" role="status" aria-live="polite"></ul>
+      <div class="hud-rescan" data-f="rescan" role="status" hidden>
+        <h3 data-f="rescan-title"></h3>
+        <p data-f="rescan-body"></p>
+        <div class="hud-actions"><button type="button" class="btn" data-f="rescan-ok"></button></div>
+      </div>
+      <div class="hud-error" data-f="error" role="alert" hidden>
+        <p data-f="error-message"></p>
+        <p data-f="error-hint" hidden></p>
+        <div class="hud-actions">
+          <button type="button" class="btn btn-primary" data-f="error-retry" hidden></button>
+          <button type="button" class="btn" data-f="error-dismiss"></button>
+        </div>
+      </div>
+      <div class="hud-actions" data-f="nav-actions">
+        <button type="button" class="btn btn-primary" data-f="change"></button>
+        <button type="button" class="btn" data-f="cancel" hidden></button>
+      </div>
+      <div class="hud-speech" data-f="speech">
+        <button type="button" class="btn" data-f="mute" aria-pressed="false"></button>
+        <label>
+          <span data-f="rate-label"></span>
+          <select data-f="rate"></select>
+        </label>
+        <span class="visually-hidden" data-f="speech-unsupported" hidden></span>
+      </div>
+      <div class="visually-hidden" data-f="live" aria-live="assertive" aria-atomic="true"></div>
+    `;
+    this.#el = el;
+    this.#f = (name) => el.querySelector(`[data-f="${name}"]`);
+    mount.appendChild(el);
+
+    this.#f('rescan-title').textContent = t('hud.rescan.title');
+    this.#f('rescan-body').textContent = t('hud.rescan.body');
+    this.#f('rescan-ok').textContent = t('hud.rescan.action');
+    this.#f('error-dismiss').textContent = t('hud.error.dismiss');
+    this.#f('error-retry').textContent = t('hud.error.retry');
+    this.#f('change').textContent = t('hud.changeDestination');
+    this.#f('cancel').textContent = t('hud.cancel');
+    this.#f('mute').textContent = t('speech.toggle');
+    this.#f('rate-label').textContent = t('speech.rate');
+    this.#f('speech-unsupported').textContent = t('speech.unsupported');
+    const rate = this.#f('rate');
+    for (const [key, value] of Object.entries(RATES)) {
+      const opt = this.#doc.createElement('option');
+      opt.value = String(value);
+      opt.textContent = t(`speech.rate.${key}`);
+      rate.appendChild(opt);
+    }
+    rate.addEventListener('change', () => this.#onRateChange?.(Number(rate.value)));
+    this.#f('mute').addEventListener('click', () => this.#onToggleMute?.());
+
+    this.#f('rescan-ok').addEventListener('click', () => {
+      this.hideRescan();
+      options.onRescanAcknowledged?.();
+    });
+    this.#f('error-dismiss').addEventListener('click', () => this.clearError());
+    this.#f('error-retry').addEventListener('click', () => {
+      const retry = this.#errorRetry;
+      this.clearError();
+      retry?.();
+    });
+    this.#f('change').addEventListener('click', () => this.#onChangeDestination?.());
+    this.#f('cancel').addEventListener('click', () => this.#onCancel?.());
+
+    this.setDestination(null);
+  }
+
+  get el() {
+    return this.#el;
+  }
+
+  /** Text helpers for tests and screen readers. */
+  get text() {
+    return {
+      destination: this.#f('destination').textContent,
+      distance: this.#f('distance').textContent,
+      step: this.#f('step').hidden ? '' : this.#f('step').textContent,
+      error: this.#f('error').hidden ? '' : this.#f('error-message').textContent,
+      rescan: this.#f('rescan').hidden ? '' : this.#f('rescan-title').textContent,
+      notices: [...this.#f('notices').children].map((li) => li.textContent),
+    };
+  }
+
+  // ----------------------------------------------------------------- notices
+
+  /**
+   * Show (or update) a persistent notice, e.g. "You are offline". Notices
+   * stack and are announced politely; use errors for things needing action.
+   * @param {string} id
+   * @param {string} text
+   */
+  showNotice(id, text) {
+    const list = this.#f('notices');
+    let li = list.querySelector(`[data-notice="${id}"]`);
+    if (!li) {
+      li = this.#doc.createElement('li');
+      li.dataset.notice = id;
+      list.appendChild(li);
+    }
+    li.textContent = text;
+  }
+
+  /** @param {string} id */
+  hideNotice(id) {
+    this.#f('notices').querySelector(`[data-notice="${id}"]`)?.remove();
+  }
+
+  /** @param {string} id */
+  hasNotice(id) {
+    return Boolean(this.#f('notices').querySelector(`[data-notice="${id}"]`));
+  }
+
+  /** The assertive live region spoken guidance is mirrored into. */
+  get liveRegion() {
+    return this.#f('live');
+  }
+
+  /**
+   * Reflect the speech guide's state on its controls.
+   * @param {{ muted: boolean, rate: number, supported: boolean }} state
+   */
+  setSpeechState(state) {
+    const mute = this.#f('mute');
+    mute.setAttribute('aria-pressed', String(!state.muted));
+    mute.textContent = state.muted ? t('speech.off') : t('speech.on');
+    mute.setAttribute('aria-label', t('speech.toggle'));
+    const rate = this.#f('rate');
+    const match = [...rate.options].find((o) => Number(o.value) === state.rate);
+    if (match) rate.value = match.value;
+    this.#f('speech-unsupported').hidden = state.supported;
+    mute.disabled = !state.supported;
+    rate.disabled = !state.supported;
+  }
+
+  // -------------------------------------------------------------- navigation
+
+  /**
+   * @param {{ name: string } | null} poi
+   */
+  setDestination(poi) {
+    this.#destination = poi;
+    this.#el.classList.remove('hud-arrived');
+    if (!poi) {
+      this.#f('destination').textContent = t('hud.noDestination');
+      this.#f('distance').textContent = '';
+      this.#f('step').hidden = true;
+      this.#f('cancel').hidden = true;
+      this.#f('change').textContent = t('hud.changeDestination');
+      return;
+    }
+    this.#f('destination').textContent = t('hud.destination', { name: poi.name });
+    this.#f('cancel').hidden = false;
+  }
+
+  /**
+   * Update from a navigator state (see src/core/navigation.js).
+   * @param {import('../core/navigation.js').NavigationState} state
+   * @param {{ floorName?: (index: number) => string }} [options]
+   */
+  setProgress(state, options = {}) {
+    if (!this.#destination) return;
+    if (state.arrived) {
+      this.setArrived(true);
+      return;
+    }
+    this.#el.classList.remove('hud-arrived');
+    this.#f('destination').textContent = t('hud.destination', { name: this.#destination.name });
+    this.#f('distance').textContent = t('hud.distance', {
+      metres: formatMetres(state.distanceRemaining),
+    });
+    this.#f('distance').setAttribute(
+      'aria-label',
+      t('hud.distanceLong', { metres: formatMetres(state.distanceRemaining) })
+    );
+
+    const step = this.#f('step');
+    if (state.floorChange) {
+      const { from, to, edge } = state.floorChange;
+      const up = to.floor > from.floor;
+      const floor = options.floorName ? options.floorName(to.floor) : String(to.floor);
+      step.textContent = t(up ? 'hud.floorChange.up' : 'hud.floorChange.down', {
+        floor,
+        via: edge?.type ?? 'walk',
+      });
+      step.hidden = false;
+    } else if (state.nextNode?.name) {
+      step.textContent = t('hud.nextTurn', { name: state.nextNode.name });
+      step.hidden = false;
+    } else {
+      step.hidden = true;
+    }
+  }
+
+  /** @param {boolean} arrived */
+  setArrived(arrived) {
+    if (!this.#destination) return;
+    this.#el.classList.toggle('hud-arrived', arrived);
+    if (arrived) {
+      this.#f('destination').textContent = t('hud.arrived', { name: this.#destination.name });
+      this.#f('distance').textContent = t('hud.arrivedShort');
+      this.#f('step').hidden = true;
+    }
+  }
+
+  // ------------------------------------------------------------------ rescan
+
+  showRescan() {
+    this.#f('rescan').hidden = false;
+  }
+
+  hideRescan() {
+    this.#f('rescan').hidden = true;
+  }
+
+  // ------------------------------------------------------------------- error
+
+  /**
+   * Show an inline error. Replaces every former alert().
+   * @param {string} message   Already-localised text (use `t()`).
+   * @param {{ hint?: string, retry?: () => void }} [options]
+   */
+  showError(message, options = {}) {
+    this.#f('error-message').textContent = message;
+    const hint = this.#f('error-hint');
+    hint.hidden = !options.hint;
+    hint.textContent = options.hint ?? '';
+    this.#errorRetry = options.retry ?? null;
+    this.#f('error-retry').hidden = !options.retry;
+    this.#f('error').hidden = false;
+  }
+
+  clearError() {
+    this.#f('error').hidden = true;
+    this.#f('error-message').textContent = '';
+    this.#errorRetry = null;
+  }
+
+  // --------------------------------------------------------------- lifecycle
+
+  show() {
+    this.#el.hidden = false;
+  }
+
+  hide() {
+    this.#el.hidden = true;
+  }
+
+  destroy() {
+    this.#el.remove();
+  }
+}
+
+/** @param {ConstructorParameters<typeof Hud>[0]} [options] */
+export function createHud(options) {
+  return new Hud(options);
+}

@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "id": "demo-health-centre",
+  "name": "Demo Health Centre",
+  "description": "Two-floor example venue for exercising routing filters: the stairs are the short way up, the lift the long way; a staff corridor short-cuts to Clinic A; the lift is out of service overnight.",
+  "frame": { "headingOffsetDeg": 0 },
+  "floors": [
+    { "index": 0, "id": "ground", "name": "Ground", "elevation": 0 },
+    { "index": 1, "id": "first", "name": "First floor", "elevation": 4 }
+  ],
+  "nodes": [
+    { "id": "n-entrance", "x": 0, "y": 0, "z": 0, "floor": 0, "name": "Main entrance" },
+    { "id": "n-lobby", "x": 0, "y": 6, "z": 0, "floor": 0, "name": "Lobby / reception" },
+    {
+      "id": "n-corridor-g-1",
+      "x": 10,
+      "y": 6,
+      "z": 0,
+      "floor": 0,
+      "name": "Ground corridor, west"
+    },
+    {
+      "id": "n-corridor-g-2",
+      "x": 20,
+      "y": 6,
+      "z": 0,
+      "floor": 0,
+      "name": "Ground corridor, middle"
+    },
+    {
+      "id": "n-corridor-g-3",
+      "x": 30,
+      "y": 6,
+      "z": 0,
+      "floor": 0,
+      "name": "Ground corridor, east"
+    },
+    { "id": "n-clinic-a", "x": 10, "y": 12, "z": 0, "floor": 0, "name": "Clinic A door" },
+    { "id": "n-toilets-g", "x": 20, "y": 10, "z": 0, "floor": 0, "name": "Ground toilets" },
+    { "id": "n-stairs-g", "x": 10, "y": 2, "z": 0, "floor": 0, "name": "Stairwell, ground" },
+    { "id": "n-lift-g", "x": 30, "y": 10, "z": 0, "floor": 0, "name": "Lift lobby, ground" },
+    { "id": "n-stairs-1", "x": 10, "y": 2, "z": 4, "floor": 1, "name": "Stairwell, first" },
+    { "id": "n-lift-1", "x": 30, "y": 10, "z": 4, "floor": 1, "name": "Lift lobby, first" },
+    { "id": "n-corridor-1-1", "x": 10, "y": 6, "z": 4, "floor": 1, "name": "First corridor, west" },
+    {
+      "id": "n-corridor-1-2",
+      "x": 20,
+      "y": 6,
+      "z": 4,
+      "floor": 1,
+      "name": "First corridor, middle"
+    },
+    { "id": "n-corridor-1-3", "x": 30, "y": 6, "z": 4, "floor": 1, "name": "First corridor, east" },
+    { "id": "n-clinic-b", "x": 20, "y": 0, "z": 4, "floor": 1, "name": "Clinic B door" },
+    { "id": "n-staff-room", "x": 36, "y": 2, "z": 4, "floor": 1, "name": "Staff room" }
+  ],
+  "edges": [
+    { "from": "n-entrance", "to": "n-lobby", "type": "door", "name": "Main entrance doors" },
+    { "from": "n-lobby", "to": "n-corridor-g-1", "type": "walk" },
+    { "from": "n-corridor-g-1", "to": "n-corridor-g-2", "type": "walk" },
+    { "from": "n-corridor-g-2", "to": "n-corridor-g-3", "type": "walk" },
+    {
+      "from": "n-corridor-g-1",
+      "to": "n-clinic-a",
+      "type": "door",
+      "name": "Clinic A public door"
+    },
+    { "from": "n-corridor-g-2", "to": "n-toilets-g", "type": "door" },
+    {
+      "from": "n-lobby",
+      "to": "n-clinic-a",
+      "type": "walk",
+      "distance": 12,
+      "staffOnly": true,
+      "name": "Staff corridor (lobby to Clinic A)"
+    },
+    { "from": "n-corridor-g-1", "to": "n-stairs-g", "type": "walk" },
+    { "from": "n-corridor-g-3", "to": "n-lift-g", "type": "walk" },
+    {
+      "from": "n-stairs-g",
+      "to": "n-stairs-1",
+      "type": "stairs",
+      "distance": 6,
+      "floorChange": true,
+      "name": "Main stairwell"
+    },
+    {
+      "from": "n-lift-g",
+      "to": "n-lift-1",
+      "type": "lift",
+      "distance": 8,
+      "floorChange": true,
+      "hours": [{ "open": "06:00", "close": "22:00" }],
+      "name": "Passenger lift (out of service overnight)"
+    },
+    { "from": "n-stairs-1", "to": "n-corridor-1-1", "type": "walk" },
+    { "from": "n-lift-1", "to": "n-corridor-1-3", "type": "walk" },
+    { "from": "n-corridor-1-1", "to": "n-corridor-1-2", "type": "walk" },
+    { "from": "n-corridor-1-2", "to": "n-corridor-1-3", "type": "walk" },
+    { "from": "n-corridor-1-2", "to": "n-clinic-b", "type": "door", "name": "Clinic B door" },
+    {
+      "from": "n-corridor-1-3",
+      "to": "n-staff-room",
+      "type": "door",
+      "staffOnly": true,
+      "name": "Staff room door"
+    }
+  ],
+  "pois": [
+    {
+      "id": "poi-entrance",
+      "name": "Main entrance",
+      "aliases": ["Entrance", "Exit", "Way out"],
+      "node": "n-entrance",
+      "category": "exit"
+    },
+    {
+      "id": "poi-reception",
+      "name": "Reception",
+      "aliases": ["Front desk", "Check-in"],
+      "floor": 0,
+      "node": "n-lobby",
+      "category": "service",
+      "hours": [{ "open": "08:00", "close": "18:00", "days": [1, 2, 3, 4, 5] }]
+    },
+    {
+      "id": "poi-clinic-a",
+      "name": "Clinic A",
+      "aliases": ["Physiotherapy"],
+      "floor": 0,
+      "node": "n-clinic-a",
+      "category": "clinic",
+      "description": "Physiotherapy and rehabilitation. Ground floor, west corridor."
+    },
+    {
+      "id": "poi-clinic-b",
+      "name": "Clinic B",
+      "aliases": ["Dermatology"],
+      "floor": 1,
+      "node": "n-clinic-b",
+      "category": "clinic",
+      "description": "Dermatology. First floor, middle corridor."
+    },
+    {
+      "id": "poi-toilets-g",
+      "name": "Toilets",
+      "aliases": ["WC", "Restrooms", "Bathroom"],
+      "node": "n-toilets-g",
+      "category": "facility"
+    },
+    {
+      "id": "poi-lift",
+      "name": "Lift",
+      "aliases": ["Elevator"],
+      "node": "n-lift-g",
+      "category": "facility"
+    },
+    {
+      "id": "poi-stairs",
+      "name": "Stairs",
+      "aliases": ["Stairwell"],
+      "node": "n-stairs-g",
+      "category": "facility"
+    },
+    {
+      "id": "poi-staff-room",
+      "name": "Staff room",
+      "node": "n-staff-room",
+      "category": "staff",
+      "access": "staff"
+    }
+  ],
+  "anchors": [
+    { "id": "a-entrance", "x": 0, "y": 1, "z": 0, "floor": 0, "heading": 0 },
+    { "id": "a-lift-g", "x": 30, "y": 9, "z": 0, "floor": 0, "heading": 0 },
+    { "id": "a-lift-1", "x": 30, "y": 9, "z": 4, "floor": 1, "heading": 0 }
+  ],
+  "providers": {
+    "order": ["qr", "mock"]
+  }
+}

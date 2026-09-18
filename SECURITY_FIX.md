@@ -1,7 +1,9 @@
 # Security Fix Guide - Remove Secrets from Git History
 
 ## The Problem
+
 Your repository has sensitive data in git history:
+
 1. .env file with API keys (commit 466e165)
 2. data.js with crypto seed phrases (commit 466e165)
 
@@ -94,6 +96,7 @@ git push -u origin main --force
 2. **Update your local config.js** with new keys
 
 3. **Verify the secrets are gone:**
+
    ```bash
    git log --all --full-history --source -- .env
    # Should return nothing
@@ -107,6 +110,7 @@ git push -u origin main --force
 ## Prevention
 
 Your current branch already has:
+
 - ✅ .gitignore with .env and config.js
 - ✅ Clean data.js without sensitive info
 - ✅ config.example.js template
