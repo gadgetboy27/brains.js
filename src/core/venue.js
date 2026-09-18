@@ -35,6 +35,8 @@ export class Venue {
   /** @type {object} */ providers;
   /** @type {Array<object>} floors sorted by index */ floors;
   /** @type {{ nodes: object[], edges: object[] }} */ graph;
+  /** @type {ReadonlyArray<object>} */ pois;
+  /** @type {ReadonlyArray<object>} */ anchors;
 
   #floorsByIndex = new Map();
   #floorsById = new Map();
@@ -45,6 +47,7 @@ export class Venue {
   #poisByAlias = new Map(); // normalised alias -> poi[]
   #poisByFloor = new Map();
   #poisByNode = new Map();
+  #anchorsById = new Map();
 
   /**
    * @param {object} json Already-validated venue JSON.
@@ -83,6 +86,10 @@ export class Venue {
     }
     this.pois = Object.freeze(pois);
 
+    const anchors = (json.anchors ?? []).map((a) => Object.freeze({ z: 0, heading: 0, ...a }));
+    for (const anchor of anchors) this.#anchorsById.set(anchor.id, anchor);
+    this.anchors = Object.freeze(anchors);
+
     for (const list of [...this.#nodesByFloor.values(), ...this.#poisByFloor.values()]) {
       Object.freeze(list);
     }
@@ -115,6 +122,16 @@ export class Venue {
    */
   nodesOnFloor(floorIndex) {
     return this.#nodesByFloor.get(floorIndex) ?? EMPTY;
+  }
+
+  // ------------------------------------------------------------ anchors
+
+  /**
+   * A physical marker (QR code) with a known standing position and facing.
+   * @param {string} id
+   */
+  anchorById(id) {
+    return this.#anchorsById.get(id);
   }
 
   // --------------------------------------------------------------- pois

@@ -21,6 +21,10 @@
     { "from": "n-atrium", "to": "n-l1-landing", "type": "stairs", "distance": 6 },
     { "from": "n-l1-landing", "to": "n-l1-toilets", "type": "walk" }
   ],
+  "anchors": [
+    { "id": "a-entrance", "x": 0.5, "y": 1, "z": 0, "floor": 0, "heading": 90 },
+    { "id": "a-l1-landing", "x": 10, "y": 1.5, "z": 4.2, "floor": 1 }
+  ],
   "pois": [
     {
       "id": "poi-info",

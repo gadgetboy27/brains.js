@@ -83,6 +83,32 @@ describe('Venue — nodes', () => {
   });
 });
 
+describe('Venue — anchors', () => {
+  it('looks up anchors by id with z and heading defaulted', () => {
+    const v = venue();
+    expect(v.anchors.map((a) => a.id)).toEqual(['a-entrance', 'a-l1-landing']);
+    expect(v.anchorById('a-entrance')).toEqual({
+      id: 'a-entrance',
+      x: 0.5,
+      y: 1,
+      z: 0,
+      floor: 0,
+      heading: 90,
+    });
+    expect(v.anchorById('a-l1-landing')).toMatchObject({ z: 4.2, heading: 0 });
+    expect(v.anchorById('nope')).toBeUndefined();
+    expect(Object.isFrozen(v.anchors)).toBe(true);
+  });
+
+  it('is an empty list when the venue has no anchors', () => {
+    const json = structuredClone(sample);
+    delete json.anchors;
+    const v = createVenue(json);
+    expect(v.anchors).toEqual([]);
+    expect(v.anchorById('a-entrance')).toBeUndefined();
+  });
+});
+
 describe('Venue — poi lookups', () => {
   it('by id', () => {
     const v = venue();

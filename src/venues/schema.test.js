@@ -221,6 +221,43 @@ describe('validateVenue — edges', () => {
   });
 });
 
+describe('validateVenue — anchors', () => {
+  it('are optional', () => {
+    const v = clone();
+    delete v.anchors;
+    expect(validateVenue(v)).toEqual([]);
+  });
+
+  it('validates coordinates, floor and heading, naming the field', () => {
+    const v = clone();
+    v.anchors[0].x = 'zero';
+    expectSingleError(v, 'anchors[0].x', /finite number, got "zero"/);
+    v.anchors[0].x = 0;
+    v.anchors[0].floor = 9;
+    expectSingleError(v, 'anchors[0].floor', /references undefined floor index 9/);
+    v.anchors[0].floor = 0;
+    v.anchors[0].heading = 360;
+    expectSingleError(v, 'anchors[0].heading', /must be < 360/);
+    v.anchors[0].heading = -1;
+    expectSingleError(v, 'anchors[0].heading', /must be >= 0/);
+  });
+
+  it('rejects duplicate ids and GPS keys', () => {
+    const v = clone();
+    v.anchors[1].id = 'a-entrance';
+    expectSingleError(v, 'anchors[1].id', /duplicate id "a-entrance"/);
+    const w = clone();
+    w.anchors[0].lat = 1;
+    expectSingleError(w, 'anchors[0].lat', /GPS/);
+  });
+
+  it('must be an array when present', () => {
+    const v = clone();
+    v.anchors = {};
+    expectSingleError(v, 'anchors', /must be an array/);
+  });
+});
+
 describe('validateVenue — pois', () => {
   it('requires id, name and a known node', () => {
     const v = clone();

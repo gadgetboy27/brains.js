@@ -27,6 +27,14 @@
  *   "edges": [                           // see src/core/router.js for fields
  *     { "from": "n-entrance", "to": "n-atrium", "type": "walk" }
  *   ],
+ *   "anchors": [                         // optional: physical QR-code markers
+ *     {
+ *       "id": "a-entrance",
+ *       "x": 0.5, "y": 1.0, "z": 0,      // where the user STANDS when scanning
+ *       "floor": 0,
+ *       "heading": 90                    // direction the user faces when scanning
+ *     }
+ *   ],
  *   "pois": [
  *     {
  *       "id": "poi-info",
@@ -320,6 +328,32 @@ export function validateVenue(venue) {
       c.isEnum(edge.accessLevel, `${p}.accessLevel`, ACCESS_LEVELS);
       checkHours(c, edge.hours, `${p}.hours`);
     });
+  }
+
+  // --- anchors (optional)
+  if (venue.anchors !== undefined && c.isArray(venue.anchors, 'anchors')) {
+    venue.anchors.forEach((anchor, i) => {
+      const p = `anchors[${i}]`;
+      if (!c.isObject(anchor, p)) return;
+      c.noGps(anchor, p);
+      c.isString(anchor.id, `${p}.id`, { pattern: ID_PATTERN, patternHint: 'must be a slug' });
+      c.isNumber(anchor.x, `${p}.x`);
+      c.isNumber(anchor.y, `${p}.y`);
+      c.isNumber(anchor.z, `${p}.z`, { required: false });
+      if (
+        c.isNumber(anchor.floor, `${p}.floor`, { integer: true }) &&
+        !floorIndexes.has(anchor.floor)
+      ) {
+        c.add(`${p}.floor`, `references undefined floor index ${anchor.floor}`);
+      }
+      if (
+        c.isNumber(anchor.heading, `${p}.heading`, { required: false, min: 0 }) &&
+        anchor.heading >= 360
+      ) {
+        c.add(`${p}.heading`, `must be < 360, got ${anchor.heading}`);
+      }
+    });
+    checkUnique(c, venue.anchors, 'id', 'anchors');
   }
 
   // --- pois

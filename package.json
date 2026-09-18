@@ -25,7 +25,8 @@
   },
   "homepage": "https://github.com/gadgetboy27/brains.js#readme",
   "dependencies": {
-    "@ar-js-org/ar.js": "^3.4.5"
+    "@ar-js-org/ar.js": "^3.4.5",
+    "barcode-detector": "^3.2.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
