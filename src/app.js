@@ -226,9 +226,12 @@ export async function bootApp(options = {}) {
   };
   win?.addEventListener?.('deviceorientation', onOrientation);
 
+  let fitted = { w: 0, h: 0 };
   function fit() {
     const w = root.clientWidth || win?.innerWidth || 1;
     const h = root.clientHeight || win?.innerHeight || 1;
+    if (w === fitted.w && h === fitted.h) return;
+    fitted = { w, h };
     arScene.resize(w, h);
     floorplan.resize(w, h);
   }
@@ -314,6 +317,7 @@ export async function bootApp(options = {}) {
   // --- render loop
   let frame = null;
   const loop = (time) => {
+    fit(); // cheap no-op unless the layout size changed (e.g. first frame after boot)
     arrow.update(time ?? 0);
     if (view === 'ar') arScene.render();
     frame = raf(loop);

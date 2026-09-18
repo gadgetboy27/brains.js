@@ -4,7 +4,25 @@ import { defineConfig } from 'vite';
 
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 
+/**
+ * public/index.html loads ../src/main.js, which sits outside the Vite root.
+ * The build handles that fine, but in dev the browser normalises the URL to
+ * /src/main.js and Vite serves the HTML fallback for it. Rewrite the tag to a
+ * /@fs/ URL during `vite serve` only.
+ */
+const entryOutsideRoot = {
+  name: 'brains:entry-outside-root',
+  apply: 'serve',
+  transformIndexHtml: {
+    order: 'pre', // before Vite normalises the relative URL to /src/main.js
+    handler(html) {
+      return html.replace('src="../src/main.js"', `src="/@fs/${projectRoot}src/main.js"`);
+    },
+  },
+};
+
 export default defineConfig({
+  plugins: [entryOutsideRoot],
   // The single entry point is public/index.html; static assets (models,
   // images) come from assets/ and are served at the site root.
   root: 'public',

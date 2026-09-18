@@ -103,6 +103,8 @@ export class ArScene {
     this.#canvas = this.#opts.canvas ?? doc?.createElement('canvas');
     if (!this.#canvas) throw new TypeError('ArScene needs a canvas (or a document to create one)');
     if (!this.#opts.canvas && (this.#opts.mount ?? doc?.body)) {
+      // Fill the mount; the renderer sets the drawing-buffer size separately.
+      this.#canvas.style.cssText = 'display:block;width:100%;height:100%;';
       (this.#opts.mount ?? doc.body).appendChild(this.#canvas);
     }
 
