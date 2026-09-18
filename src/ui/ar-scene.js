@@ -27,7 +27,6 @@
 
 import {
   BufferGeometry,
-  CanvasTexture,
   Color,
   ConeGeometry,
   Group,
@@ -38,10 +37,11 @@ import {
   PerspectiveCamera,
   RingGeometry,
   Scene,
-  Sprite,
-  SpriteMaterial,
   Vector3,
 } from 'three';
+
+import { makeTextSprite } from './labels.js';
+import { cssToken } from './tokens.js';
 
 /** @typedef {import('../core/positioning.js').Pose} Pose */
 /** @typedef {import('../core/venue.js').Venue} Venue */
@@ -221,6 +221,17 @@ export class ArScene {
     this.#ownsRenderer = true;
   }
 
+  /** Read a colour token (theme.css); `fallback` is a CSS colour name for stylesheet-less tests. */
+  #token(name, fallback) {
+    return cssToken(name, { fallback, getComputedStyle: this.#opts.getComputedStyle });
+  }
+
+  /** Rebuild everything with the current tokens (after a high-contrast toggle). */
+  refreshColors() {
+    this.#rebuildRoute();
+    this.#rebuildPois();
+  }
+
   #track(obj) {
     if (obj.geometry) this.#disposables.add(obj.geometry);
     if (obj.material) {
@@ -264,7 +275,10 @@ export class ArScene {
     }
     if (points.length >= 2) {
       const geometry = new BufferGeometry().setFromPoints(points);
-      const material = new LineBasicMaterial({ color: new Color('#3b82f6'), linewidth: 2 });
+      const material = new LineBasicMaterial({
+        color: new Color(this.#token('--color-route', 'blue')),
+        linewidth: 2,
+      });
       const line = new Line(geometry, material);
       line.name = 'route-line';
       this.#routeGroup.add(this.#track(line));
@@ -274,7 +288,11 @@ export class ArScene {
     if (last && last.floor === this.#floor) {
       const ring = new Mesh(
         new RingGeometry(0.35, 0.5, 32),
-        new MeshBasicMaterial({ color: new Color('#22c55e'), transparent: true, opacity: 0.9 })
+        new MeshBasicMaterial({
+          color: new Color(this.#token('--color-destination', 'green')),
+          transparent: true,
+          opacity: 0.9,
+        })
       );
       ring.rotation.x = -Math.PI / 2;
       ring.position.copy(venueToScene({ x: last.x, y: last.y, z: (last.z ?? 0) + lift + 0.01 }));
@@ -286,7 +304,7 @@ export class ArScene {
   #floorChangeMarker(node, edge, next) {
     const cone = new Mesh(
       new ConeGeometry(0.3, 0.6, 16),
-      new MeshBasicMaterial({ color: new Color('#f59e0b') })
+      new MeshBasicMaterial({ color: new Color(this.#token('--color-floor-change', 'orange')) })
     );
     const up = next.floor > node.floor;
     cone.rotation.x = up ? 0 : Math.PI;
@@ -321,7 +339,7 @@ export class ArScene {
 
       const pin = new Mesh(
         new ConeGeometry(0.15, 0.4, 12),
-        new MeshBasicMaterial({ color: new Color('#ef4444') })
+        new MeshBasicMaterial({ color: new Color(this.#token('--color-poi', 'red')) })
       );
       pin.rotation.x = Math.PI;
       marker.add(this.#track(pin));
@@ -338,30 +356,8 @@ export class ArScene {
   /** A billboard text label, or null when no 2D canvas is available. */
   #label(text) {
     if (this.#opts.createLabel) return this.#opts.createLabel(text);
-    const doc = this.#opts.document ?? globalThis.document;
-    const canvas = doc?.createElement?.('canvas');
-    const ctx = canvas?.getContext?.('2d');
-    if (!ctx) return null;
-    const font = '28px system-ui, sans-serif';
-    ctx.font = font;
-    const pad = 12;
-    const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
-    const h = 44;
-    canvas.width = w;
-    canvas.height = h;
-    ctx.font = font;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#fff';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, pad, h / 2);
-    const texture = new CanvasTexture(canvas);
-    const sprite = new Sprite(
-      new SpriteMaterial({ map: texture, transparent: true, depthTest: false })
-    );
-    sprite.scale.set(w / 100, h / 100, 1);
-    sprite.name = `label:${text}`;
-    return this.#track(sprite);
+    const sprite = makeTextSprite(text, { document: this.#opts.document });
+    return sprite ? this.#track(sprite) : null;
   }
 }
 

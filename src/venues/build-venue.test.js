@@ -91,7 +91,15 @@ afterAll(() => {
 });
 
 const run = (args, opts = {}) => {
-  const res = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', ...opts });
+  // A clean env: the child must not inherit vitest's NODE_OPTIONS loader hooks.
+  const env = { ...process.env, NODE_OPTIONS: '', VITEST: '', VITEST_WORKER_ID: '' };
+  const res = spawnSync(process.execPath, [CLI, ...args], {
+    encoding: 'utf8',
+    env,
+    timeout: 30_000,
+    ...opts,
+  });
+  if (res.error) throw res.error;
   return { code: res.status, stdout: res.stdout ?? '', stderr: res.stderr ?? '' };
 };
 
