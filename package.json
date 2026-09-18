@@ -11,7 +11,10 @@
     "test:watch": "vitest",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint --fix . && prettier --write .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "dev:https": "vite --host",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=brains-js",
+    "deploy:preview": "npm run build && wrangler pages deploy dist --project-name=brains-js --branch=preview"
   },
   "repository": {
     "type": "git",
@@ -31,6 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "eslint": "^10.10.0",
@@ -38,6 +42,7 @@
     "globals": "^17.12.0",
     "jsdom": "^29.1.1",
     "prettier": "^3.9.8",
+    "qrcode": "^1.5.4",
     "vite": "^8.3.0",
     "vitest": "^4.1.11"
   },

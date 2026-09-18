@@ -1,0 +1,15 @@
+# Served by Cloudflare Pages for every path (copied into dist/ by Vite from assets/).
+
+/*
+  # The app itself uses the camera, motion sensors and speech; nothing else may.
+  Permissions-Policy: camera=(self), gyroscope=(self), accelerometer=(self), magnetometer=(self), geolocation=(), microphone=(), payment=(), usb=()
+  # Never downgrade to HTTP: sensors need a secure context.
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin
+
+# Venue data and runtime config change without a deploy: keep them fresh.
+/venues/*
+  Cache-Control: no-cache

@@ -1,0 +1,103 @@
+name: Deploy to Cloudflare Pages
+
+# Production deploy on push to master; a preview deploy for every pull
+# request, with its HTTPS URL posted as a PR comment. Camera, motion and
+# orientation APIs only work in a secure context, so every deployment —
+# preview included — is served over HTTPS by Cloudflare Pages.
+#
+# One-time setup (see docs/deployment.md):
+#   - create the Pages project (name below) in the Cloudflare dashboard, or
+#     `npx wrangler pages project create brains-js --production-branch master`
+#   - add repository secrets CLOUDFLARE_API_TOKEN (Pages: Edit) and
+#     CLOUDFLARE_ACCOUNT_ID
+#   - optionally set IMMERSAL_API_KEY / VENUE_JSON_URL as repository variables
+#     or secrets to bake into the build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+  deployments: write
+
+concurrency:
+  group: deploy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PAGES_PROJECT: brains-js
+
+jobs:
+  checks:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm test
+
+  deploy:
+    name: ${{ github.event_name == 'pull_request' && 'Preview deploy' || 'Production deploy' }}
+    needs: checks
+    runs-on: ubuntu-latest
+    # Forked PRs cannot read secrets; skip rather than fail.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
+      url: ${{ steps.deploy.outputs.deployment-url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+
+      - name: Build
+        env:
+          IMMERSAL_API_KEY: ${{ secrets.IMMERSAL_API_KEY }}
+          VENUE_JSON_URL: ${{ vars.VENUE_JSON_URL }}
+          VENUE_BASE_URL: ${{ vars.VENUE_BASE_URL }}
+          RUNTIME_CONFIG_URL: ${{ vars.RUNTIME_CONFIG_URL }}
+          POSITIONING_PROVIDER: ${{ vars.POSITIONING_PROVIDER }}
+        run: npm run build
+
+      - name: Deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Previews deploy under the PR's branch name; master is production.
+          command: >-
+            pages deploy dist
+            --project-name=${{ env.PAGES_PROJECT }}
+            --branch=${{ github.event_name == 'pull_request' && github.head_ref || 'master' }}
+            --commit-hash=${{ github.event.pull_request.head.sha || github.sha }}
+            --commit-dirty=false
+
+      - name: Comment preview URL on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        with:
+          script: |
+            const marker = '<!-- pages-preview -->';
+            const body = `${marker}\n**Preview deployed:** ${process.env.URL}\n\nHTTPS is required for camera and motion access; open it on a phone to test positioning.`;
+            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: context.issue.number });
+            const existing = comments.find((c) => c.body?.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            }

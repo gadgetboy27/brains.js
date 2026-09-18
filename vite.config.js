@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
 
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -21,8 +22,14 @@ const entryOutsideRoot = {
   },
 };
 
-export default defineConfig({
-  plugins: [entryOutsideRoot],
+export default defineConfig(({ command }) => ({
+  // `npm run dev:https` serves a self-signed certificate so a phone on the
+  // same network can open the app in a secure context (camera and motion
+  // APIs refuse plain HTTP; only localhost is exempt). See docs/deployment.md.
+  plugins: [
+    entryOutsideRoot,
+    ...(command === 'serve' && process.env.npm_lifecycle_event === 'dev:https' ? [basicSsl()] : []),
+  ],
   // The single entry point is public/index.html; static assets (models,
   // images) come from assets/ and are served at the site root.
   root: 'public',
@@ -42,4 +49,4 @@ export default defineConfig({
     include: ['src/**/*.test.js'],
     exclude: ['legacy/**', 'node_modules/**'],
   },
-});
+}));

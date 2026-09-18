@@ -1,0 +1,8 @@
+{
+  // Cloudflare Pages project. Deployed by .github/workflows/deploy.yml, or
+  // manually with `npm run deploy` after `npx wrangler login`.
+  "$schema": "https://developers.cloudflare.com/schemas/wrangler.json",
+  "name": "brains-js",
+  "pages_build_output_dir": "dist",
+  "compatibility_date": "2026-09-01",
+}
