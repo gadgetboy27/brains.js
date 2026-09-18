@@ -130,6 +130,30 @@ export default {
     'error.noRouteClosedHint':
       'Kua kati tētahi wāhanga e aukati ana i ngā ara katoa. Pātai ki ngā kaimahi.',
 
+    // First-run permissions screen
+    'firstRun.title': 'I mua i te tīmatanga',
+    'firstRun.intro':
+      'Ka ārahi tēnei taupānga i a koe huri noa i {venue} mā tō waea. E rua ngā whakaaetanga e hiahiatia ana:',
+    'firstRun.camera.title': 'Kāmera',
+    'firstRun.camera.why':
+      'Hei kimi i tō wāhi mā te mōhio ki ngā tohu, ngā kūaha me ngā tohu whakaū e karapoti ana i a koe. Ka whakamahia te kāmera i te wā anake e tuwhera ana te tirohanga kāmera.',
+    'firstRun.motion.title': 'Ngā pūoko nekehanga',
+    'firstRun.motion.why':
+      'Kia tika tonu te tohu o te pere i a koe e hīkoi ana i waenga i ngā whakatau kāmera.',
+    'firstRun.data.title': 'Ngā mea ka wehe i tō waea',
+    'firstRun.data.none': 'Kāore he mea. Ka rere te tautuhi wāhi i runga i tō waea.',
+    'firstRun.data.item': '{data} → {destination}: {purpose}',
+    'firstRun.never.title': 'Ngā mea kāore e kohia',
+    'firstRun.never.body':
+      'Kāore he wāhi GPS, kāore he pūkete, kāore he ingoa, kāore he whakaahua e tiakina ana, kāore he pānuitanga, kāore he tātari. Tirohia te pānui tūmataiti.',
+    'firstRun.allow': 'Whakaae ki te kāmera me te nekehanga',
+    'firstRun.floorplanOnly': 'Whakamahia te mahere papa anake',
+    'firstRun.privacyLink': 'Pānui tūmataiti',
+    'firstRun.requesting': 'E tono ana i tō waea mō te whakaaetanga…',
+    'firstRun.motionDenied':
+      'Kāore i whakaaetia te nekehanga. Tērā pea ka pōturi te pere i waenga i ngā whakatau kāmera.',
+    'entry.anchorSeeded': 'E tīmata ana i te tohu {name}.',
+
     // Floors
     'floor.unknown': 'Papa tē mōhiotia',
   },

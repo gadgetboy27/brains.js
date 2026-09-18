@@ -90,6 +90,10 @@ describe('parseQrPayload', () => {
       venueId: 'sample-mall',
       anchorId: 'a-1',
     });
+    expect(parseQrPayload('https://wayfinding.example.nz/?v=sample-mall&anchor=a-1')).toEqual({
+      venueId: 'sample-mall',
+      anchorId: 'a-1',
+    });
     expect(parseQrPayload('http://localhost:5173/#/venue=m&anchor=a')).toEqual({
       venueId: 'm',
       anchorId: 'a',

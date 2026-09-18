@@ -45,6 +45,7 @@ async function boot(overrides = {}) {
       updateLabel: () => true,
     },
     floorplanOptions: { context: fakeContext() },
+    firstRun: false, // the first-run screen has its own tests below
     requestAnimationFrame: (cb) => {
       frames.push(cb);
       return frames.length;
@@ -69,6 +70,8 @@ describe('readConfig', () => {
   it('reads query, then env, then defaults', () => {
     expect(readConfig({ search: '', env: {} })).toEqual({
       venueUrl: null,
+      venueId: null,
+      anchorId: null,
       runtimeConfigUrl: null,
       provider: null,
       allowMock: false,
@@ -97,6 +100,19 @@ describe('readConfig', () => {
       allowMock: false,
     });
     expect(readConfig({ search: '?mock=1', env: {} }).allowMock).toBe(true);
+    // QR entry: venue id → URL under the venue base; anchor carried through.
+    expect(
+      readConfig({ search: '?v=demo-health-centre&anchor=a-entrance', env: {} })
+    ).toMatchObject({
+      venueUrl: '/venues/demo-health-centre/venue.json',
+      venueId: 'demo-health-centre',
+      anchorId: 'a-entrance',
+    });
+    expect(
+      readConfig({ search: '?v=demo', env: { VENUE_BASE_URL: 'https://cdn.example/venues' } })
+        .venueUrl
+    ).toBe('https://cdn.example/venues/demo/venue.json');
+    expect(readConfig({ search: '?v=../etc', env: {} }).venueUrl).toBeNull(); // ids are slugs only
     expect(readConfig({ search: '?provider=mock', env: {} }).allowMock).toBe(true);
     expect(readConfig({ search: '', env: { DEV: true } }).allowMock).toBe(true);
     expect(readConfig({ search: '?view=sideways', env: {} }).view).toBe('auto');
@@ -694,6 +710,142 @@ describe('bootApp — runtime config (closures and hidden POIs without a redeplo
       cancelAnimationFrame: () => {},
     });
     expect(fetch).toHaveBeenCalledWith('/venues/demo/runtime.json', { cache: 'no-store' });
+    await app.destroy();
+  });
+});
+
+describe('bootApp — QR entry and first run', () => {
+  it('seeds the position from the scanned entrance anchor', async () => {
+    const { app } = await boot({
+      config: { anchorId: 'a-lift-1', provider: 'mock', allowMock: true },
+      providerOptions: { mock: { path: [], fixIntervalMs: 100000 } }, // mock emits nothing useful
+    });
+    expect(app.state.hasPose).toBe(true);
+    expect(app.floorplan.floor).toBe(1); // a-lift-1 is on the first floor
+    expect(app.hud.text.notices).toContain('Starting from the a-lift-1 marker.');
+    app.setDestination(app.venue.poiById('poi-clinic-b'));
+    expect(app.hud.text.distance).toBe('19 m'); // (30,9) → corridor east (3) → middle (10) → Clinic B (6)
+    await app.destroy();
+  });
+
+  it('ignores an unknown anchor', async () => {
+    const { app } = await boot({ config: { anchorId: 'a-nope' } });
+    expect(app.hud.text.notices.some((n) => n.startsWith('Starting from'))).toBe(false);
+    await app.destroy();
+  });
+
+  it('shows the first-run screen before starting a camera provider; Allow requests motion, warms the camera, then starts', async () => {
+    const requestMotion = vi.fn(async () => 'granted');
+    const warmCamera = vi.fn(async () => true);
+    const storage = {
+      data: {},
+      getItem: (k) => storage.data[k] ?? null,
+      setItem: (k, v) => (storage.data[k] = v),
+    };
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const bootPromise = boot({
+      config: { provider: null },
+      providerOptions: {
+        order: ['qr', 'mock'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+      options: {
+        firstRun: undefined,
+        storage,
+        permissions: { query: async () => ({ state: 'prompt' }) },
+        firstRunOptions: { requestMotion, warmCamera },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const screen = document.querySelector('.firstrun');
+    expect(screen).not.toBeNull();
+    expect(screen.getAttribute('role')).toBe('dialog');
+    expect(screen.querySelector('[data-f="camera-why"]').textContent).toBe(
+      t('firstRun.camera.why')
+    );
+    // Data disclosure comes from the providers: QR and mock send nothing.
+    expect(screen.querySelector('[data-f="data"]').textContent).toBe(t('firstRun.data.none'));
+
+    screen.querySelector('[data-f="allow"]').click();
+    const { app } = await bootPromise;
+    expect(requestMotion).toHaveBeenCalledOnce();
+    expect(warmCamera).toHaveBeenCalledOnce();
+    expect(storage.data['brains:permissions']).toBe('granted');
+    expect(document.querySelector('.firstrun')).toBeNull();
+    expect(app.permissions).toEqual({ camera: true, motion: true });
+    expect(app.chain.state.active).toBe('qr');
+    await app.destroy();
+  });
+
+  it('"floor plan only" skips camera providers and keeps the floor plan usable', async () => {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const bootPromise = boot({
+      config: { provider: null },
+      providerOptions: {
+        order: ['qr', 'mock'],
+        qr: { getUserMedia: async () => stream, BarcodeDetector: class {} },
+      },
+      options: {
+        firstRun: undefined,
+        storage: null,
+        permissions: { query: async () => ({ state: 'prompt' }) },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    document.querySelector('.firstrun [data-f="floorplan"]').click();
+    const { app } = await bootPromise;
+    expect(app.permissions.camera).toBe(false);
+    expect(app.view).toBe('floorplan');
+    expect(app.state.cameraUsable).toBe(false);
+    expect(app.chain.state.active).toBeNull(); // the camera chain was not started
+    expect(app.setDestination(app.venue.poiById('poi-clinic-a'))).toBe(true);
+    await app.destroy();
+  });
+
+  it('is skipped when camera permission is already granted or remembered', async () => {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const providerOptions = {
+      order: ['qr'],
+      qr: {
+        getUserMedia: async () => stream,
+        BarcodeDetector: class {
+          detect = async () => [];
+        },
+      },
+    };
+    const a = await boot({
+      config: { provider: null },
+      providerOptions,
+      options: {
+        firstRun: undefined,
+        storage: null,
+        permissions: { query: async () => ({ state: 'granted' }) },
+      },
+    });
+    expect(document.querySelector('.firstrun')).toBeNull();
+    await a.app.destroy();
+    const storage = { getItem: () => 'granted', setItem: () => {} };
+    const b = await boot({
+      config: { provider: null },
+      providerOptions,
+      options: {
+        firstRun: undefined,
+        storage,
+        permissions: { query: async () => ({ state: 'prompt' }) },
+      },
+    });
+    expect(document.querySelector('.firstrun')).toBeNull();
+    await b.app.destroy();
+  });
+
+  it('is not shown for venues with no camera provider', async () => {
+    const { app } = await boot({ options: { firstRun: undefined, storage: null } }); // mock only
+    expect(document.querySelector('.firstrun')).toBeNull();
     await app.destroy();
   });
 });

@@ -13,10 +13,12 @@
  * `parseQrPayload()` accepts either:
  *
  *  - `brains://<venueId>/<anchorId>` — compact, for printed markers; or
- *  - any `http(s)` URL carrying `venue` and `anchor` in its query string or
- *    hash (`https://example.com/ar?venue=mall&anchor=a-1`,
+ *  - any `http(s)` URL carrying `venue` (or `v`) and `anchor` in its query
+ *    string or hash (`https://example.com/?v=mall&anchor=a-1`,
  *    `https://example.com/#venue=mall&anchor=a-1`), so a marker scanned with
- *    the phone's own camera app can open the web app.
+ *    the phone's own camera app opens the web app at that venue and anchor —
+ *    the no-install entry path (see docs/entry.md and
+ *    scripts/make-entrance-qr.mjs).
  *
  * ## Decoding
  *
@@ -92,7 +94,8 @@ export function parseQrPayload(text) {
 
   const fromQuery = url.searchParams;
   const fromHash = new URLSearchParams(url.hash.replace(/^#\/?/, ''));
-  const venueId = fromQuery.get('venue') ?? fromHash.get('venue');
+  const venueId =
+    fromQuery.get('venue') ?? fromQuery.get('v') ?? fromHash.get('venue') ?? fromHash.get('v');
   const anchorId = fromQuery.get('anchor') ?? fromHash.get('anchor');
   if (!venueId || !anchorId) return null;
   return { venueId, anchorId };

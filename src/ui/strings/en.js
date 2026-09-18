@@ -127,6 +127,29 @@ export default {
     'error.noRouteClosed': 'No route to {name}: part of the way is closed.',
     'error.noRouteClosedHint': 'A closed section blocks every route. Ask staff for help.',
 
+    // First-run permissions screen
+    'firstRun.title': 'Before we start',
+    'firstRun.intro':
+      'This app guides you around {venue} using your phone. It needs two permissions:',
+    'firstRun.camera.title': 'Camera',
+    'firstRun.camera.why':
+      'To work out where you are by recognising signs, doorways and markers around you. The camera is only used while the camera view is open.',
+    'firstRun.motion.title': 'Motion sensors',
+    'firstRun.motion.why':
+      'To keep the arrow pointing the right way as you walk between camera fixes.',
+    'firstRun.data.title': 'What leaves your phone',
+    'firstRun.data.none': 'Nothing. Positioning runs on your phone.',
+    'firstRun.data.item': '{data} → {destination}: {purpose}',
+    'firstRun.never.title': 'What is never collected',
+    'firstRun.never.body':
+      'No GPS location, no account, no name, no photos are saved, no advertising or analytics. See the privacy notice for details.',
+    'firstRun.allow': 'Allow camera and motion',
+    'firstRun.floorplanOnly': 'Use the floor plan only',
+    'firstRun.privacyLink': 'Privacy notice',
+    'firstRun.requesting': 'Asking your phone for permission…',
+    'firstRun.motionDenied': 'Motion access was declined. The arrow may lag between camera fixes.',
+    'entry.anchorSeeded': 'Starting from the {name} marker.',
+
     // Floors
     'floor.unknown': 'Unknown floor',
   },

@@ -9,6 +9,8 @@
  * see .env.example), then defaults:
  *
  *  - venue:     `?venue=<url>`      / `VENUE_JSON_URL`    / the bundled demo venue
+ *  - venue id:  `?v=<id>` → `${VENUE_BASE_URL ?? '/venues/'}<id>/venue.json` (QR entry, docs/entry.md)
+ *  - anchor:    `?anchor=<id>` — the marker the user scanned; seeds their position
  *  - provider:  `?provider=<name>`  / `POSITIONING_PROVIDER` / the venue's own order
  *  - mock:      `?mock=1` or `provider=mock` allows the mock provider (always allowed in dev builds)
  *  - view:      `?view=ar|floorplan|auto` / default auto (tilt-driven)
@@ -39,6 +41,7 @@ import { createProviderChain } from './providers/index.js';
 import { NavigationArrow } from './ui/arrow.js';
 import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
+import { createFirstRun, needsFirstRun } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHud } from './ui/hud.js';
 import { createSpeechGuide } from './ui/speech.js';
@@ -82,8 +85,19 @@ export function readConfig({
   const q = new URLSearchParams(search);
   const provider = q.get('provider') ?? env.POSITIONING_PROVIDER ?? null;
   const view = q.get('view') ?? 'auto';
+  const venueId = q.get('v');
+  const base = env.VENUE_BASE_URL ?? '/venues/';
+  const venueUrl =
+    q.get('venue') ??
+    (venueId && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(venueId)
+      ? `${base.endsWith('/') ? base : `${base}/`}${venueId}/venue.json`
+      : null) ??
+    env.VENUE_JSON_URL ??
+    null;
   return {
-    venueUrl: q.get('venue') ?? env.VENUE_JSON_URL ?? null,
+    venueUrl,
+    venueId: venueId ?? null,
+    anchorId: q.get('anchor') ?? null,
     runtimeConfigUrl: q.get('runtime') ?? env.RUNTIME_CONFIG_URL ?? null,
     provider,
     allowMock: q.get('mock') === '1' || provider === 'mock' || Boolean(env.DEV),
@@ -395,6 +409,8 @@ export async function bootApp(options = {}) {
   fit();
 
   // --- navigation state
+  let chainNoCamera = null;
+  let offPose2 = null;
   const floorName = (i) => venue.floorByIndex(i)?.name ?? t('floor.unknown');
   let destination = null;
   let navigator = null;
@@ -509,8 +525,73 @@ export async function bootApp(options = {}) {
   frame = raf(loop);
 
   showView(view);
+
+  // --- first run: explain and request camera + motion before starting any
+  // camera provider. "Floor plan only" drops the camera providers.
+  const cameraInChain = chain.order.some((n) => CAMERA_PROVIDERS.has(n));
+  let permissions = { camera: true, motion: true };
+  let firstRun = null;
+  const ask =
+    cameraInChain &&
+    options.firstRun !== false &&
+    (await needsFirstRun({
+      storage,
+      ...(options.permissions ? { permissions: options.permissions } : {}),
+    }));
+  if (ask) {
+    permissions = await new Promise((resolve) => {
+      firstRun = createFirstRun({
+        document: doc,
+        mount: root,
+        storage,
+        venueName: venue.name,
+        uploads: chain.declaredUploads(),
+        onContinue: resolve,
+        ...options.firstRunOptions,
+      });
+    });
+    firstRun.destroy();
+    if (!permissions.camera) cameraUnavailable('notice.cameraDenied');
+  }
+
   picker.open();
-  await chain.start();
+  if (permissions.camera || !cameraInChain) {
+    await chain.start();
+  } else {
+    // Floor-plan only: positioning without the camera, if any provider allows it.
+    const rest = chain.order.filter((n) => !CAMERA_PROVIDERS.has(n));
+    if (rest.length > 0) {
+      await chain.stop();
+      chainNoCamera = createProviderChain(venue, {
+        allowMock: config.allowMock,
+        order: rest,
+        ...options.providerOptions,
+      });
+      offPose2 = chainNoCamera.onPose(onPose);
+      await chainNoCamera.start();
+    } else {
+      hud.showNotice('position', t('notice.noPosition'));
+    }
+  }
+
+  // --- QR entry: the scanned entrance marker fixes the starting position.
+  if (config.anchorId) {
+    const anchor = venue.anchorById(config.anchorId);
+    if (anchor) {
+      const pose = {
+        x: anchor.x,
+        y: anchor.y,
+        z: anchor.z ?? 0,
+        floor: anchor.floor,
+        heading: anchor.heading ?? 0,
+        confidence: 1,
+        timestamp: Date.now(),
+      };
+      onPose(pose);
+      chain.active?.handleScan?.(`brains://${venue.id}/${anchor.id}`); // tell a QR provider too
+      hud.showNotice('anchor', t('entry.anchorSeeded', { name: anchor.name ?? anchor.id }));
+    }
+  }
 
   // Re-apply on change: a closure must take effect immediately, so rebuild
   // the UI over the adjusted venue (and re-route if navigating).
@@ -552,6 +633,9 @@ export async function bootApp(options = {}) {
     get runtimeConfig() {
       return runtimeConfig;
     },
+    get permissions() {
+      return { ...permissions };
+    },
     /** Explicit handled state, for tests and diagnostics. */
     get state() {
       return {
@@ -581,6 +665,9 @@ export async function bootApp(options = {}) {
       battery?.removeEventListener?.('levelchange', applyBattery);
       battery?.removeEventListener?.('chargingchange', applyBattery);
       offPose();
+      offPose2?.();
+      await chainNoCamera?.stop();
+      firstRun?.destroy();
       offChange();
       offSpeech();
       speech.destroy();
