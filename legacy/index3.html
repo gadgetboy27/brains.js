@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR.js Places with Images</title>
+
+    <!-- A-Frame and AR.js -->
+    <script src='https://aframe.io/releases/1.3.0/aframe.min.js'></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+
+    <!-- Configuration for API keys -->
+    <script src="config.js"></script>
+
+    <!-- Places demo with images -->
+    <script src="./index3.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #place-label {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+    <a-scene
+        cursor='rayOrigin: mouse; fuse: true; fuseTimeout: 500;'
+        raycaster="objects: [gps-entity-place]"
+        vr-mode-ui="enabled: false"
+        embedded
+        arjs='sourceType: webcam; debugUIEnabled: false;'>
+
+        <!-- GPS Camera -->
+        <a-camera
+            gps-camera="gpsMinDistance: 5"
+            rotation-reader>
+        </a-camera>
+
+        <!-- Entities will be added dynamically by index3.js -->
+    </a-scene>
+</body>
+</html>
