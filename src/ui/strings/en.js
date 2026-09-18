@@ -150,6 +150,19 @@ export default {
     'firstRun.motionDenied': 'Motion access was declined. The arrow may lag between camera fixes.',
     'entry.anchorSeeded': 'Starting from the {name} marker.',
 
+    // Accuracy harness (test walks)
+    'harness.title': 'Accuracy test',
+    'harness.hint': 'Stand exactly on a marked checkpoint, then tap it.',
+    'harness.checkpoints': 'Checkpoints',
+    'harness.here': 'I am at {name}',
+    'harness.recorded': 'Recorded {name} — {count} checkpoints so far',
+    'harness.poses': '{count} poses',
+    'harness.rescan': 'Rescan requested',
+    'harness.download': 'Download log',
+    'harness.report': 'Show report',
+    'harness.reset': 'Reset',
+    'harness.summary': 'Mean error {mean} m, worst {worst} m, failed fixes {failed}',
+
     // Floors
     'floor.unknown': 'Unknown floor',
   },

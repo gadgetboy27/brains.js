@@ -92,7 +92,11 @@ afterAll(() => {
 
 const run = (args, opts = {}) => {
   // A clean env: the child must not inherit vitest's NODE_OPTIONS loader hooks.
+  // A clean env: vitest workers are forked with an IPC channel, and a child
+  // inheriting NODE_CHANNEL_FD waits on it forever instead of exiting.
   const env = { ...process.env, NODE_OPTIONS: '', VITEST: '', VITEST_WORKER_ID: '' };
+  delete env.NODE_CHANNEL_FD;
+  delete env.NODE_UNIQUE_ID;
   const res = spawnSync(process.execPath, [CLI, ...args], {
     encoding: 'utf8',
     env,

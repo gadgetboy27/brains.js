@@ -16,6 +16,7 @@
  *  - view:      `?view=ar|floorplan|auto` / default auto (tilt-driven)
  *  - filters:   `?wheelchair=1`, `?stepFree=1`, `?staff=1`
  *  - runtime:   `?runtime=<url>` / `RUNTIME_CONFIG_URL` / the venue's `runtimeConfigUrl`
+ *  - harness:   `?harness=1` shows the accuracy test panel (docs/accuracy.md)
  *
  * ## Views
  *
@@ -43,6 +44,7 @@ import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
 import { createFirstRun, needsFirstRun } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
+import { createHarness } from './ui/harness.js';
 import { createHud } from './ui/hud.js';
 import { createSpeechGuide } from './ui/speech.js';
 import {
@@ -102,6 +104,7 @@ export function readConfig({
     provider,
     allowMock: q.get('mock') === '1' || provider === 'mock' || Boolean(env.DEV),
     view: ['ar', 'floorplan', 'auto'].includes(view) ? view : 'auto',
+    harness: q.get('harness') === '1',
     filter: {
       wheelchair: q.get('wheelchair') === '1',
       stepFree: q.get('stepFree') === '1',
@@ -574,6 +577,19 @@ export async function bootApp(options = {}) {
     }
   }
 
+  // --- accuracy harness (test walks): records poses, fix requests and checkpoints.
+  let harness = null;
+  if (config.harness) {
+    harness = createHarness({
+      venue,
+      provider: chain,
+      providerName: config.provider ?? chain.order.join('>'),
+      document: doc,
+      mount: root,
+      ...options.harnessOptions,
+    });
+  }
+
   // --- QR entry: the scanned entrance marker fixes the starting position.
   if (config.anchorId) {
     const anchor = venue.anchorById(config.anchorId);
@@ -636,6 +652,7 @@ export async function bootApp(options = {}) {
     get permissions() {
       return { ...permissions };
     },
+    harness,
     /** Explicit handled state, for tests and diagnostics. */
     get state() {
       return {
@@ -668,6 +685,7 @@ export async function bootApp(options = {}) {
       offPose2?.();
       await chainNoCamera?.stop();
       firstRun?.destroy();
+      harness?.destroy();
       offChange();
       offSpeech();
       speech.destroy();

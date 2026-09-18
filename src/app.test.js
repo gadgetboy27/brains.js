@@ -76,6 +76,7 @@ describe('readConfig', () => {
       provider: null,
       allowMock: false,
       view: 'auto',
+      harness: false,
       filter: { wheelchair: false, stepFree: false, accessLevel: 'visitor' },
     });
     expect(

@@ -154,6 +154,19 @@ export default {
       'Kāore i whakaaetia te nekehanga. Tērā pea ka pōturi te pere i waenga i ngā whakatau kāmera.',
     'entry.anchorSeeded': 'E tīmata ana i te tohu {name}.',
 
+    // Accuracy harness
+    'harness.title': 'Whakamātautau tika',
+    'harness.hint': 'E tū tika ki runga i tētahi wāhi tohu, kātahi ka pāwhiri.',
+    'harness.checkpoints': 'Ngā wāhi tohu',
+    'harness.here': 'Kei {name} ahau',
+    'harness.recorded': 'Kua hopukina a {name} — {count} wāhi tohu i tēnei wā',
+    'harness.poses': '{count} tū',
+    'harness.rescan': 'Kua tonoa he matawai anō',
+    'harness.download': 'Tikiake i te rangitaki',
+    'harness.report': 'Whakaatu i te pūrongo',
+    'harness.reset': 'Tautuhi anō',
+    'harness.summary': 'Hapa toharite {mean} m, kino rawa {worst} m, whakatau rahua {failed}',
+
     // Floors
     'floor.unknown': 'Papa tē mōhiotia',
   },
