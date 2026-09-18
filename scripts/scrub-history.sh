@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 #
-# scrub-history.sh — purge .env from the entire git history of this repo.
+# scrub-history.sh — purge .env and data.js from the entire git history of
+# this repo.
 #
-# Background: .env (containing live Foursquare API credentials) was committed
-# and pushed to this public repo in 62df7d5 / b3d43c8 (2024-06-04) and only
-# untracked in e8c995a (2026-09-19). Untracking does NOT remove it from the
-# commits that came before, so anyone can still `git show 62df7d5:.env`.
-# This script rewrites history so that .env never existed.
+# Background:
+#   - .env (live Foursquare API credentials) was committed and pushed to this
+#     public repo in 62df7d5 / b3d43c8 (2024-06-04) and only untracked in
+#     e8c995a (2026-09-19).
+#   - data.js (cryptocurrency wallet seed phrases and addresses, NOT app data)
+#     was committed in 0d08ca3 (2024-01-22) and deleted on 2026-09-19.
+# Untracking or deleting does NOT remove a file from the commits that came
+# before, so anyone can still `git show 62df7d5:.env` or `git show 0d08ca3:data.js`.
+# This script rewrites history so that neither file ever existed.
 #
 # ---------------------------------------------------------------------------
 #  READ BEFORE RUNNING
@@ -28,11 +33,14 @@
 #     views, "activity" pages). Contact GitHub Support to purge unreachable
 #     objects if you want them gone from the server side too.
 #
-#  3. ROTATE THE FOURSQUARE CREDENTIALS ANYWAY. Rewriting history does not
-#     un-leak a secret. Forks, existing clones, GitHub's cached views, search
-#     engine crawls, and secret-scanning bots have all had access to the old
-#     commits since 2024-06-04. Treat the keys as compromised: generate new
-#     ones in the Foursquare developer console and revoke the old ones.
+#  3. ROTATE / MOVE EVERYTHING ANYWAY. Rewriting history does not un-leak a
+#     secret. Forks, existing clones, GitHub's cached views, search engine
+#     crawls, and secret-scanning bots have all had access to the old commits
+#     since 2024-01-22. Treat everything as compromised:
+#       - Foursquare: generate new keys in the developer console, revoke old.
+#       - Wallets in data.js: if any seed phrase is real, move funds to a
+#         freshly generated wallet FIRST, before running this script. Bots
+#         scan GitHub for seed phrases continuously.
 #     History scrubbing is hygiene, not remediation.
 #
 #  4. git-filter-repo refuses to run on anything but a fresh clone unless
@@ -76,15 +84,15 @@ fi
 # Capture the remote URL now — filter-repo deletes the `origin` remote.
 ORIGIN_URL="$(git remote get-url origin 2>/dev/null || true)"
 
-echo "Commits currently touching .env:"
-git log --all --format='  %h  %ad  %s' --date=short -- .env
+echo "Commits currently touching .env or data.js:"
+git log --all --format='  %h  %ad  %s' --date=short -- .env data.js
 echo
 
 # --- rewrite ---------------------------------------------------------------
 
-# --invert-paths: keep everything EXCEPT the listed path.
+# --invert-paths: keep everything EXCEPT the listed paths.
 # --force:        allow running on a non-fresh clone (see note 4 above).
-git filter-repo --path .env --invert-paths --force
+git filter-repo --path .env --path data.js --invert-paths --force
 
 # --- restore remote (NOT pushing) -----------------------------------------
 
@@ -99,11 +107,12 @@ git reflog expire --expire=now --all
 git gc --prune=now --aggressive
 
 echo
-echo "Done. Verify that .env is gone from history:"
-echo "    git log --all --oneline -- .env      # should print nothing"
+echo "Done. Verify that both files are gone from history:"
+echo "    git log --all --oneline -- .env data.js   # should print nothing"
 echo
 echo "Then, when ready, force-push (this is NOT done automatically):"
 echo "    git push --force --all origin"
 echo "    git push --force --tags origin"
 echo
-echo "And ROTATE THE FOURSQUARE CREDENTIALS — the old ones are still compromised."
+echo "And ROTATE THE FOURSQUARE CREDENTIALS and MOVE ANY WALLET FUNDS — the old"
+echo "secrets are still compromised regardless of this rewrite."
