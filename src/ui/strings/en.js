@@ -90,6 +90,23 @@ export default {
     'category.staff': 'Staff',
     'category.other': 'Other',
 
+    // Spoken guidance (Web Speech API); also mirrored to a live region.
+    'speech.toggle': 'Voice guidance',
+    'speech.on': 'Voice guidance on',
+    'speech.off': 'Voice guidance off',
+    'speech.rate': 'Speech rate',
+    'speech.rate.slow': 'Slow',
+    'speech.rate.normal': 'Normal',
+    'speech.rate.fast': 'Fast',
+    'speech.unsupported': 'Voice guidance is not available in this browser.',
+    'speech.destinationSet': 'Navigating to {name}. {metres} metres to go.',
+    'speech.nextStep': 'Continue {metres} metres to {name}.',
+    'speech.floorChange.up': 'Go up to {floor} using the {via}.',
+    'speech.floorChange.down': 'Go down to {floor} using the {via}.',
+    'speech.arrived': 'You have arrived at {name}.',
+    'speech.rescan': 'Position uncertain. Point the camera at a sign or a QR marker.',
+    'speech.cancelled': 'Navigation stopped.',
+
     // Floors
     'floor.unknown': 'Unknown floor',
   },

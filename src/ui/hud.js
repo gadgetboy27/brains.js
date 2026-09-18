@@ -12,6 +12,7 @@
  * touch-target token.
  */
 
+import { RATES } from './speech.js';
 import { formatMetres, t } from './strings/index.js';
 import { ensureStyle } from './tokens.js';
 
@@ -32,6 +33,11 @@ const CSS = `
 .hud-rescan p, .hud-error p { margin: 0; }
 .hud-error { border: 2px solid var(--color-error); background: var(--color-error-bg); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 6px; }
 .hud-error .hud-actions { margin-top: 4px; }
+.hud-speech { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.hud-speech[hidden] { display: none; }
+.hud-speech label { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
+.hud-speech select { min-height: var(--touch-target); padding: 6px 10px; border: 2px solid var(--color-accent); border-radius: var(--radius);
+  background: var(--color-surface-solid); color: var(--color-text); font: inherit; }
 `;
 
 export class Hud {
@@ -41,6 +47,8 @@ export class Hud {
   #destination = null;
   #onChangeDestination;
   #onCancel;
+  #onToggleMute;
+  #onRateChange;
   #errorRetry = null;
 
   /**
@@ -50,6 +58,8 @@ export class Hud {
    * @param {() => void} [options.onChangeDestination]
    * @param {() => void} [options.onCancel]
    * @param {() => void} [options.onRescanAcknowledged]
+   * @param {() => void} [options.onToggleMute]
+   * @param {(rate: number) => void} [options.onRateChange]
    */
   constructor(options = {}) {
     this.#doc = options.document ?? globalThis.document;
@@ -57,6 +67,8 @@ export class Hud {
     if (!this.#doc || !mount) throw new TypeError('Hud requires a document and mount element');
     this.#onChangeDestination = options.onChangeDestination;
     this.#onCancel = options.onCancel;
+    this.#onToggleMute = options.onToggleMute;
+    this.#onRateChange = options.onRateChange;
 
     ensureStyle('brains-hud-style', CSS, this.#doc);
     const el = this.#doc.createElement('section');
@@ -85,6 +97,15 @@ export class Hud {
         <button type="button" class="btn btn-primary" data-f="change"></button>
         <button type="button" class="btn" data-f="cancel" hidden></button>
       </div>
+      <div class="hud-speech" data-f="speech">
+        <button type="button" class="btn" data-f="mute" aria-pressed="false"></button>
+        <label>
+          <span data-f="rate-label"></span>
+          <select data-f="rate"></select>
+        </label>
+        <span class="visually-hidden" data-f="speech-unsupported" hidden></span>
+      </div>
+      <div class="visually-hidden" data-f="live" aria-live="assertive" aria-atomic="true"></div>
     `;
     this.#el = el;
     this.#f = (name) => el.querySelector(`[data-f="${name}"]`);
@@ -97,6 +118,18 @@ export class Hud {
     this.#f('error-retry').textContent = t('hud.error.retry');
     this.#f('change').textContent = t('hud.changeDestination');
     this.#f('cancel').textContent = t('hud.cancel');
+    this.#f('mute').textContent = t('speech.toggle');
+    this.#f('rate-label').textContent = t('speech.rate');
+    this.#f('speech-unsupported').textContent = t('speech.unsupported');
+    const rate = this.#f('rate');
+    for (const [key, value] of Object.entries(RATES)) {
+      const opt = this.#doc.createElement('option');
+      opt.value = String(value);
+      opt.textContent = t(`speech.rate.${key}`);
+      rate.appendChild(opt);
+    }
+    rate.addEventListener('change', () => this.#onRateChange?.(Number(rate.value)));
+    this.#f('mute').addEventListener('click', () => this.#onToggleMute?.());
 
     this.#f('rescan-ok').addEventListener('click', () => {
       this.hideRescan();
@@ -127,6 +160,28 @@ export class Hud {
       error: this.#f('error').hidden ? '' : this.#f('error-message').textContent,
       rescan: this.#f('rescan').hidden ? '' : this.#f('rescan-title').textContent,
     };
+  }
+
+  /** The assertive live region spoken guidance is mirrored into. */
+  get liveRegion() {
+    return this.#f('live');
+  }
+
+  /**
+   * Reflect the speech guide's state on its controls.
+   * @param {{ muted: boolean, rate: number, supported: boolean }} state
+   */
+  setSpeechState(state) {
+    const mute = this.#f('mute');
+    mute.setAttribute('aria-pressed', String(!state.muted));
+    mute.textContent = state.muted ? t('speech.off') : t('speech.on');
+    mute.setAttribute('aria-label', t('speech.toggle'));
+    const rate = this.#f('rate');
+    const match = [...rate.options].find((o) => Number(o.value) === state.rate);
+    if (match) rate.value = match.value;
+    this.#f('speech-unsupported').hidden = state.supported;
+    mute.disabled = !state.supported;
+    rate.disabled = !state.supported;
   }
 
   // -------------------------------------------------------------- navigation

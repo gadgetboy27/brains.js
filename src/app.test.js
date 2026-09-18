@@ -319,3 +319,81 @@ describe('bootApp — languages', () => {
     await app.destroy();
   });
 });
+
+describe('bootApp — spoken guidance', () => {
+  function fakeSynth() {
+    const utterances = [];
+    return {
+      synth: { speak: vi.fn((u) => utterances.push(u)), cancel: vi.fn() },
+      Utterance: class {
+        constructor(text) {
+          this.text = text;
+        }
+      },
+      utterances,
+    };
+  }
+
+  it('narrates destination, progress and arrival; mirrors into the HUD live region; mute stops speech', async () => {
+    const { synth, Utterance, utterances } = fakeSynth();
+    const { app } = await boot({
+      options: { speechOptions: { synth, Utterance, storage: null } },
+      providerOptions: {
+        mock: { path: [{ x: 0, y: 0, floor: 0 }], fixIntervalMs: 1000, speedMps: 0 },
+      },
+    });
+    app.setDestination(app.venue.poiById('poi-clinic-a'));
+    expect(utterances.at(-1).text).toBe('Navigating to Clinic A. 22 metres to go.');
+    expect(app.hud.liveRegion.textContent).toBe('Navigating to Clinic A. 22 metres to go.');
+    expect(utterances.at(-1).lang).toBe('en-NZ');
+
+    // Move the walker to the lobby via the mock's teleport: next step spoken.
+    app.chain.active.teleport({ x: 0, y: 6, floor: 0 });
+    expect(utterances.at(-1).text).toBe('Continue 10 metres to Ground corridor, west.');
+
+    // Mute from the HUD: nothing more is spoken, but the live region still updates.
+    app.hud.el.querySelector('[data-f="mute"]').click();
+    expect(app.speech.muted).toBe(true);
+    const spokenBefore = utterances.length;
+    app.chain.active.teleport({ x: 10, y: 11, floor: 0 });
+    expect(app.hud.text.destination).toBe('You have arrived at Clinic A');
+    expect(utterances.length).toBe(spokenBefore);
+    expect(app.hud.liveRegion.textContent).toBe('You have arrived at Clinic A.');
+
+    // Rate control.
+    const rate = app.hud.el.querySelector('[data-f="rate"]');
+    rate.value = '1.3';
+    rate.dispatchEvent(new Event('change'));
+    expect(app.speech.rate).toBe(1.3);
+    await app.destroy();
+  });
+
+  it('works without speech synthesis: controls disabled, live region still narrates', async () => {
+    const { app } = await boot({
+      options: { speechOptions: { synth: null, Utterance: null, storage: null } },
+    });
+    expect(app.speech.supported).toBe(false);
+    expect(app.hud.el.querySelector('[data-f="mute"]').disabled).toBe(true);
+    app.setDestination(app.venue.poiById('poi-clinic-a'));
+    expect(app.hud.liveRegion.textContent).toBe('Navigating to Clinic A. 22 metres to go.');
+    await app.destroy();
+  });
+
+  it('has landmarks and labels for assistive technology', async () => {
+    const { app } = await boot();
+    const root = document.querySelector('#app');
+    expect(root.querySelector('#app-view-ar canvas').getAttribute('aria-hidden')).toBe('true');
+    expect(root.querySelector('.app-switch').getAttribute('role')).toBe('group');
+    expect(root.querySelector('.app-switch button').getAttribute('aria-controls')).toBe(
+      'app-view-ar'
+    );
+    expect(root.querySelector('.floorplan canvas').getAttribute('role')).toBe('img');
+    expect(root.querySelector('.floorplan button').getAttribute('aria-label')).toBe(
+      t('floorplan.rotation')
+    );
+    expect(root.querySelector('.hud [aria-live="polite"]')).not.toBeNull();
+    expect(root.querySelector('.hud [role="alert"]')).not.toBeNull();
+    expect(root.querySelector('.picker').getAttribute('role')).toBe('dialog');
+    await app.destroy();
+  });
+});

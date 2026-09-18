@@ -104,12 +104,17 @@ export class Floorplan {
     const rotate = this.#doc.createElement('button');
     rotate.type = 'button';
     rotate.className = 'btn';
-    rotate.setAttribute('aria-pressed', String(this.#rotationMode === 'north-up'));
-    rotate.textContent = 'N';
-    rotate.setAttribute('aria-label', t('floorplan.title'));
+    rotate.setAttribute('aria-label', t('floorplan.rotation'));
+    const labelRotate = () => {
+      rotate.setAttribute('aria-pressed', String(this.#rotationMode === 'north-up'));
+      rotate.textContent = t(
+        this.#rotationMode === 'north-up' ? 'floorplan.northUp' : 'floorplan.headingUp'
+      );
+    };
+    labelRotate();
     rotate.addEventListener('click', () => {
       this.setRotationMode(this.#rotationMode === 'heading-up' ? 'north-up' : 'heading-up');
-      rotate.setAttribute('aria-pressed', String(this.#rotationMode === 'north-up'));
+      labelRotate();
     });
     controls.appendChild(rotate);
     this.#el.appendChild(controls);

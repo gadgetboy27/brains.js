@@ -105,6 +105,8 @@ export class ArScene {
     if (!this.#opts.canvas && (this.#opts.mount ?? doc?.body)) {
       // Fill the mount; the renderer sets the drawing-buffer size separately.
       this.#canvas.style.cssText = 'display:block;width:100%;height:100%;';
+      // The HUD and floor plan carry the information; the 3-D view is decorative to AT.
+      this.#canvas.setAttribute('aria-hidden', 'true');
       (this.#opts.mount ?? doc.body).appendChild(this.#canvas);
     }
 

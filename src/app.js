@@ -33,6 +33,7 @@ import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHud } from './ui/hud.js';
+import { createSpeechGuide } from './ui/speech.js';
 import {
   detectLanguage,
   registerLanguage,
@@ -135,6 +136,7 @@ export async function bootApp(options = {}) {
   arView.setAttribute('aria-label', t('view.ar'));
   const planView = doc.createElement('div');
   planView.className = 'app-view';
+  planView.setAttribute('aria-label', t('view.floorplan'));
   views.append(arView, planView);
   root.appendChild(views);
 
@@ -143,7 +145,16 @@ export async function bootApp(options = {}) {
     mount: root,
     onChangeDestination: () => picker.open(),
     onCancel: () => clearDestination(),
+    onToggleMute: () => speech.toggleMuted(),
+    onRateChange: (rate) => speech.setRate(rate),
   });
+  const speech = createSpeechGuide({
+    liveRegion: hud.liveRegion,
+    storage,
+    ...options.speechOptions,
+  });
+  hud.setSpeechState({ muted: speech.muted, rate: speech.rate, supported: speech.supported });
+  const offSpeech = speech.onChange((state) => hud.setSpeechState(state));
 
   // --- venue
   let venue = options.venue ?? null;
@@ -170,6 +181,7 @@ export async function bootApp(options = {}) {
     navigatorLanguages: options.navigatorLanguages ?? globalThis.navigator?.languages ?? [],
   });
   doc.documentElement.lang = langCode;
+  speech.setLanguage(langCode);
 
   // --- positioning
   const chain = createProviderChain(venue, {
@@ -220,10 +232,14 @@ export async function bootApp(options = {}) {
   arBtn.type = 'button';
   arBtn.className = 'btn';
   arBtn.textContent = t('view.ar');
+  arBtn.setAttribute('aria-controls', 'app-view-ar');
+  arView.id = 'app-view-ar';
+  planView.id = 'app-view-plan';
   const planBtn = doc.createElement('button');
   planBtn.type = 'button';
   planBtn.className = 'btn';
   planBtn.textContent = t('view.floorplan');
+  planBtn.setAttribute('aria-controls', 'app-view-plan');
   switcher.append(arBtn, planBtn);
   root.appendChild(switcher);
 
@@ -283,6 +299,7 @@ export async function bootApp(options = {}) {
     destination = poi;
     navigator = createNavigator(route);
     hud.setDestination(poi);
+    speech.announceDestination(poi, lastPose ? navigator.update(lastPose) : navigator.update(from));
     arScene.setRoute(route);
     floorplan.setRoute(route);
     floorplan.setDestination(poi);
@@ -298,6 +315,7 @@ export async function bootApp(options = {}) {
     floorplan.setRoute(null);
     floorplan.setDestination(null);
     arrow.setTarget(null);
+    speech.announceCancelled();
   }
 
   const floorName = (i) => venue.floorByIndex(i)?.name ?? t('floor.unknown');
@@ -310,6 +328,7 @@ export async function bootApp(options = {}) {
     if (navigator) {
       const state = navigator.update(pose);
       hud.setProgress(state, { floorName });
+      speech.narrate(state, { floorName, destinationName: destination?.name });
       if (state.arrived) arrow.setTarget(null);
       else arrow.setTarget(state.nextNode, state.distanceToNext);
     }
@@ -331,7 +350,10 @@ export async function bootApp(options = {}) {
     const active = event.state.provider;
     if (active && typeof active.onRescanNeeded === 'function') {
       rescanOff?.();
-      rescanOff = active.onRescanNeeded(() => hud.showRescan());
+      rescanOff = active.onRescanNeeded(() => {
+        hud.showRescan();
+        speech.announceRescan();
+      });
     }
   });
   let rescanOff = null;
@@ -363,6 +385,7 @@ export async function bootApp(options = {}) {
     chain,
     hud,
     picker,
+    speech,
     floorplan,
     arScene,
     arrow,
@@ -382,6 +405,8 @@ export async function bootApp(options = {}) {
       win?.removeEventListener?.('deviceorientation', onOrientation);
       offPose();
       offChange();
+      offSpeech();
+      speech.destroy();
       rescanOff?.();
       await chain.stop();
       arrow.dispose();

@@ -91,6 +91,23 @@ export default {
     'category.staff': 'Kaimahi',
     'category.other': 'Ētahi atu',
 
+    // Spoken guidance
+    'speech.toggle': 'Ārahi ā-reo',
+    'speech.on': 'Kua whakakāhia te ārahi ā-reo',
+    'speech.off': 'Kua whakawetohia te ārahi ā-reo',
+    'speech.rate': 'Tere o te kōrero',
+    'speech.rate.slow': 'Pōturi',
+    'speech.rate.normal': 'Waenga',
+    'speech.rate.fast': 'Tere',
+    'speech.unsupported': 'Kāore te ārahi ā-reo e wātea ana i tēnei pūtirotiro.',
+    'speech.destinationSet': 'E ārahi ana ki {name}. {metres} mita e toe ana.',
+    'speech.nextStep': 'Haere tonu {metres} mita ki {name}.',
+    'speech.floorChange.up': 'Piki ki {floor} mā te {via}.',
+    'speech.floorChange.down': 'Heke ki {floor} mā te {via}.',
+    'speech.arrived': 'Kua tae koe ki {name}.',
+    'speech.rescan': 'Kāore i te mārama tō wāhi. Tohua te kāmera ki tētahi tohu, waehere QR rānei.',
+    'speech.cancelled': 'Kua whakamutua te ārahi.',
+
     // Floors
     'floor.unknown': 'Papa tē mōhiotia',
   },

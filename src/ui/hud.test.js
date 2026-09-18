@@ -159,6 +159,41 @@ describe('Hud', () => {
   });
 });
 
+describe('Hud — speech controls and live region', () => {
+  it('exposes an assertive live region and reflects speech state on its controls', () => {
+    const onToggleMute = vi.fn();
+    const onRateChange = vi.fn();
+    const hud = createHud({ onToggleMute, onRateChange });
+    expect(hud.liveRegion.getAttribute('aria-live')).toBe('assertive');
+    const mute = hud.el.querySelector('[data-f="mute"]');
+    const rate = hud.el.querySelector('[data-f="rate"]');
+    expect([...rate.options].map((o) => o.textContent)).toEqual([
+      t('speech.rate.slow'),
+      t('speech.rate.normal'),
+      t('speech.rate.fast'),
+    ]);
+
+    hud.setSpeechState({ muted: false, rate: 1.3, supported: true });
+    expect(mute.getAttribute('aria-pressed')).toBe('true');
+    expect(mute.textContent).toBe(t('speech.on'));
+    expect(rate.value).toBe('1.3');
+
+    hud.setSpeechState({ muted: true, rate: 0.8, supported: true });
+    expect(mute.getAttribute('aria-pressed')).toBe('false');
+    expect(mute.textContent).toBe(t('speech.off'));
+
+    mute.click();
+    expect(onToggleMute).toHaveBeenCalledOnce();
+    rate.value = '0.8';
+    rate.dispatchEvent(new Event('change'));
+    expect(onRateChange).toHaveBeenCalledWith(0.8);
+
+    hud.setSpeechState({ muted: false, rate: 1, supported: false });
+    expect(mute.disabled).toBe(true);
+    expect(hud.el.querySelector('[data-f="speech-unsupported"]').hidden).toBe(false);
+  });
+});
+
 function matchesTemplate(template, text) {
   const re = new RegExp(
     `^${template.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{\w+\\\}/g, '.+')}$`
