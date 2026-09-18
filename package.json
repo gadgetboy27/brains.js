@@ -1,10 +1,17 @@
 {
   "name": "brains.js",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Indoor AR wayfinding app",
+  "main": "src/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . && prettier --check .",
+    "lint:fix": "eslint --fix . && prettier --write .",
+    "format": "prettier --write ."
   },
   "repository": {
     "type": "git",
@@ -19,5 +26,15 @@
   "homepage": "https://github.com/gadgetboy27/brains.js#readme",
   "dependencies": {
     "@ar-js-org/ar.js": "^3.4.5"
-  }
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.8",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  },
+  "type": "module"
 }
