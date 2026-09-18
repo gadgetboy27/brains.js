@@ -1,0 +1,99 @@
+name: PR from Claude Branch
+
+# Replaces the former auto-deploy.yml, which merged any claude/** branch
+# straight into master with no review. This workflow instead opens a pull
+# request against master and runs checks on it, so every change from a
+# claude/** branch is reviewed before it lands.
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # Baseline check that needs no tooling: every tracked JS file must parse.
+      - name: Syntax-check JavaScript
+        run: |
+          set -euo pipefail
+          git ls-files '*.js' ':!node_modules/**' | while read -r f; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+
+      # Picks up a real linter automatically once a "lint" script exists.
+      - name: Run lint script
+        run: npm run lint --if-present
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # package.json currently has npm's placeholder test script, which always
+      # exits 1. Skip it with a warning rather than failing every PR; once a
+      # real test script is defined this runs it for real.
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          if node -e "process.exit(/no test specified/.test(require('./package.json').scripts?.test ?? '') ? 0 : 1)"; then
+            echo "::warning::package.json has no real test script yet; skipping npm test."
+          else
+            npm test
+          fi
+
+  open-pr:
+    name: Open pull request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Opens a PR against master if one doesn't already exist for this branch.
+      # Never merges. Requires "Allow GitHub Actions to create and approve pull
+      # requests" under Settings > Actions > General.
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          existing="$(gh pr list --head "$BRANCH" --base master --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for $BRANCH; nothing to do."
+            exit 0
+          fi
+          gh pr create \
+            --base master \
+            --head "$BRANCH" \
+            --title "$BRANCH" \
+            --body "$(printf 'Automated pull request for `%s`.\n\nOpened by the `PR from Claude Branch` workflow. Review the lint and test checks below before merging.' "$BRANCH")"
