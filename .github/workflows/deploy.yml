@@ -94,28 +94,26 @@ jobs:
           alias=$(echo "${{ github.head_ref }}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40)
           echo "alias=$alias" >> "$GITHUB_OUTPUT"
 
+      # wrangler comes from package.json (same version as local), authenticated
+      # by the CLOUDFLARE_* job env; output is kept for the preview URL below.
       - name: Deploy
         id: deploy
         if: steps.creds.outputs.configured == 'true'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # The action's default wrangler predates static-assets config; use a current one.
-          wranglerVersion: '4.135.0'
-          command: >-
-            ${{ github.event_name == 'pull_request'
-              && format('versions upload --preview-alias={0} --message="PR #{1}"', steps.alias.outputs.alias, github.event.pull_request.number)
-              || 'deploy' }}
+        run: |
+          set -o pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            npx wrangler versions upload --preview-alias="${{ steps.alias.outputs.alias }}" \
+              --message="PR #${{ github.event.pull_request.number }}" | tee deploy.log
+          else
+            npx wrangler deploy | tee deploy.log
+          fi
 
       - name: Resolve preview URL
         if: github.event_name == 'pull_request' && steps.creds.outputs.configured == 'true'
         id: preview
-        env:
-          OUT: ${{ steps.deploy.outputs.command-output }}
         run: |
           # wrangler prints "Version Preview Alias URL: https://<alias>-brains-js.<subdomain>.workers.dev"
-          url=$(printf '%s' "$OUT" | grep -o 'Version Preview Alias URL: https://[^ ]*' | head -1 | sed 's/.*: //')
+          url=$(grep -o 'Version Preview Alias URL: https://[^ ]*' deploy.log | head -1 | sed 's/.*: //')
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview URL on the PR
