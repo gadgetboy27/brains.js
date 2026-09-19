@@ -67,6 +67,8 @@ export default defineConfig(({ command }) => ({
   },
   test: {
     root: projectRoot,
+    // CLI tests spawn node several times; under load that exceeds the 5 s default.
+    testTimeout: 30_000,
     include: ['src/**/*.test.js'],
     exclude: ['legacy/**', 'node_modules/**'],
   },
