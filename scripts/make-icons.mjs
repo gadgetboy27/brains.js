@@ -12,7 +12,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 
 const BG = [0x0f, 0x17, 0x2a];
 const ARROW = [0x38, 0xbd, 0xf8];
@@ -120,6 +120,31 @@ export function encodePng(rgba, width, height) {
     chunk('IDAT', deflateSync(raw, { level: 9 })),
     chunk('IEND', Buffer.alloc(0)),
   ]);
+}
+
+/** Decode a PNG written by encodePng (RGBA, filter none) back to pixels. */
+export function decodePng(png) {
+  let off = 8;
+  let width = 0;
+  let height = 0;
+  const idat = [];
+  while (off < png.length) {
+    const len = png.readUInt32BE(off);
+    const type = png.subarray(off + 4, off + 8).toString('ascii');
+    const data = png.subarray(off + 8, off + 8 + len);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+    } else if (type === 'IDAT') idat.push(data);
+    off += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    if (raw[y * (width * 4 + 1)] !== 0) throw new Error('decodePng: only filter 0 is supported');
+    raw.copy(rgba, y * width * 4, y * (width * 4 + 1) + 1, (y + 1) * (width * 4 + 1));
+  }
+  return { width, height, rgba };
 }
 
 export const ICONS = [
