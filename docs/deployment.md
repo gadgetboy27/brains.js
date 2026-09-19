@@ -61,7 +61,8 @@ warning rather than failing.
 
 `.github/workflows/deploy.yml`:
 
-- **Lint and test** on every push to `master` and every PR.
+- **Lint and test** on every push to `master` and every PR (Node 22 — wrangler
+  requires it; `.nvmrc` and `engines` say the same).
 - **Preview deploy** for PRs from this repository: `wrangler versions upload
 --preview-alias=<branch>`, giving
   `https://<branch>-brains-js.henrypeti-dev.workers.dev`, posted (and updated)
