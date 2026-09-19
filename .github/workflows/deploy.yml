@@ -101,6 +101,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The action's default wrangler predates static-assets config; use a current one.
+          wranglerVersion: '4.135.0'
           command: >-
             ${{ github.event_name == 'pull_request'
               && format('versions upload --preview-alias={0} --message="PR #{1}"', steps.alias.outputs.alias, github.event.pull_request.number)
