@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { ICONS, encodePng, renderIcon } from '../../scripts/make-icons.mjs';
+import { ICONS, decodePng, renderIcon } from '../../scripts/make-icons.mjs';
 import { imageSize } from '../../scripts/lib/venue-builder.mjs';
 
 describe('app icons', () => {
@@ -10,12 +10,10 @@ describe('app icons', () => {
     for (const icon of ICONS) {
       const file = readFileSync(resolve(process.cwd(), 'assets/icons', icon.file));
       expect(imageSize(file)).toEqual({ width: icon.size, height: icon.size, type: 'png' });
-      const fresh = encodePng(
-        renderIcon(icon.size, { rounded: icon.rounded ?? true }),
-        icon.size,
-        icon.size
-      );
-      expect(file.equals(fresh), `${icon.file} is stale: run node scripts/make-icons.mjs`).toBe(
+      // Compare pixels, not bytes: zlib output differs between platforms.
+      const { rgba } = decodePng(file);
+      const fresh = renderIcon(icon.size, { rounded: icon.rounded ?? true });
+      expect(rgba.equals(fresh), `${icon.file} is stale: run node scripts/make-icons.mjs`).toBe(
         true
       );
     }
