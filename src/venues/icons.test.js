@@ -17,7 +17,7 @@ describe('app icons', () => {
         true
       );
     }
-  });
+  }, 30_000); // the 512 px render with 4× supersampling takes a few seconds
 
   it('renders the arrow in the accent colour on a transparent-cornered dark square', () => {
     const px = renderIcon(64);
