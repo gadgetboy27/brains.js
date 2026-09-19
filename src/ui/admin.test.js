@@ -1,0 +1,262 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { PositionProvider } from '../core/positioning.js';
+import { createVenue } from '../core/venue.js';
+import demo from '../venues/demo-venue.json';
+import { createAdminPanel } from './admin.js';
+import { createFloorplan } from './floorplan.js';
+import { t } from './strings/index.js';
+
+class Fake extends PositionProvider {
+  static uploads = [];
+  async start() {}
+  async stop() {}
+  emit(p) {
+    this.emitPose(p);
+  }
+}
+const pose = (x, y, heading = 0, floor = 0) => ({
+  x,
+  y,
+  z: floor * 4,
+  floor,
+  heading,
+  confidence: 1,
+  timestamp: 1,
+});
+const fakeContext = () => new Proxy({}, { get: () => () => {}, set: () => true });
+const mem = () => {
+  const data = {};
+  return {
+    getItem: (k) => data[k] ?? null,
+    setItem: (k, v) => (data[k] = v),
+    removeItem: (k) => delete data[k],
+    data,
+  };
+};
+
+function make(options = {}) {
+  const venue = createVenue(structuredClone(demo));
+  const provider = new Fake();
+  const floorplan = createFloorplan({
+    venue,
+    context: fakeContext(),
+    pixelsPerMetre: 10,
+    rotationMode: 'north-up',
+  });
+  floorplan.resize(400, 300, 1);
+  const storage = mem();
+  const download = vi.fn();
+  const copy = vi.fn(async () => {});
+  const prompt = vi.fn(() => 'Named');
+  const admin = createAdminPanel({
+    venue,
+    provider,
+    floorplan,
+    storage,
+    download,
+    copy,
+    prompt,
+    ...options,
+  });
+  return { admin, provider, floorplan, storage, download, copy, prompt, venue };
+}
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+});
+
+describe('AdminPanel — recording a route', () => {
+  it('starts from the venue, disables "here" buttons until a pose arrives', () => {
+    const { admin } = make();
+    expect(admin.draft.summary.nodes).toBe(demo.nodes.length);
+    expect(admin.el.querySelector('[data-f="rec-node"]').disabled).toBe(true);
+    expect(admin.el.querySelector('[data-f="rec-status"]').textContent).toBe(
+      t('admin.record.noPose')
+    );
+  });
+
+  it('drops linked nodes as you walk, joining existing junctions', () => {
+    const { admin, provider, storage } = make();
+    provider.emit(pose(0, 0)); // on the entrance node
+    admin.startRecording();
+    expect(admin.recording).toBe(true);
+
+    provider.emit(pose(40, 6));
+    const a = admin.addNodeHere('Pharmacy');
+    expect(a.id).toBe('n-pharmacy');
+    // Started on n-entrance? No: the walk starts wherever the first node is dropped
+    // unless we began on an existing node; we did (0,0 = n-entrance).
+    expect(admin.draft.edgeBetween('n-entrance', 'n-pharmacy')).not.toBeNull();
+
+    provider.emit(pose(40, 16));
+    const b = admin.addNodeHere();
+    expect(admin.draft.edgeBetween(a.id, b.id).distance).toBe(10);
+
+    // Walk back to the east corridor node: snaps and links, no new node.
+    provider.emit(pose(30.4, 6.2));
+    const c = admin.addNodeHere();
+    expect(c.id).toBe('n-corridor-g-3');
+    expect(admin.draft.edgeBetween(b.id, 'n-corridor-g-3')).not.toBeNull();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.record.snapped', { name: 'Ground corridor, east' })
+    );
+    expect(admin.el.querySelector('[data-f="rec-status"]').textContent).toBe(
+      t('admin.record.status', { nodes: 2, edges: 3 })
+    );
+    expect(JSON.parse(storage.data['brains:admin-draft']).nodes).toHaveLength(
+      demo.nodes.length + 2
+    );
+    admin.stopRecording();
+    expect(admin.recording).toBe(false);
+  });
+
+  it('adds a place and a QR marker where you stand', () => {
+    const { admin, provider, prompt } = make();
+    provider.emit(pose(40, 6, 135));
+    admin.addPoiHere();
+    expect(admin.el.querySelector('[data-f="poi-form"]').hidden).toBe(false);
+    const poi = admin.submitPoi({
+      name: 'Pharmacy',
+      aliases: ['Chemist', ' Drugs '],
+      category: 'retail',
+    });
+    expect(poi).toMatchObject({
+      id: 'poi-pharmacy',
+      name: 'Pharmacy',
+      aliases: ['Chemist', 'Drugs'],
+      category: 'retail',
+    });
+    expect(admin.draft.nodeById(poi.node)).toMatchObject({ x: 40, y: 6 });
+
+    prompt.mockReturnValueOnce('Pharmacy door');
+    const anchor = admin.addAnchorHere();
+    expect(anchor).toMatchObject({ x: 40, y: 6, floor: 0, heading: 135, name: 'Pharmacy door' });
+    prompt.mockReturnValueOnce(null); // cancelled
+    expect(admin.addAnchorHere()).toBeNull();
+    expect(admin.draft.validate()).toEqual([]);
+  });
+});
+
+describe('AdminPanel — plan editor', () => {
+  it('tap to add, tap to select, link two nodes, rename, remove, undo', () => {
+    const { admin, prompt } = make();
+    admin.showTab('plan');
+    const n1 = admin.tapPlan({ x: 50, y: 20, floor: 0 });
+    expect(n1.id).toBe('n-17');
+    expect(admin.selected).toBe(n1.id);
+    const n2 = admin.tapPlan({ x: 60, y: 20, floor: 0 });
+    expect(admin.selected).toBe(n2.id);
+
+    // Select n1 by tapping near it, then link to n2.
+    expect(admin.tapPlan({ x: 50.5, y: 20.3, floor: 0 })).toBe(n1);
+    admin.el.querySelector('[data-f="plan-link"]').click();
+    admin.tapPlan({ x: 60, y: 20, floor: 0 });
+    expect(admin.draft.edgeBetween(n1.id, n2.id).distance).toBe(10);
+
+    prompt.mockReturnValueOnce('Café');
+    admin.tapPlan({ x: 50, y: 20, floor: 0 });
+    admin.renameSelected();
+    expect(admin.draft.nodeById(n1.id).name).toBe('Café');
+
+    admin.removeSelected();
+    expect(admin.draft.nodeById(n1.id)).toBeNull();
+    expect(admin.draft.edges.some((e) => e.from === n1.id || e.to === n1.id)).toBe(false);
+    expect(admin.selected).toBeNull();
+
+    expect(admin.undo().type).toBe('removeNode');
+    expect(admin.draft.nodeById(n1.id)).not.toBeNull();
+  });
+
+  it('converts canvas taps through the floor plan projection', () => {
+    const { admin, floorplan } = make();
+    admin.showTab('plan');
+    // North-up, no pose: the plan is centred on floor 0's centroid; a tap at the
+    // screen centre lands on that centroid.
+    const centre = floorplan.fromScreen(200, 150);
+    floorplan.canvas.getBoundingClientRect = () => ({ left: 0, top: 0 });
+    floorplan.canvas.dispatchEvent(new MouseEvent('click', { clientX: 200, clientY: 150 }));
+    const added = admin.draft.nodes.at(-1);
+    expect(added.x).toBeCloseTo(centre.x, 1);
+    expect(added.y).toBeCloseTo(centre.y, 1);
+  });
+
+  it('ignores plan taps on other tabs', () => {
+    const { admin, floorplan } = make();
+    floorplan.canvas.getBoundingClientRect = () => ({ left: 0, top: 0 });
+    floorplan.canvas.dispatchEvent(new MouseEvent('click', { clientX: 10, clientY: 10 }));
+    expect(admin.draft.summary.nodes).toBe(demo.nodes.length);
+  });
+});
+
+describe('AdminPanel — export and drafts', () => {
+  it('validates, downloads and copies the venue JSON', async () => {
+    const { admin, download, copy } = make();
+    admin.showTab('export');
+    expect(admin.el.querySelector('[data-f="valid"]').textContent).toBe(t('admin.export.valid'));
+    expect(admin.download()).toBe('demo-health-centre.venue.json');
+    const [, text] = download.mock.calls[0];
+    expect(JSON.parse(text)).toEqual(demo);
+    await admin.copy();
+    expect(copy).toHaveBeenCalledOnce();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(t('admin.export.copied'));
+  });
+
+  it('blocks download while the draft is invalid and lists the problems', () => {
+    const { admin } = make();
+    admin.draft.pois[0].node = 'n-ghost';
+    admin.showTab('export');
+    expect(admin.el.querySelector('[data-f="download"]').disabled).toBe(true);
+    expect(admin.el.querySelector('[data-f="problems"]').textContent).toContain('pois[0].node');
+    expect(admin.download()).toBeNull();
+  });
+
+  it('restores a draft for the same venue and can discard it', () => {
+    const first = make();
+    first.provider.emit(pose(40, 6));
+    first.admin.addNodeHere('Pharmacy');
+    const second = make({ storage: first.storage });
+    expect(second.admin.draft.nodeById('n-pharmacy')).not.toBeNull();
+    expect(second.admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.draft.restored')
+    );
+    second.admin.discard();
+    expect(second.admin.draft.nodeById('n-pharmacy')).toBeNull();
+    expect(first.storage.data['brains:admin-draft']).toBeUndefined();
+  });
+
+  it('draws the draft on the floor plan overlay', () => {
+    const calls = [];
+    const ctx = new Proxy(
+      {},
+      { get: (_, p) => (p === 'calls' ? calls : (...a) => calls.push([p, ...a])), set: () => true }
+    );
+    const venue = createVenue(structuredClone(demo));
+    const floorplan = createFloorplan({
+      venue,
+      context: ctx,
+      pixelsPerMetre: 10,
+      rotationMode: 'north-up',
+    });
+    floorplan.resize(400, 300, 1);
+    const admin = createAdminPanel({
+      venue,
+      provider: new Fake(),
+      floorplan,
+      storage: null,
+      download: vi.fn(),
+      copy: vi.fn(),
+      prompt: vi.fn(),
+    });
+    admin.showTab('plan');
+    calls.length = 0;
+    admin.tapPlan({ x: 15, y: 6, floor: 0 });
+    expect(calls.filter((c) => c[0] === 'arc').length).toBeGreaterThanOrEqual(
+      demo.nodes.filter((n) => n.floor === 0).length + 1
+    );
+    expect(calls.some((c) => c[0] === 'strokeRect')).toBe(true); // anchors
+    admin.destroy();
+    expect(document.querySelector('.admin')).toBeNull();
+  });
+});

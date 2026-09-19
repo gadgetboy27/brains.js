@@ -217,7 +217,11 @@ export class Venue {
       floors: this.floors.map((f) => ({ ...f })),
       nodes: this.graph.nodes.map((n) => ({ ...n })),
       edges: this.graph.edges.map((e) => ({ ...e })),
-      pois: this.pois.map((p) => ({ ...p })),
+      pois: this.pois.map((p) => {
+        const out = { ...p };
+        if (!out.aliases?.length) delete out.aliases; // indexing default, not authored
+        return out;
+      }),
     };
     if (this.description) json.description = this.description;
     if (this.runtimeConfigUrl) json.runtimeConfigUrl = this.runtimeConfigUrl;

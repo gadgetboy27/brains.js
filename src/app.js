@@ -17,6 +17,7 @@
  *  - filters:   `?wheelchair=1`, `?stepFree=1`, `?staff=1`
  *  - runtime:   `?runtime=<url>` / `RUNTIME_CONFIG_URL` / the venue's `runtimeConfigUrl`
  *  - harness:   `?harness=1` shows the accuracy test panel (docs/accuracy.md)
+ *  - admin:     `?admin=1` shows the venue admin panel (docs/admin.md)
  *
  * ## Views
  *
@@ -42,6 +43,7 @@ import { createProviderChain } from './providers/index.js';
 import { NavigationArrow } from './ui/arrow.js';
 import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
+import { createAdminPanel } from './ui/admin.js';
 import { createCameraBackdrop } from './ui/camera-backdrop.js';
 import { createFirstRun, needsFirstRun } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
@@ -106,6 +108,7 @@ export function readConfig({
     allowMock: q.get('mock') === '1' || provider === 'mock' || Boolean(env.DEV),
     view: ['ar', 'floorplan', 'auto'].includes(view) ? view : 'auto',
     harness: q.get('harness') === '1',
+    admin: q.get('admin') === '1',
     filter: {
       wheelchair: q.get('wheelchair') === '1',
       stepFree: q.get('stepFree') === '1',
@@ -608,6 +611,23 @@ export async function bootApp(options = {}) {
     });
   }
 
+  // --- admin (staff): record routes by walking, edit the plan, export venue JSON.
+  let admin = null;
+  if (config.admin) {
+    admin = createAdminPanel({
+      venue,
+      provider: chain,
+      floorplan,
+      document: doc,
+      mount: root,
+      storage,
+      initialPose: lastPose,
+      onClose: () => admin?.destroy(),
+      ...options.adminOptions,
+    });
+    if (view !== 'floorplan') showView('floorplan', { manual: true }); // editing happens on the plan
+  }
+
   // --- QR entry: the scanned entrance marker fixes the starting position.
   if (config.anchorId) {
     const anchor = venue.anchorById(config.anchorId);
@@ -671,6 +691,7 @@ export async function bootApp(options = {}) {
       return { ...permissions };
     },
     harness,
+    admin,
     /** Explicit handled state, for tests and diagnostics. */
     backdrop,
     get state() {
@@ -706,6 +727,7 @@ export async function bootApp(options = {}) {
       await chainNoCamera?.stop();
       firstRun?.destroy();
       harness?.destroy();
+      admin?.destroy();
       offChange();
       offSpeech();
       speech.destroy();

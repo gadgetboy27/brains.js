@@ -66,6 +66,7 @@ export class Floorplan {
   #floor = null;
   #rotationMode;
   #images = new Map();
+  #drawHooks = new Set();
   #width = 0;
   #height = 0;
   #dpr = 1;
@@ -253,6 +254,34 @@ export class Floorplan {
     return { x: this.#width / 2 + rx * s, y: this.#height / 2 - ry * s };
   }
 
+  /** Inverse of toScreen(): canvas CSS pixels → venue metres on the current floor. */
+  fromScreen(sx, sy) {
+    const centre = this.#pose ?? this.#centreOfFloor();
+    const rot = this.#rotationMode === 'heading-up' && this.#pose ? this.#pose.heading * DEG : 0;
+    const s = this.#opts.pixelsPerMetre;
+    const rx = (sx - this.#width / 2) / s;
+    const ry = (this.#height / 2 - sy) / s;
+    // Undo the rotation applied in toScreen().
+    const dx = rx * Math.cos(rot) + ry * Math.sin(rot);
+    const dy = -rx * Math.sin(rot) + ry * Math.cos(rot);
+    return {
+      x: centre.x + dx,
+      y: centre.y + dy,
+      floor: this.#floor ?? this.#venue.floors[0].index,
+    };
+  }
+
+  /**
+   * Register a draw hook called after the map is drawn, with the 2-D context
+   * and this instance (for toScreen). Used by the admin overlay.
+   * @param {(ctx: CanvasRenderingContext2D, fp: Floorplan) => void} fn
+   * @returns {() => void}
+   */
+  onDraw(fn) {
+    this.#drawHooks.add(fn);
+    return () => this.#drawHooks.delete(fn);
+  }
+
   #centreOfFloor() {
     const nodes = this.#venue.nodesOnFloor(this.#floor ?? this.#venue.floors[0].index);
     if (nodes.length === 0) return { x: 0, y: 0 };
@@ -418,6 +447,7 @@ export class Floorplan {
       ctx.restore();
     }
 
+    for (const hook of this.#drawHooks) hook(ctx, this);
     ctx.restore();
   }
 

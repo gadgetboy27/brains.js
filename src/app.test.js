@@ -77,6 +77,7 @@ describe('readConfig', () => {
       allowMock: false,
       view: 'auto',
       harness: false,
+      admin: false,
       filter: { wheelchair: false, stepFree: false, accessLevel: 'visitor' },
     });
     expect(
@@ -848,5 +849,28 @@ describe('bootApp — QR entry and first run', () => {
     const { app } = await boot({ options: { firstRun: undefined, storage: null } }); // mock only
     expect(document.querySelector('.firstrun')).toBeNull();
     await app.destroy();
+  });
+});
+
+describe('bootApp — admin mode', () => {
+  it('mounts the admin panel on the floor plan and records from live poses', async () => {
+    const { app } = await boot({
+      config: { admin: true },
+      options: {
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: {
+        mock: { path: [{ x: 40, y: 6, floor: 0 }], fixIntervalMs: 1000, speedMps: 0 },
+      },
+    });
+    expect(app.admin).not.toBeNull();
+    expect(app.view).toBe('floorplan');
+    expect(document.querySelector('.admin')).not.toBeNull();
+    app.admin.startRecording();
+    const node = app.admin.addNodeHere('Pharmacy');
+    expect(node).toMatchObject({ x: 40, y: 6, floor: 0, name: 'Pharmacy' });
+    expect(app.admin.draft.validate()).toEqual([]);
+    await app.destroy();
+    expect(document.querySelector('.admin')).toBeNull();
   });
 });
