@@ -82,8 +82,9 @@ describe('NavigationArrow', () => {
     expect(arrow.model).not.toBeNull();
     expect(style.getPropertyValue).toHaveBeenCalledWith('--color-arrow');
     const mesh = arrow.model.children[0];
-    expect(mesh.material.type).toBe('MeshBasicMaterial'); // GLB material replaced
+    expect(mesh.material.type).toBe('MeshStandardMaterial'); // GLB material replaced, lit
     expect(mesh.material.color.getHexString()).toBe('ff0000');
+    expect(mesh.material.emissive.getHexString()).toBe('ff0000');
     expect(arrow.model.scale.x).toBe(0.5);
 
     arrow.setPose(pose(0, 0));

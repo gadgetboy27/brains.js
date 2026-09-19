@@ -94,7 +94,12 @@ describe('ArScene — construction', () => {
     expect(scene.floor).toBeNull();
     expect(scene.poiMarkerCount).toBe(0);
     expect(scene.routeObjectCount).toBe(0);
-    expect(scene.scene.children.map((c) => c.name)).toEqual(['route', 'pois']);
+    expect(scene.scene.children.map((c) => c.name)).toEqual([
+      'route',
+      'pois',
+      'light-hemisphere',
+      'light-key',
+    ]);
   });
 });
 
@@ -202,8 +207,11 @@ describe('ArScene — route', () => {
     scene.setRoute(route);
 
     const group = scene.scene.getObjectByName('route');
-    expect(names(group)).toEqual(['route-line', 'route-destination']);
-    const line = scene.scene.getObjectByName('route-line');
+    expect(names(group)).toEqual(['route-line', 'route-centreline', 'route-destination']);
+    const tube = scene.scene.getObjectByName('route-line');
+    expect(tube.geometry.type).toBe('TubeGeometry'); // WebGL ignores line width; the route is a tube
+    expect(tube.userData.points).toBe(3);
+    const line = scene.scene.getObjectByName('route-centreline');
     const positions = line.geometry.getAttribute('position');
     expect(positions.count).toBe(3);
     expect(positions.getX(2)).toBeCloseTo(20, 9);
@@ -221,7 +229,7 @@ describe('ArScene — route', () => {
     scene.setPose(pose({ floor: 0 }));
     scene.setRoute(route);
     let group = scene.scene.getObjectByName('route');
-    expect(names(group)).toEqual(['route-floor-change:lift:up', 'route-line']);
+    expect(names(group)).toEqual(['route-floor-change:lift:up', 'route-line', 'route-centreline']);
     const cone = group.children[0];
     expect(cone.userData.toFloor).toBe(1);
     expect(cone.position.x).toBeCloseTo(10, 9); // at n-atrium
@@ -230,8 +238,8 @@ describe('ArScene — route', () => {
 
     scene.setPose(pose({ floor: 1 }));
     group = scene.scene.getObjectByName('route');
-    expect(names(group)).toEqual(['route-line', 'route-destination']);
-    const line = scene.scene.getObjectByName('route-line');
+    expect(names(group)).toEqual(['route-line', 'route-centreline', 'route-destination']);
+    const line = scene.scene.getObjectByName('route-centreline');
     expect(line.geometry.getAttribute('position').count).toBe(2);
   });
 
@@ -239,7 +247,7 @@ describe('ArScene — route', () => {
     const { scene } = make();
     scene.setPose(pose({ floor: 0 }));
     scene.setRoute(findRoute(venue().graph, 'n-entrance', 'n-shop-a'));
-    expect(scene.routeObjectCount).toBe(2);
+    expect(scene.routeObjectCount).toBe(3);
     scene.setRoute(null);
     expect(scene.routeObjectCount).toBe(0);
     scene.setRoute({ found: false, reason: 'no-route' });
@@ -251,7 +259,7 @@ describe('ArScene — route', () => {
     scene.setRoute(findRoute(venue().graph, 'n-entrance', 'n-shop-a'));
     expect(scene.routeObjectCount).toBe(0);
     scene.setPose(pose({ floor: 0 }));
-    expect(scene.routeObjectCount).toBe(2);
+    expect(scene.routeObjectCount).toBe(3);
   });
 });
 
@@ -276,7 +284,7 @@ describe('ArScene — rendering and resize', () => {
     const { scene } = make();
     scene.setPose(pose({ floor: 0 }));
     scene.setRoute(findRoute(venue().graph, 'n-entrance', 'n-shop-a'));
-    const line = scene.scene.getObjectByName('route-line');
+    const line = scene.scene.getObjectByName('route-centreline');
     const geomDispose = vi.spyOn(line.geometry, 'dispose');
     const matDispose = vi.spyOn(line.material, 'dispose');
     scene.dispose();

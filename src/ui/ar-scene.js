@@ -27,16 +27,21 @@
 
 import {
   BufferGeometry,
+  CatmullRomCurve3,
   Color,
+  DirectionalLight,
+  HemisphereLight,
   ConeGeometry,
   Group,
   Line,
   LineBasicMaterial,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   PerspectiveCamera,
   RingGeometry,
   Scene,
+  TubeGeometry,
   Vector3,
 } from 'three';
 
@@ -70,6 +75,7 @@ export function headingToYaw(headingDeg) {
  * @property {number} [eyeHeight=1.5]              Metres from the pose's z to the camera.
  * @property {number} [poiHeight=1.8]              Metres above the floor for POI markers.
  * @property {number} [pathHeight=0.05]            Metres above the floor for the route line.
+ * @property {number} [routeRadius=0.06]           Radius of the route tube, metres.
  * @property {(text: string) => object | null} [createLabel]  Sprite factory; default draws to a canvas.
  * @property {Document} [document]
  */
@@ -90,13 +96,22 @@ export class ArScene {
   #pose = null;
   #floor = null;
   #disposables = new Set();
+  /** Size requested before the renderer existed (it is created asynchronously). */
+  #pendingSize = null;
 
   /** @param {ArSceneOptions} options */
   constructor(options) {
     if (!options?.venue || !Array.isArray(options.venue.floors)) {
       throw new TypeError('ArScene requires a Venue');
     }
-    this.#opts = { fov: 60, eyeHeight: 1.5, poiHeight: 1.8, pathHeight: 0.05, ...options };
+    this.#opts = {
+      fov: 60,
+      eyeHeight: 1.5,
+      poiHeight: 1.8,
+      pathHeight: 0.05,
+      routeRadius: 0.06,
+      ...options,
+    };
     this.#venue = options.venue;
     const doc = this.#opts.document ?? globalThis.document;
 
@@ -117,6 +132,17 @@ export class ArScene {
     this.#routeGroup.name = 'route';
     this.#poiGroup.name = 'pois';
     this.#scene.add(this.#routeGroup, this.#poiGroup);
+
+    // Lighting so lit materials (arrow, pins) read as solid objects.
+    const hemi = new HemisphereLight(0xffffff, 0x444466, 1.1);
+    hemi.name = 'light-hemisphere';
+    const key = new DirectionalLight(0xffffff, 1.4);
+    key.position.set(2, 6, 3);
+    key.name = 'light-key';
+    this.#scene.add(hemi, key);
+
+    // Start creating the renderer now so the first resize is not lost.
+    if (!this.#renderer) void this.#ensureRenderer();
   }
 
   // -------------------------------------------------------------- accessors
@@ -193,9 +219,16 @@ export class ArScene {
   resize(width, height, pixelRatio = globalThis.devicePixelRatio ?? 1) {
     this.#camera.aspect = height === 0 ? 1 : width / height;
     this.#camera.updateProjectionMatrix();
-    this.#ensureRenderer();
-    this.#renderer?.setPixelRatio?.(pixelRatio);
-    this.#renderer?.setSize?.(width, height, false);
+    // Cap at 2×: beyond that the GPU cost is not visible on a phone.
+    this.#pendingSize = { width, height, pixelRatio: Math.min(2, Math.max(1, pixelRatio)) };
+    this.#applyPendingSize();
+  }
+
+  #applyPendingSize() {
+    if (!this.#renderer || !this.#pendingSize) return;
+    const { width, height, pixelRatio } = this.#pendingSize;
+    this.#renderer.setPixelRatio?.(pixelRatio);
+    this.#renderer.setSize?.(width, height, false);
   }
 
   /** Draw one frame. */
@@ -220,9 +253,20 @@ export class ArScene {
     if (this.#renderer) return;
     // Lazy: importing WebGLRenderer eagerly would break in jsdom tests.
     const { WebGLRenderer } = await import('three');
-    this.#renderer = new WebGLRenderer({ canvas: this.#canvas, alpha: true, antialias: true });
+    if (this.#renderer) return;
+    try {
+      this.#renderer = new WebGLRenderer({
+        canvas: this.#canvas,
+        alpha: true,
+        antialias: true,
+        powerPreference: 'high-performance',
+      });
+    } catch {
+      return; // no WebGL (tests, very old devices): the floor plan still works
+    }
     this.#renderer.setClearColor(0x000000, 0);
     this.#ownsRenderer = true;
+    this.#applyPendingSize(); // the size requested while we were loading
   }
 
   /** Read a colour token (theme.css); `fallback` is a CSS colour name for stylesheet-less tests. */
@@ -278,13 +322,27 @@ export class ArScene {
       }
     }
     if (points.length >= 2) {
-      const geometry = new BufferGeometry().setFromPoints(points);
-      const material = new LineBasicMaterial({
+      // WebGL draws lines 1 px wide whatever `linewidth` says, so the route is
+      // a tube along the path (radius in metres) that scales with distance.
+      const curve = new CatmullRomCurve3(points, false, 'catmullrom', 0);
+      const segments = Math.max(8, points.length * 12);
+      const geometry = new TubeGeometry(curve, segments, this.#opts.routeRadius, 8, false);
+      const material = new MeshStandardMaterial({
         color: new Color(this.#token('--color-route', 'blue')),
-        linewidth: 2,
+        emissive: new Color(this.#token('--color-route', 'blue')),
+        emissiveIntensity: 0.35,
+        roughness: 0.6,
       });
-      const line = new Line(geometry, material);
-      line.name = 'route-line';
+      const tube = new Mesh(geometry, material);
+      tube.name = 'route-line';
+      tube.userData.points = points.length;
+      this.#routeGroup.add(this.#track(tube));
+      // Keep a thin centre line too: visible at any distance and in tests.
+      const line = new Line(
+        new BufferGeometry().setFromPoints(points),
+        new LineBasicMaterial({ color: new Color(this.#token('--color-route', 'blue')) })
+      );
+      line.name = 'route-centreline';
       this.#routeGroup.add(this.#track(line));
     }
     // Destination marker on this floor.
@@ -308,7 +366,11 @@ export class ArScene {
   #floorChangeMarker(node, edge, next) {
     const cone = new Mesh(
       new ConeGeometry(0.3, 0.6, 16),
-      new MeshBasicMaterial({ color: new Color(this.#token('--color-floor-change', 'orange')) })
+      new MeshStandardMaterial({
+        color: new Color(this.#token('--color-floor-change', 'orange')),
+        emissive: new Color(this.#token('--color-floor-change', 'orange')),
+        emissiveIntensity: 0.3,
+      })
     );
     const up = next.floor > node.floor;
     cone.rotation.x = up ? 0 : Math.PI;
@@ -343,7 +405,11 @@ export class ArScene {
 
       const pin = new Mesh(
         new ConeGeometry(0.15, 0.4, 12),
-        new MeshBasicMaterial({ color: new Color(this.#token('--color-poi', 'red')) })
+        new MeshStandardMaterial({
+          color: new Color(this.#token('--color-poi', 'red')),
+          emissive: new Color(this.#token('--color-poi', 'red')),
+          emissiveIntensity: 0.3,
+        })
       );
       pin.rotation.x = Math.PI;
       marker.add(this.#track(pin));

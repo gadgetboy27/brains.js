@@ -42,6 +42,7 @@ import { createProviderChain } from './providers/index.js';
 import { NavigationArrow } from './ui/arrow.js';
 import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
+import { createCameraBackdrop } from './ui/camera-backdrop.js';
 import { createFirstRun, needsFirstRun } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
@@ -295,6 +296,14 @@ export async function bootApp(options = {}) {
     document: doc,
     ...options.arrowOptions,
   });
+  // Live camera feed under the canvas; attached whenever the AR view is showing.
+  const backdrop = createCameraBackdrop({
+    mount: arView,
+    document: doc,
+    ...options.backdropOptions,
+  });
+  arScene.canvas.style.position = 'relative';
+  arScene.canvas.style.zIndex = '1';
   const floorplan = createFloorplan({
     venue,
     mount: planView,
@@ -344,15 +353,22 @@ export async function bootApp(options = {}) {
   let view = config.view === 'floorplan' ? 'floorplan' : 'ar';
   let autoView = config.view === 'auto';
   let cameraUsable = true; // false once camera positioning is known to be unavailable
+  let permissions = { camera: true, motion: true }; // set by the first-run screen
   let lowPower = false; // true while the battery is low and not charging
   function showView(next, { manual = false } = {}) {
     view = next;
     if (manual) autoView = false;
     arView.hidden = view !== 'ar';
     planView.hidden = view !== 'floorplan';
+    syncBackdrop();
     arBtn.setAttribute('aria-pressed', String(view === 'ar'));
     planBtn.setAttribute('aria-pressed', String(view === 'floorplan'));
     fit();
+  }
+  function syncBackdrop() {
+    if (view === 'ar' && permissions.camera !== false && !lowPower) {
+      void backdrop.attach(chain.active ?? chainNoCamera?.active ?? null);
+    } else backdrop.detach();
   }
   arBtn.addEventListener('click', () => showView('ar', { manual: true }));
   planBtn.addEventListener('click', () => showView('floorplan', { manual: true }));
@@ -488,6 +504,7 @@ export async function bootApp(options = {}) {
     }
     if (event.type === 'started' || event.type === 'fallback') {
       hud.hideNotice('position');
+      syncBackdrop();
       const cameraFailure = event.state.failed.find((f) => FAILURE_MESSAGES[f.reason]);
       if (cameraFailure && !CAMERA_PROVIDERS.has(event.state.active)) {
         // e.g. QR denied the camera, mock took over: AR has nothing to show.
@@ -532,7 +549,6 @@ export async function bootApp(options = {}) {
   // --- first run: explain and request camera + motion before starting any
   // camera provider. "Floor plan only" drops the camera providers.
   const cameraInChain = chain.order.some((n) => CAMERA_PROVIDERS.has(n));
-  let permissions = { camera: true, motion: true };
   let firstRun = null;
   const ask =
     cameraInChain &&
@@ -576,6 +592,8 @@ export async function bootApp(options = {}) {
       hud.showNotice('position', t('notice.noPosition'));
     }
   }
+
+  syncBackdrop();
 
   // --- accuracy harness (test walks): records poses, fix requests and checkpoints.
   let harness = null;
@@ -654,9 +672,11 @@ export async function bootApp(options = {}) {
     },
     harness,
     /** Explicit handled state, for tests and diagnostics. */
+    backdrop,
     get state() {
       return {
         cameraUsable,
+        cameraBackdrop: backdrop.source,
         lowPower,
         online: nav?.onLine !== false,
         venueFromCache,
@@ -691,6 +711,7 @@ export async function bootApp(options = {}) {
       speech.destroy();
       rescanOff?.();
       await chain.stop();
+      backdrop.destroy();
       arrow.dispose();
       arScene.dispose();
       floorplan.destroy();

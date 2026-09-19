@@ -16,7 +16,7 @@
  * The GLB loader is injectable so tests run without network or WebGL.
  */
 
-import { Group, MeshBasicMaterial, Object3D, Vector3 } from 'three';
+import { Group, MeshStandardMaterial, Object3D, Vector3 } from 'three';
 
 import { t } from './strings/index.js';
 import { makeTextSprite, updateTextSprite } from './labels.js';
@@ -145,8 +145,13 @@ export class NavigationArrow {
     this.#materials = [];
     model.traverse?.((child) => {
       if (!child.isMesh) return;
-      // Replace whatever the GLB shipped with by a token-coloured unlit material.
-      child.material = new MeshBasicMaterial();
+      // Replace whatever the GLB shipped with by a token-coloured lit material
+      // (with a little self-illumination so it never disappears in shadow).
+      child.material = new MeshStandardMaterial({
+        roughness: 0.45,
+        metalness: 0.1,
+        emissiveIntensity: 0.35,
+      });
       this.#materials.push(child.material);
     });
   }
@@ -157,7 +162,10 @@ export class NavigationArrow {
       fallback: 'white',
       getComputedStyle: this.#opts.getComputedStyle,
     });
-    for (const m of this.#materials) m.color.set(color);
+    for (const m of this.#materials) {
+      m.color.set(color);
+      m.emissive?.set(color);
+    }
   }
 
   /**
