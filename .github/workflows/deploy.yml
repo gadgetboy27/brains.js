@@ -18,6 +18,7 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch: # manual redeploy of master
 
 permissions:
   contents: read
