@@ -906,3 +906,54 @@ describe('bootApp — admin on a phone', () => {
     await app.destroy();
   });
 });
+
+describe('bootApp — map matching', () => {
+  it('snaps drifting poses onto the corridor and announces places as they are passed', async () => {
+    const { synth, Utterance, utterances } = (() => {
+      const u = [];
+      return {
+        synth: { speak: vi.fn((x) => u.push(x)), cancel: vi.fn() },
+        Utterance: class {
+          constructor(t) {
+            this.text = t;
+          }
+        },
+        utterances: u,
+      };
+    })();
+    const { app } = await boot({
+      options: { speechOptions: { synth, Utterance, storage: null } },
+      providerOptions: {
+        mock: { path: [{ x: 0, y: 0, floor: 0 }], fixIntervalMs: 100000, speedMps: 0 },
+      },
+    });
+    // Start at the entrance: the entrance landmark is announced once.
+    expect(app.hud.text.notices).toContain('Passing Main entrance');
+    expect(utterances.at(-1).text).toBe('Passing Main entrance.');
+
+    // A dead-reckoned pose 2 m into the wall beside the corridor is pulled back onto it.
+    app.chain.active.forceLowConfidence(0.5);
+    app.chain.active.teleport({ x: 15, y: 8, floor: 0 });
+    expect(app.floorplan.summary).toContain('You are at 15.0, 6.0 metres');
+    expect(app.state.landmarks).toEqual([]); // nothing marked mid-corridor
+
+    // An exact fix is never moved.
+    app.chain.active.clearForcedConfidence();
+    app.chain.active.forceLowConfidence(1);
+    app.chain.active.teleport({ x: 15, y: 8, floor: 0 });
+    expect(app.floorplan.summary).toContain('You are at 15.0, 8.0 metres');
+    await app.destroy();
+  });
+
+  it('can be disabled', async () => {
+    const { app } = await boot({
+      options: { mapMatching: false },
+      providerOptions: {
+        mock: { path: [{ x: 15, y: 8, floor: 0 }], fixIntervalMs: 100000, speedMps: 0 },
+      },
+    });
+    expect(app.matcher).toBeNull();
+    expect(app.floorplan.summary).toContain('You are at 15.0, 8.0 metres');
+    await app.destroy();
+  });
+});

@@ -29,6 +29,7 @@
  * Every browser dependency is injectable so the whole boot runs under jsdom.
  */
 
+import { MapMatcher } from './core/map-matching.js';
 import { createNavigator } from './core/navigation.js';
 import { findRoute } from './core/router.js';
 import { createVenue, loadVenue } from './core/venue.js';
@@ -140,6 +141,7 @@ export function viewForTilt(beta, current) {
  * @param {ReturnType<typeof readConfig>} [options.config]
  * @param {object} [options.venue]        A pre-built Venue (skips loading).
  * @param {object} [options.providerOptions]  Extra options for createProviderChain.
+ * @param {object | false} [options.mapMatching]  MapMatcher options, or false to disable snapping.
  * @param {object} [options.arSceneOptions]
  * @param {object} [options.arrowOptions]
  * @param {object} [options.floorplanOptions]
@@ -240,6 +242,12 @@ export async function bootApp(options = {}) {
   speech.setLanguage(langCode);
   if (venueFromCache) hud.showNotice('venue-cached', t('notice.venueCached'));
 
+  // --- map matching: snap dead-reckoned poses to the corridors and notice
+  // known places as they are passed (src/core/map-matching.js).
+  const matcher =
+    options.mapMatching === false ? null : new MapMatcher(venue, options.mapMatching ?? {});
+  let lastLandmarkAnnouncedAt = -Infinity;
+
   // --- runtime config: closures and hidden POIs, fetched now and polled.
   const baseVenue = venue;
   const runtimeUrl = resolveRuntimeConfigUrl({
@@ -253,6 +261,7 @@ export async function bootApp(options = {}) {
   function applyRuntime(result) {
     runtimeConfig = result.config;
     venue = applyRuntimeConfig(baseVenue, result.config).venue;
+    matcher?.setVenue(venue);
     showClosures();
   }
   function showClosures() {
@@ -488,7 +497,22 @@ export async function bootApp(options = {}) {
   }
 
   let returnToPlanAfterScan = false;
-  function onPose(pose) {
+  function onPose(raw) {
+    let pose = raw;
+    if (matcher) {
+      const match = matcher.update(raw);
+      pose = match.pose;
+      // Announce a landmark we have just come within range of — at most one
+      // every 8 s so a cluster of places does not turn into a monologue.
+      const landmark = match.entered.find((l) => l.kind !== 'node') ?? match.entered[0];
+      if (landmark && Date.now() - lastLandmarkAnnouncedAt > 8000) {
+        lastLandmarkAnnouncedAt = Date.now();
+        hud.showNotice('landmark', t('landmark.passing', { name: landmark.name }));
+        speech.announce(t('speech.landmark', { name: landmark.name }), { interrupt: false });
+      } else if (match.left.length && match.nearby.length === 0) {
+        hud.hideNotice('landmark');
+      }
+    }
     lastPose = pose;
     if (returnToPlanAfterScan && pose.confidence >= 1) {
       returnToPlanAfterScan = false;
@@ -715,9 +739,11 @@ export async function bootApp(options = {}) {
     admin,
     /** Explicit handled state, for tests and diagnostics. */
     backdrop,
+    matcher,
     get state() {
       return {
         cameraUsable,
+        landmarks: matcher ? matcher.near.map((l) => l.name) : [],
         cameraBackdrop: backdrop.source,
         lowPower,
         online: nav?.onLine !== false,

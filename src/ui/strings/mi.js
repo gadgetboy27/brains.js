@@ -248,6 +248,11 @@ export default {
     'admin.ok': 'Āe',
     'admin.cancel': 'Whakakore',
 
+    // Landmarks
+    'landmark.passing': 'E haere ana i {name}',
+    'landmark.near': 'E tata ana ki {name}',
+    'speech.landmark': 'E haere ana i {name}.',
+
     // Floors
     'floor.unknown': 'Papa tē mōhiotia',
   },

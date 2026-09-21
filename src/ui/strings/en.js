@@ -241,6 +241,11 @@ export default {
     'admin.ok': 'OK',
     'admin.cancel': 'Cancel',
 
+    // Landmarks recognised while moving (map matching)
+    'landmark.passing': 'Passing {name}',
+    'landmark.near': 'Near {name}',
+    'speech.landmark': 'Passing {name}.',
+
     // Floors
     'floor.unknown': 'Unknown floor',
   },

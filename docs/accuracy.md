@@ -45,3 +45,22 @@ so the pipeline can be checked without a walk. It is deterministic per
   walls or poor lighting there — add a QR anchor or re-scan the map.
 - Fix latency dominates the first impression: if it is over ~5 s, put an
   entrance anchor where people naturally stop.
+
+## Map matching (how the app keeps a sense of where it is)
+
+Between exact fixes the app runs every pose through `src/core/map-matching.js`:
+
+- **Snapping** — a dead-reckoned pose within 4 m of a corridor on its floor is
+  projected onto that corridor (you cannot be inside a wall), with hysteresis
+  so it does not hop between parallel corridors. An exact fix (a scan, a VPS
+  localisation) is never moved. On-graph poses get a small confidence boost.
+- **Landmarks** — places and markers within 6 m are recognised as the user
+  enters their vicinity ("Passing Reception", spoken and shown), and
+  forgotten only once 9 m away, so a cluster does not chatter.
+
+The more places and markers staff add, the more legible the building becomes
+to the app without any new hardware — which is also why the accuracy harness
+records the _matched_ position: it is what the visitor sees.
+
+Options: `mapMatching: { maxSnapM, stickyM, landmarkRadiusM, exitRadiusM, includeNodes }`
+in `bootApp()`, or `mapMatching: false` to compare raw positioning.
