@@ -442,6 +442,8 @@ export function validateVenue(venue) {
       ) {
         c.add(`${p}.floor`, `references undefined floor index ${anchor.floor}`);
       }
+      c.isString(anchor.name, `${p}.name`, { required: false });
+      c.isString(anchor.code, `${p}.code`, { required: false });
       if (
         c.isNumber(anchor.heading, `${p}.heading`, { required: false, min: 0 }) &&
         anchor.heading >= 360

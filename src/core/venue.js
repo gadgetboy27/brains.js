@@ -142,6 +142,11 @@ export class Venue {
     return this.#anchorsById.get(id);
   }
 
+  /** A marker registered from a pre-printed code, by that code's exact text. */
+  anchorByCode(text) {
+    return this.anchors.find((a) => a.code !== undefined && a.code === text);
+  }
+
   // --------------------------------------------------------------- pois
 
   /** @param {string} id */

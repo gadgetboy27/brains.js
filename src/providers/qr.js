@@ -336,12 +336,17 @@ export class QrProvider extends PositionProvider {
    * @returns {'accepted' | 'unrecognised' | 'wrong-venue' | 'unknown-anchor' | 'repeat'}
    */
   handleScan(text) {
-    const parsed = parseQrPayload(text);
     const emitScan = (result, extra = {}) => {
       const event = { text, result, ...extra };
       for (const l of this.#scanListeners) l(event);
       return result;
     };
+
+    // A pre-printed sticker registered in admin mode: its own text names the marker.
+    const registered = this.#opts.venue.anchorByCode?.(text);
+    const parsed = registered
+      ? { venueId: this.#opts.venue.id, anchorId: registered.id }
+      : parseQrPayload(text);
 
     if (!parsed) return emitScan('unrecognised');
     const { venueId, anchorId } = parsed;

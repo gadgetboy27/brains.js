@@ -68,13 +68,42 @@ beforeEach(() => {
 });
 
 describe('AdminPanel — recording a route', () => {
-  it('starts from the venue, disables "here" buttons until a pose arrives', () => {
+  it('starts from the venue; without a position the "here" buttons explain what to do', () => {
     const { admin } = make();
     expect(admin.draft.summary.nodes).toBe(demo.nodes.length);
-    expect(admin.el.querySelector('[data-f="rec-node"]').disabled).toBe(true);
+    const btn = admin.el.querySelector('[data-f="rec-node"]');
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
     expect(admin.el.querySelector('[data-f="rec-status"]').textContent).toBe(
-      t('admin.record.noPose')
+      t('admin.record.noPoseHint')
     );
+    btn.click();
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+      t('admin.record.noPoseHint')
+    );
+    expect(admin.draft.summary.nodes).toBe(demo.nodes.length);
+  });
+
+  it('a tap on the plan sets the working position, then "here" buttons work and give loud feedback', () => {
+    const onManualPose = vi.fn();
+    const { admin } = make({ onManualPose });
+    const pose = admin.setManualPose({ x: 40, y: 6, floor: 0 });
+    expect(pose).toMatchObject({ x: 40, y: 6, floor: 0, confidence: 0.5 });
+    expect(onManualPose).toHaveBeenCalledWith(pose);
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+      t('admin.record.poseFromPlan')
+    );
+    expect(admin.el.querySelector('[data-f="rec-node"]').getAttribute('aria-disabled')).toBe(
+      'false'
+    );
+
+    const node = admin.addNodeHere('Pharmacy');
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+      t('admin.record.added.node', { name: 'Pharmacy' })
+    );
+    expect(admin.walk).toEqual([{ kind: 'node', name: 'Pharmacy' }]);
+    expect(admin.el.querySelector('[data-f="walk"]').textContent).toContain('Pharmacy');
+    expect(node.id).toBe('n-pharmacy');
   });
 
   it('drops linked nodes as you walk, joining existing junctions', () => {
@@ -566,5 +595,68 @@ describe('AdminPanel — wards, phone layout, scan', () => {
     expect(withScan.el.querySelector('[data-f="status"]').textContent).toBe(
       t('admin.record.scanning')
     );
+  });
+});
+
+describe('AdminPanel — QR codes: preview, print sheet, register a printed sticker', () => {
+  const qr = {
+    qrDataUrl: async (text) => `data:image/png;base64,${btoa(text)}`,
+    qrSvg: async (text) => `<svg data-text="${text}"></svg>`,
+  };
+
+  it("shows each marker's code in the Export tab and builds a print sheet", async () => {
+    const openSheet = vi.fn();
+    const { admin } = make({ ...qr, openSheet, publicBaseUrl: 'https://wayfinding.example.nz' });
+    admin.showTab('export');
+    await new Promise((r) => setTimeout(r, 0));
+    const imgs = [...admin.el.querySelectorAll('[data-f="markers"] img')];
+    expect(imgs).toHaveLength(demo.anchors.length);
+    expect(imgs[0].src).toBe(
+      `data:image/png;base64,${btoa('https://wayfinding.example.nz/?v=demo-health-centre&anchor=a-entrance')}`
+    );
+    expect(admin.el.querySelector('[data-f="markers-title"]').textContent).toBe(
+      t('admin.export.markers', { count: 3 })
+    );
+
+    const html = await admin.openPrintSheet();
+    expect(openSheet).toHaveBeenCalledOnce();
+    expect(html).toContain(
+      'data-text="https://wayfinding.example.nz/?v=demo-health-centre&anchor=a-lift-1"'
+    );
+    expect(html.match(/<section class="card">/g)).toHaveLength(3);
+    expect(html).toContain('Demo Health Centre');
+  });
+
+  it('registers a pre-printed sticker at the current position and the scanner recognises it', () => {
+    const onScanRequest = vi.fn();
+    const { admin, provider, prompt } = make({ ...qr, onScanRequest });
+    expect(admin.beginRegister()).toBe(false); // no position yet
+    provider.emit(pose(20, 6, 90));
+    expect(admin.beginRegister()).toBe(true);
+    expect(onScanRequest).toHaveBeenCalledOnce();
+    expect(admin.registering).toBe(true);
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.record.registering')
+    );
+
+    prompt.mockReturnValueOnce('Sticker 17');
+    const anchor = admin.registerCode('STICKER-0017');
+    expect(anchor).toMatchObject({
+      x: 20,
+      y: 6,
+      heading: 90,
+      name: 'Sticker 17',
+      code: 'STICKER-0017',
+    });
+    expect(admin.registering).toBe(false);
+    expect(admin.markerPayload(anchor)).toBe('STICKER-0017'); // its own text, not a URL
+    expect(admin.draft.validate()).toEqual([]);
+
+    admin.beginRegister();
+    expect(admin.registerCode('STICKER-0017')).toBeNull(); // recognised, not duplicated
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+      t('admin.record.registerKnown', { name: 'Sticker 17' })
+    );
+    expect(admin.registerCode('ANOTHER')).toBeNull(); // not registering any more
   });
 });

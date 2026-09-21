@@ -425,3 +425,24 @@ describe('QrProvider — scanning and pose emission', () => {
     expect(poses).toEqual([]);
   });
 });
+
+describe('QrProvider — registered pre-printed stickers', () => {
+  it("accepts a code whose text matches an anchor's registered code", () => {
+    const json = structuredClone(sample);
+    json.anchors.push({
+      id: 'a-sticker',
+      x: 5,
+      y: 5,
+      z: 0,
+      floor: 0,
+      heading: 180,
+      code: 'STICKER-0017',
+    });
+    const { provider } = make({ venue: createVenue(json) });
+    const { poses, scans } = collect(provider);
+    expect(provider.handleScan('STICKER-0017')).toBe('accepted');
+    expect(poses[0]).toMatchObject({ x: 5, y: 5, heading: 180, confidence: 1 });
+    expect(scans[0]).toMatchObject({ result: 'accepted', anchorId: 'a-sticker' });
+    expect(provider.handleScan('STICKER-0018')).toBe('unrecognised');
+  });
+});

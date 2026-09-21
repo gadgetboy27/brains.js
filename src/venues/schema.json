@@ -373,6 +373,15 @@
           "type": "number",
           "minimum": 0,
           "exclusiveMaximum": 360
+        },
+        "name": {
+          "description": "Label for staff and print sheets (e.g. \"Reception desk\"). Optional.",
+          "type": "string"
+        },
+        "code": {
+          "description": "For a pre-printed QR sticker registered by scanning it: the exact text that code contains. The app then recognises that sticker as this marker. Optional; markers printed by the app do not need it.",
+          "type": "string",
+          "minLength": 1
         }
       }
     },

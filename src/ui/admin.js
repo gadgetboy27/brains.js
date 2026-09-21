@@ -21,6 +21,8 @@
  * venue file.
  */
 
+import QRCode from 'qrcode';
+
 import { VenueDraft } from '../core/venue-draft.js';
 import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
 import { categoryName, t } from './strings/index.js';
@@ -57,6 +59,12 @@ const CSS = `
   border: 1px solid var(--color-text-muted); border-radius: 8px; background: var(--color-surface-solid); color: var(--color-text); font: inherit; cursor: pointer; }
 .admin-list button[aria-selected='true'] { border-color: var(--color-accent); }
 .admin-list .kind { color: var(--color-text-muted); font-size: 0.9em; }
+.admin-toast { margin: 6px 0; padding: 8px 12px; border-radius: 8px; background: var(--color-accent); color: var(--color-accent-contrast); font-weight: 600; }
+.admin-toast:empty { display: none; }
+.admin-walk { margin: 6px 0; padding-left: 18px; }
+.admin-markers { list-style: none; margin: 6px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.admin-markers li { display: grid; gap: 4px; text-align: center; font-size: 13px; }
+.admin-markers img { width: 100%; max-width: 140px; margin: 0 auto; background: #fff; border-radius: 6px; }
 `;
 
 const DRAFT_KEY = 'brains:admin-draft';
@@ -78,6 +86,11 @@ export class AdminPanel {
   #unsub = [];
   #tab = 'record';
   #published = true;
+  #registering = false;
+  #walk = [];
+  #markerUrls = new Map();
+  #markerRender = 0;
+  #toastTimer = null;
   /** @type {{ kind: 'poi' | 'anchor', id: string } | null} */
   #editing = null;
 
@@ -98,6 +111,11 @@ export class AdminPanel {
    * @param {Storage | null} [options.sessionStorage] Keeps the publishing key for the session.
    * @param {ReadonlyArray<object>} [options.places]  Place templates for the POI form (default: hospital library).
    * @param {() => void} [options.onScanRequest]   Show the camera so a marker can be scanned to fix position.
+   * @param {(pose: object) => void} [options.onManualPose]  A position set by tapping the plan.
+   * @param {string} [options.publicBaseUrl]         Origin printed into marker codes (default this page's origin).
+   * @param {(text: string) => Promise<string>} [options.qrDataUrl]  Injectable QR renderer (tests).
+   * @param {(text: string) => Promise<string>} [options.qrSvg]
+   * @param {(html: string) => void} [options.openSheet]
    * @param {object | null} [options.initialPose]  Last known pose, if positioning started before this panel.
    * @param {Function} [options.getComputedStyle]
    */
@@ -153,8 +171,12 @@ export class AdminPanel {
           <button type="button" class="btn" data-f="rec-poi"></button>
           <button type="button" class="btn" data-f="rec-anchor"></button>
           <button type="button" class="btn" data-f="rec-scan"></button>
+          <button type="button" class="btn" data-f="rec-register"></button>
         </div>
         <p data-f="rec-status"></p>
+        <p class="admin-toast" data-f="toast" role="status" aria-live="assertive"></p>
+        <p class="visually-hidden" data-f="walk-title"></p>
+        <ul class="admin-walk" data-f="walk"></ul>
       </div>
 
       <div class="admin-tool" data-tool="plan" role="tabpanel" hidden>
@@ -194,6 +216,12 @@ export class AdminPanel {
         <p data-f="summary"></p>
         <p data-f="valid"></p>
         <ul class="problems" data-f="problems"></ul>
+        <h3 data-f="markers-title"></h3>
+        <p data-f="markers-empty" hidden></p>
+        <ul class="admin-markers" data-f="markers"></ul>
+        <div class="admin-actions">
+          <button type="button" class="btn" data-f="print-sheet"></button>
+        </div>
         <div class="admin-actions">
           <button type="button" class="btn btn-primary" data-f="publish"></button>
           <button type="button" class="btn" data-f="download"></button>
@@ -272,6 +300,10 @@ export class AdminPanel {
     this.#f('collapse').textContent = t('admin.collapse');
     this.#f('rec-scan').textContent = t('admin.record.scan');
     this.#f('rec-scan').hidden = typeof options.onScanRequest !== 'function';
+    this.#f('rec-register').textContent = t('admin.record.register');
+    this.#f('rec-register').hidden = typeof options.onScanRequest !== 'function';
+    this.#f('walk-title').textContent = t('admin.record.walkList');
+    this.#f('print-sheet').textContent = t('admin.export.printSheet');
     for (const c of [
       'clinic',
       'ward',
@@ -294,9 +326,12 @@ export class AdminPanel {
     this.#f('save').addEventListener('click', () => this.save());
     this.#f('collapse').addEventListener('click', () => this.setCollapsed(!this.collapsed));
     this.#f('rec-scan').addEventListener('click', () => {
+      this.#registering = false;
       this.#status(t('admin.record.scanning'));
       options.onScanRequest?.();
     });
+    this.#f('rec-register').addEventListener('click', () => this.beginRegister());
+    this.#f('print-sheet').addEventListener('click', () => this.openPrintSheet());
     // Ward category: show the number field; the name follows the number.
     for (const prefix of ['poi', 'edit']) {
       const cat = this.#f(`${prefix}-cat`);
@@ -460,17 +495,80 @@ export class AdminPanel {
     );
     this.#f('rec-toggle').setAttribute('aria-pressed', String(this.#recording));
     const havePose = this.#pose !== null;
-    for (const n of ['rec-node', 'rec-poi', 'rec-anchor']) this.#f(n).disabled = !havePose;
+    // Buttons stay tappable without a position so they can explain what to do.
+    for (const n of ['rec-node', 'rec-poi', 'rec-anchor']) {
+      this.#f(n).setAttribute('aria-disabled', String(!havePose));
+    }
     this.#f('rec-status').textContent = !havePose
-      ? t('admin.record.noPose')
+      ? t('admin.record.noPoseHint')
       : this.#recording
         ? t('admin.record.status', { nodes: this.#walkNodes, edges: this.#walkEdges })
         : '';
   }
 
+  /** Loud, transient feedback for a completed action (with a buzz where supported). */
+  #toast(text) {
+    const el = this.#f('toast');
+    el.textContent = text;
+    this.#status(text);
+    try {
+      globalThis.navigator?.vibrate?.(40);
+    } catch {
+      // ignore
+    }
+    clearTimeout(this.#toastTimer);
+    this.#toastTimer = setTimeout(() => {
+      if (el.textContent === text) el.textContent = '';
+    }, 4000);
+  }
+
+  #addedOnWalk(kind, name) {
+    this.#walk.unshift({ kind, name });
+    this.#walk = this.#walk.slice(0, 8);
+    const list = this.#f('walk');
+    list.textContent = '';
+    for (const item of this.#walk) {
+      const li = this.#doc.createElement('li');
+      const kind = item.kind === 'node' ? 'Node' : t(`admin.edit.kind.${item.kind}`);
+      li.textContent = `${kind}: ${item.name}`;
+      list.appendChild(li);
+    }
+  }
+
+  /** Items added on this walk (newest first). */
+  get walk() {
+    return [...this.#walk];
+  }
+
+  /**
+   * Set the working position by hand (a tap on the plan) so the "here"
+   * buttons work before any marker exists. Confidence is deliberately low.
+   * @param {{ x: number, y: number, floor?: number, z?: number }} point
+   */
+  setManualPose(point) {
+    const floor = point.floor ?? this.#pose?.floor ?? this.#draft.floors[0].index;
+    const pose = {
+      x: point.x,
+      y: point.y,
+      z: point.z ?? this.#draft.floorByIndex(floor)?.elevation ?? 0,
+      floor,
+      heading: this.#pose?.heading ?? 0,
+      confidence: 0.5,
+      timestamp: Date.now(),
+    };
+    this.#pose = pose;
+    this.#updateRecording();
+    this.#toast(t('admin.record.poseFromPlan'));
+    this.#opts.onManualPose?.(pose);
+    return pose;
+  }
+
   /** Drop a node at the current position, linked to the previous one on this walk. */
   addNodeHere(name) {
-    if (!this.#pose) return null;
+    if (!this.#pose) {
+      this.#toast(t('admin.record.noPoseHint'));
+      return null;
+    }
     const before = { nodes: this.#draft.nodes.length, edges: this.#draft.edges.length };
     const node = this.#draft.addNode(
       { x: this.#pose.x, y: this.#pose.y, z: this.#pose.z, floor: this.#pose.floor, name },
@@ -480,9 +578,9 @@ export class AdminPanel {
     this.#walkNodes += created ? 1 : 0;
     this.#walkEdges += this.#draft.edges.length - before.edges;
     this.#lastNodeId = node.id;
-    this.#status(
-      t(created ? 'admin.record.added' : 'admin.record.snapped', { name: node.name ?? node.id })
-    );
+    const label = node.name ?? node.id;
+    this.#toast(t(created ? 'admin.record.added.node' : 'admin.record.snapped', { name: label }));
+    if (created) this.#addedOnWalk('node', label);
     this.#updateRecording();
     this.#changed();
     return node;
@@ -497,7 +595,10 @@ export class AdminPanel {
 
   /** A QR anchor at the current position, facing the current heading. */
   addAnchorHere() {
-    if (!this.#pose) return null;
+    if (!this.#pose) {
+      this.#toast(t('admin.record.noPoseHint'));
+      return null;
+    }
     const name = this.#opts.prompt(t('admin.name.prompt'), '') ?? null;
     if (name === null) return null;
     const anchor = this.#draft.addAnchor({
@@ -508,7 +609,58 @@ export class AdminPanel {
       heading: this.#pose.heading,
       name: name || undefined,
     });
-    this.#status(t('admin.record.added', { name: anchor.name ?? anchor.id }));
+    this.#toast(t('admin.record.added.anchor', { name: anchor.name ?? anchor.id }));
+    this.#addedOnWalk('anchor', anchor.name ?? anchor.id);
+    this.#changed();
+    return anchor;
+  }
+
+  // ------------------------------------------------- register a printed code
+
+  /** Next scanned code that the venue does not know becomes a marker here. */
+  beginRegister() {
+    if (!this.#pose) {
+      this.#toast(t('admin.record.noPoseHint'));
+      return false;
+    }
+    this.#registering = true;
+    this.#status(t('admin.record.registering'));
+    this.#opts.onScanRequest?.();
+    return true;
+  }
+
+  get registering() {
+    return this.#registering;
+  }
+
+  /**
+   * Called by the app with the raw text of a scanned code. While registering,
+   * an unknown code becomes a marker at the current position (its text is
+   * stored so the scanner recognises that sticker from now on).
+   * @param {string} text
+   * @returns {object | null} The anchor created, if any.
+   */
+  registerCode(text) {
+    if (!this.#registering || !this.#pose) return null;
+    const known = this.#draft.anchors.find((a) => a.code === text);
+    if (known) {
+      this.#toast(t('admin.record.registerKnown', { name: known.name ?? known.id }));
+      this.#registering = false;
+      return null;
+    }
+    const name = this.#opts.prompt(t('admin.name.prompt'), '') ?? '';
+    const anchor = this.#draft.addAnchor({
+      x: this.#pose.x,
+      y: this.#pose.y,
+      z: this.#pose.z,
+      floor: this.#pose.floor,
+      heading: this.#pose.heading,
+      name: name || undefined,
+    });
+    anchor.code = text;
+    this.#registering = false;
+    this.#toast(t('admin.record.registered', { name: anchor.name ?? anchor.id }));
+    this.#addedOnWalk('anchor', anchor.name ?? anchor.id);
     this.#changed();
     return anchor;
   }
@@ -516,9 +668,13 @@ export class AdminPanel {
   // ----------------------------------------------------------- plan editor
 
   #onPlanTap(e) {
-    if (this.#tab !== 'plan') return;
+    if (this.#tab !== 'plan' && this.#tab !== 'record') return;
     const rect = this.#opts.floorplan.canvas.getBoundingClientRect?.() ?? { left: 0, top: 0 };
     const point = this.#opts.floorplan.fromScreen(e.clientX - rect.left, e.clientY - rect.top);
+    if (this.#tab === 'record') {
+      this.setManualPose(point);
+      return;
+    }
     this.tapPlan(point);
   }
 
@@ -605,7 +761,8 @@ export class AdminPanel {
     });
     form.dataset.access = '';
     form.hidden = true;
-    this.#status(t('admin.record.added', { name: poi.name }));
+    this.#toast(t('admin.record.added.poi', { name: poi.name }));
+    this.#addedOnWalk('poi', poi.name);
     this.#changed();
     return poi;
   }
@@ -903,6 +1060,89 @@ export class AdminPanel {
     }
     this.#f('download').disabled = problems.length > 0;
     this.#f('publish').disabled = problems.length > 0;
+    void this.#renderMarkers();
+  }
+
+  /** The text a marker's QR code carries (its own code if registered from a sticker). */
+  markerPayload(anchor) {
+    if (anchor.code) return anchor.code;
+    const base = this.#opts.publicBaseUrl ?? globalThis.location?.origin ?? '';
+    return `${base}/?v=${encodeURIComponent(this.#draft.id)}&anchor=${encodeURIComponent(anchor.id)}`;
+  }
+
+  async #renderMarkers() {
+    const anchors = this.#draft.anchors;
+    this.#f('markers-title').textContent = t('admin.export.markers', { count: anchors.length });
+    this.#f('markers-empty').hidden = anchors.length > 0;
+    this.#f('markers-empty').textContent = t('admin.export.noMarkers');
+    this.#f('print-sheet').disabled = anchors.length === 0;
+    const list = this.#f('markers');
+    const token = (this.#markerRender = (this.#markerRender ?? 0) + 1);
+    const frag = this.#doc.createDocumentFragment();
+    const render =
+      this.#opts.qrDataUrl ??
+      ((text) => QRCode.toDataURL(text, { errorCorrectionLevel: 'H', margin: 1, width: 280 }));
+    for (const a of anchors) {
+      const li = this.#doc.createElement('li');
+      const img = this.#doc.createElement('img');
+      img.alt = `QR code for ${a.name ?? a.id}`;
+      const payload = this.markerPayload(a);
+      try {
+        if (!this.#markerUrls.has(payload)) this.#markerUrls.set(payload, await render(payload));
+        img.src = this.#markerUrls.get(payload);
+      } catch {
+        img.alt = payload;
+      }
+      const name = this.#doc.createElement('strong');
+      name.textContent = a.name ?? a.id;
+      const code = this.#doc.createElement('span');
+      code.textContent = a.code ? t('admin.export.markerCode', { text: a.code }) : a.id;
+      li.append(img, name, code);
+      frag.appendChild(li);
+    }
+    if (token !== this.#markerRender) return; // a newer render superseded this one
+    list.textContent = '';
+    list.appendChild(frag);
+  }
+
+  /** Build the print sheet HTML (one marker per page). */
+  async printSheetHtml() {
+    const esc = (v) =>
+      String(v).replace(
+        /[&<>"]/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]
+      );
+    const render =
+      this.#opts.qrSvg ??
+      ((text) => QRCode.toString(text, { type: 'svg', errorCorrectionLevel: 'H', margin: 2 }));
+    const cards = [];
+    for (const a of this.#draft.anchors) {
+      const payload = this.markerPayload(a);
+      const svg = await render(payload);
+      cards.push(
+        `<section class="card">${svg}<h1>${esc(this.#draft.name)}</h1><p>Scan with your phone camera to start wayfinding — no app to install.</p><p><strong>${esc(a.name ?? a.id)}</strong></p><code>${esc(payload)}</code></section>`
+      );
+    }
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(this.#draft.name)} — QR markers</title><style>
+body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;display:grid;place-items:center;min-height:100vh;text-align:center;padding:24px;box-sizing:border-box}
+.card svg{width:min(70vw,420px);height:auto}h1{font-size:26px;margin:8px 0}p{font-size:18px;margin:4px 0}code{font-size:12px;color:#555;word-break:break-all}
+</style></head><body>${cards.join('')}</body></html>`;
+  }
+
+  /** Open the print sheet in a new tab (print or share from there). */
+  async openPrintSheet() {
+    if (this.#draft.anchors.length === 0) return null;
+    const html = await this.printSheetHtml();
+    const open =
+      this.#opts.openSheet ??
+      ((h) => {
+        const blob = new Blob([h], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        globalThis.open?.(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      });
+    open(html);
+    return html;
   }
 
   /**

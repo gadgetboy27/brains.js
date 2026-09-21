@@ -22,6 +22,7 @@ const CSS = `
 .firstrun h1 { margin: 0 0 8px; font-size: var(--font-size-large); }
 .firstrun h2 { margin: 16px 0 4px; font-size: 1em; color: var(--color-accent); }
 .firstrun p, .firstrun li { margin: 0 0 6px; line-height: 1.45; }
+.firstrun a { color: var(--color-accent); }
 .firstrun ul { margin: 0; padding-left: 20px; }
 .firstrun-actions { display: grid; gap: 10px; margin-top: 20px; }
 .firstrun-status { min-height: 1.5em; color: var(--color-text-muted); }

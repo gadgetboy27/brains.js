@@ -865,6 +865,7 @@ describe('bootApp — admin mode', () => {
     });
     expect(app.admin).not.toBeNull();
     expect(app.view).toBe('floorplan');
+    expect(app.picker.isOpen).toBe(false); // staff see the plan first
     expect(document.querySelector('.admin')).not.toBeNull();
     app.admin.startRecording();
     const node = app.admin.addNodeHere('Pharmacy');
@@ -954,6 +955,46 @@ describe('bootApp — map matching', () => {
     });
     expect(app.matcher).toBeNull();
     expect(app.floorplan.summary).toContain('You are at 15.0, 8.0 metres');
+    await app.destroy();
+  });
+});
+
+describe('bootApp — registering a printed sticker from the scanner', () => {
+  it('an unrecognised scan while registering becomes a marker at the current position', async () => {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const { app } = await boot({
+      config: { admin: true, provider: null },
+      options: {
+        adminOptions: {
+          storage: null,
+          download: vi.fn(),
+          copy: vi.fn(),
+          prompt: vi.fn(() => 'Ward door sticker'),
+          qrDataUrl: async () => 'data:,',
+        },
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    expect(app.chain.state.active).toBe('qr');
+    app.admin.setManualPose({ x: 12, y: 6, floor: 0 });
+    app.admin.beginRegister();
+    expect(app.view).toBe('ar'); // camera shown to scan
+    app.chain.active.handleScan('ROLL-0042');
+    expect(app.admin.draft.anchors.at(-1)).toMatchObject({
+      x: 12,
+      y: 6,
+      code: 'ROLL-0042',
+      name: 'Ward door sticker',
+    });
+    expect(app.view).toBe('floorplan'); // back to the plan once registered
     await app.destroy();
   });
 });

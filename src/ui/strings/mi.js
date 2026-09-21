@@ -243,6 +243,23 @@ export default {
     'admin.expand': 'Whakaatu ngā utauta',
     'admin.record.scan': 'Matawaia he tohu hei whakaū i tōku wāhi',
     'admin.record.scanning': 'Tohua te kāmera ki tētahi tohu i te pakitara…',
+    'admin.record.noPoseHint':
+      'Kāore anō he wāhi. Pāwhiria te mahere papa kei reira koe e tū ana, matawaia rānei he tohu.',
+    'admin.record.poseFromPlan':
+      'Kua tautuhia te wāhi mai i te mahere — whakamahia ngā pātene "ki konei".',
+    'admin.record.added.node': 'Kua tāpiritia te pona {name}',
+    'admin.record.added.poi': 'Kua tāpiritia te wāhi {name}',
+    'admin.record.added.anchor':
+      'Kua tāpiritia te tohu QR {name}. Kei te ripa Kaweake tōna waehere.',
+    'admin.record.walkList': 'Kua tāpiritia i tēnei hīkoi',
+    'admin.record.register': 'Rēhita i tētahi waehere kua tāia ki konei',
+    'admin.record.registering': 'Tohua te kāmera ki te waehere kua tāia hei rēhita ki tēnei wāhi…',
+    'admin.record.registered': 'Kua rēhitatia te waehere hei tohu {name}',
+    'admin.record.registerKnown': 'Kua noho kē taua waehere hei tohu {name}',
+    'admin.export.markers': 'Ngā tohu QR ({count})',
+    'admin.export.printSheet': 'Whakatuwhera i te pepa tā',
+    'admin.export.noMarkers': 'Kāore anō he tohu — tāpirihia mā "Tāpiri tohu QR ki konei".',
+    'admin.export.markerCode': 'Waehere: {text}',
     'admin.draft.restored': 'Kua whakahokia te tauira mai i tēnei pūrere.',
     'admin.close': 'Kati te whakahaere',
     'admin.ok': 'Āe',

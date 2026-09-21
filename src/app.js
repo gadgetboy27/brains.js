@@ -497,8 +497,11 @@ export async function bootApp(options = {}) {
   }
 
   let returnToPlanAfterScan = false;
+  let scanOff = null;
+  let scanWatchOff = null;
   function onPose(raw) {
     let pose = raw;
+    hud.hideNotice('position'); // we have one now, however it was obtained
     if (matcher) {
       const match = matcher.update(raw);
       pose = match.pose;
@@ -611,7 +614,7 @@ export async function bootApp(options = {}) {
     if (!permissions.camera) cameraUnavailable('notice.cameraDenied');
   }
 
-  picker.open();
+  if (!config.admin) picker.open(); // staff surveying want the plan, not the destination list
   if (permissions.camera || !cameraInChain) {
     await chain.start();
   } else {
@@ -662,6 +665,8 @@ export async function bootApp(options = {}) {
         returnToPlanAfterScan = true;
         showView('ar', { manual: true });
       },
+      onManualPose: (pose) => onPose(pose),
+      publicBaseUrl: options.publicBaseUrl ?? globalThis.location?.origin,
       onClose: () => {
         admin?.destroy();
         admin = null;
@@ -671,6 +676,24 @@ export async function bootApp(options = {}) {
     });
     if (view !== 'floorplan') showView('floorplan', { manual: true }); // editing happens on the plan
     hud.setCompact(true); // give the map the screen; the HUD keeps only the status line
+    // Registering a printed sticker: unknown codes seen by the scanner become markers.
+    const watchScans = (provider) => {
+      scanOff?.();
+      scanOff = null;
+      if (provider && typeof provider.onScan === 'function') {
+        scanOff = provider.onScan((scan) => {
+          if (scan.result === 'unrecognised' && admin?.registering) {
+            const anchor = admin.registerCode(scan.text);
+            if (anchor) {
+              returnToPlanAfterScan = false;
+              showView('floorplan', { manual: true });
+            }
+          }
+        });
+      }
+    };
+    watchScans(chain.active);
+    scanWatchOff = chain.onChange((e) => watchScans(e.state.provider));
   }
 
   // --- QR entry: the scanned entrance marker fixes the starting position.
@@ -774,6 +797,8 @@ export async function bootApp(options = {}) {
       await chainNoCamera?.stop();
       firstRun?.destroy();
       harness?.destroy();
+      scanOff?.();
+      scanWatchOff?.();
       admin?.destroy();
       offChange();
       offSpeech();
