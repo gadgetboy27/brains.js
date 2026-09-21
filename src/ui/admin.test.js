@@ -392,3 +392,109 @@ describe('AdminPanel — places library', () => {
     expect(admin.draft.validate()).toEqual([]);
   });
 });
+
+describe('AdminPanel — edit existing and saved state', () => {
+  it('shows saved state: published on load, local after a change, published after Publish', async () => {
+    const fetch = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ ok: true }),
+    }));
+    const sessionStorage = { getItem: () => 'k', setItem: () => {}, removeItem: () => {} };
+    const { admin, provider } = make({ fetch, sessionStorage });
+    const saved = () => admin.el.querySelector('[data-f="saved"]').textContent;
+    expect(admin.savedState).toBe('published');
+    expect(saved()).toBe(t('admin.saved.published'));
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
+    expect(admin.savedState).toBe('local');
+    expect(saved()).toBe(t('admin.saved.local'));
+    admin.el.querySelector('[data-f="save"]').click();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(t('admin.saved.now'));
+    await admin.publish();
+    expect(admin.savedState).toBe('published');
+    expect(saved()).toBe(t('admin.saved.published'));
+  });
+
+  it('finds places and markers by name, alias or id', () => {
+    const { admin } = make();
+    admin.showTab('edit');
+    expect(admin.editCandidates('derma').map((c) => c.id)).toEqual(['poi-clinic-b']);
+    expect(admin.editCandidates('lift').map((c) => `${c.kind}:${c.id}`)).toEqual([
+      'poi:poi-lift',
+      'anchor:a-lift-g',
+      'anchor:a-lift-1',
+    ]);
+    expect(admin.editCandidates('').length).toBe(demo.pois.length + demo.anchors.length);
+    expect(admin.editCandidates('zzz')).toEqual([]);
+    admin.el.querySelector('[data-f="edit-search"]').value = 'clinic';
+    admin.el.querySelector('[data-f="edit-search"]').dispatchEvent(new Event('input'));
+    expect(admin.el.querySelectorAll('[data-f="edit-list"] [role="option"]')).toHaveLength(2);
+  });
+
+  it('edits a ward: rename, aliases, category, access — id unchanged', () => {
+    const { admin } = make();
+    admin.showTab('edit');
+    admin.el.querySelector('[data-f="edit-list"] [data-id="poi-clinic-b"]').click();
+    const form = admin.el.querySelector('[data-f="edit-form"]');
+    expect(form.hidden).toBe(false);
+    expect(admin.el.querySelector('[data-f="edit-name"]').value).toBe('Clinic B');
+    admin.el.querySelector('[data-f="edit-name"]').value = 'Ward 4 North';
+    admin.el.querySelector('[data-f="edit-alias"]').value = 'Dermatology, Skin';
+    admin.el.querySelector('[data-f="edit-cat"]').value = 'clinic';
+    admin.el.querySelector('[data-f="edit-access"]').value = 'staff';
+    const item = admin.saveEdit();
+    expect(item).toMatchObject({
+      id: 'poi-clinic-b',
+      name: 'Ward 4 North',
+      aliases: ['Dermatology', 'Skin'],
+      access: 'staff',
+    });
+    expect(form.hidden).toBe(true);
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.edit.saved', { name: 'Ward 4 North' })
+    );
+    expect(admin.savedState).toBe('local');
+    expect(admin.draft.validate()).toEqual([]);
+  });
+
+  it('renames a marker and moves it to where you stand; the printed id stays valid', () => {
+    const { admin, provider } = make();
+    admin.showTab('edit');
+    admin.openEdit('anchor', 'a-entrance');
+    expect(admin.el.querySelector('[data-f="edit-note"]').textContent).toBe(
+      t('admin.edit.markerId', { id: 'a-entrance' })
+    );
+    expect(admin.el.querySelector('[data-f="edit-move"]').disabled).toBe(true); // no pose yet
+    admin.el.querySelector('[data-f="edit-name"]').value = 'Front doors';
+    admin.el.querySelector('[data-f="edit-heading"]').value = '180';
+    expect(admin.saveEdit()).toMatchObject({ id: 'a-entrance', name: 'Front doors', heading: 180 });
+
+    provider.emit(pose(2, 3, 45));
+    admin.openEdit('anchor', 'a-entrance');
+    expect(admin.el.querySelector('[data-f="edit-move"]').disabled).toBe(false);
+    const moved = admin.moveEditedHere();
+    expect(moved).toMatchObject({ id: 'a-entrance', x: 2, y: 3, heading: 45 });
+    expect(admin.draft.anchors.find((a) => a.id === 'a-entrance').name).toBe('Front doors');
+  });
+
+  it('moves a place to where you stand, reusing a nearby node, and removes items', () => {
+    const { admin, provider } = make();
+    admin.showTab('edit');
+    provider.emit(pose(30.3, 6.1)); // next to n-corridor-g-3
+    admin.openEdit('poi', 'poi-toilets-g');
+    const moved = admin.moveEditedHere();
+    expect(moved.node).toBe('n-corridor-g-3');
+    expect(admin.draft.nodes).toHaveLength(demo.nodes.length); // snapped, no new node
+
+    admin.openEdit('poi', 'poi-toilets-g');
+    expect(admin.removeEdited()).toBe(true);
+    expect(admin.draft.pois.find((p) => p.id === 'poi-toilets-g')).toBeUndefined();
+    admin.openEdit('anchor', 'a-lift-1');
+    expect(admin.removeEdited()).toBe(true);
+    expect(admin.draft.anchors.find((a) => a.id === 'a-lift-1')).toBeUndefined();
+    expect(admin.undo().type).toBe('removeAnchor');
+    expect(admin.draft.validate()).toEqual([]);
+  });
+});

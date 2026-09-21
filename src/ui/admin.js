@@ -45,6 +45,11 @@ const CSS = `
 .admin pre { white-space: pre-wrap; font-size: 12px; max-height: 20vh; overflow: auto; background: var(--color-surface-solid); padding: 8px; border-radius: 8px; }
 .admin-form { border: 1px solid var(--color-text-muted); border-radius: 8px; padding: 8px; margin: 6px 0; }
 .admin-form[hidden] { display: none; }
+.admin-list { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; max-height: 24vh; overflow: auto; }
+.admin-list button { width: 100%; text-align: left; display: grid; grid-template-columns: 1fr auto; gap: 8px; min-height: 44px; padding: 8px 12px;
+  border: 1px solid var(--color-text-muted); border-radius: 8px; background: var(--color-surface-solid); color: var(--color-text); font: inherit; cursor: pointer; }
+.admin-list button[aria-selected='true'] { border-color: var(--color-accent); }
+.admin-list .kind { color: var(--color-text-muted); font-size: 0.9em; }
 `;
 
 const DRAFT_KEY = 'brains:admin-draft';
@@ -65,6 +70,9 @@ export class AdminPanel {
   #linking = false;
   #unsub = [];
   #tab = 'record';
+  #published = true;
+  /** @type {{ kind: 'poi' | 'anchor', id: string } | null} */
+  #editing = null;
 
   /**
    * @param {Object} options
@@ -120,11 +128,14 @@ export class AdminPanel {
       <div class="admin-tabs" role="tablist">
         <button type="button" class="btn" role="tab" data-tab="record"></button>
         <button type="button" class="btn" role="tab" data-tab="plan"></button>
+        <button type="button" class="btn" role="tab" data-tab="edit"></button>
         <button type="button" class="btn" role="tab" data-tab="export"></button>
+        <button type="button" class="btn" data-f="save"></button>
         <button type="button" class="btn" data-f="undo"></button>
         <button type="button" class="btn" data-f="close"></button>
       </div>
       <p class="admin-status" data-f="status" role="status" aria-live="polite"></p>
+      <p class="admin-status" data-f="saved"></p>
 
       <div class="admin-tool" data-tool="record" role="tabpanel">
         <div class="admin-actions">
@@ -145,6 +156,27 @@ export class AdminPanel {
           <button type="button" class="btn" data-f="plan-poi"></button>
           <button type="button" class="btn" data-f="plan-remove"></button>
         </div>
+      </div>
+
+      <div class="admin-tool" data-tool="edit" role="tabpanel" hidden>
+        <label><span data-f="edit-search-label"></span><input type="search" data-f="edit-search" autocomplete="off" /></label>
+        <ul class="admin-list" data-f="edit-list" role="listbox"></ul>
+        <form class="admin-form" data-f="edit-form" hidden>
+          <p data-f="edit-kind"></p>
+          <label><span data-f="edit-name-label"></span><input data-f="edit-name" required /></label>
+          <label data-f="edit-alias-row"><span data-f="edit-alias-label"></span><input data-f="edit-alias" /></label>
+          <label data-f="edit-cat-row"><span data-f="edit-cat-label"></span><select data-f="edit-cat"></select></label>
+          <label data-f="edit-access-row"><span data-f="edit-access-label"></span>
+            <select data-f="edit-access"><option value="public"></option><option value="staff"></option></select></label>
+          <label data-f="edit-heading-row"><span data-f="edit-heading-label"></span><input type="number" min="0" max="359" data-f="edit-heading" /></label>
+          <p class="admin-status" data-f="edit-note"></p>
+          <div class="admin-actions">
+            <button type="submit" class="btn btn-primary" data-f="edit-ok"></button>
+            <button type="button" class="btn" data-f="edit-move"></button>
+            <button type="button" class="btn" data-f="edit-remove"></button>
+            <button type="button" class="btn" data-f="edit-cancel"></button>
+          </div>
+        </form>
       </div>
 
       <div class="admin-tool" data-tool="export" role="tabpanel" hidden>
@@ -195,6 +227,20 @@ export class AdminPanel {
     this.#f('download').textContent = t('admin.export.download');
     this.#f('copy').textContent = t('admin.export.copy');
     this.#f('discard').textContent = t('admin.export.discard');
+    this.#f('save').textContent = t('admin.save');
+    this.#f('edit-search-label').textContent = t('admin.edit.search');
+    this.#f('edit-search').placeholder = t('admin.edit.placeholder');
+    this.#f('edit-name-label').textContent = t('admin.name.prompt');
+    this.#f('edit-alias-label').textContent = t('admin.poi.aliases');
+    this.#f('edit-cat-label').textContent = t('admin.poi.category');
+    this.#f('edit-access-label').textContent = t('admin.edit.access');
+    this.#f('edit-access').options[0].textContent = t('admin.edit.access.public');
+    this.#f('edit-access').options[1].textContent = t('admin.edit.access.staff');
+    this.#f('edit-heading-label').textContent = t('admin.anchor.heading');
+    this.#f('edit-ok').textContent = t('admin.save');
+    this.#f('edit-move').textContent = t('admin.edit.moveHere');
+    this.#f('edit-remove').textContent = t('admin.edit.remove');
+    this.#f('edit-cancel').textContent = t('admin.cancel');
     this.#f('poi-name-label').textContent = t('admin.poi.name');
     this.#f('poi-cat-label').textContent = t('admin.poi.category');
     this.#f('poi-alias-label').textContent = t('admin.poi.aliases');
@@ -210,12 +256,23 @@ export class AdminPanel {
     // Choosing a library place fills in its aliases and category.
     this.#f('poi-name').addEventListener('change', () => this.#applyPlaceTemplate());
     for (const c of ['clinic', 'facility', 'service', 'retail', 'food', 'exit', 'staff', 'other']) {
-      const o = this.#doc.createElement('option');
-      o.value = c === 'other' ? '' : c;
-      o.textContent = categoryName(c);
-      this.#f('poi-cat').appendChild(o);
+      for (const sel of ['poi-cat', 'edit-cat']) {
+        const o = this.#doc.createElement('option');
+        o.value = c === 'other' ? '' : c;
+        o.textContent = categoryName(c);
+        this.#f(sel).appendChild(o);
+      }
     }
 
+    this.#f('save').addEventListener('click', () => this.save());
+    this.#f('edit-search').addEventListener('input', () => this.#renderEditList());
+    this.#f('edit-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.saveEdit();
+    });
+    this.#f('edit-move').addEventListener('click', () => this.moveEditedHere());
+    this.#f('edit-remove').addEventListener('click', () => this.removeEdited());
+    this.#f('edit-cancel').addEventListener('click', () => this.#closeEdit());
     this.#f('undo').addEventListener('click', () => this.undo());
     this.#f('close').addEventListener('click', () => this.#opts.onClose?.());
     this.#f('rec-toggle').addEventListener('click', () =>
@@ -260,6 +317,8 @@ export class AdminPanel {
 
     this.#updateRecording();
     this.#updateExport();
+    this.#published = !restored;
+    this.#updateSaved();
     if (restored) this.#status(t('admin.draft.restored'));
     options.floorplan.render();
   }
@@ -291,6 +350,27 @@ export class AdminPanel {
     for (const tab of this.#el.querySelectorAll('[data-tab]'))
       tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
     if (name === 'export') this.#updateExport();
+    if (name === 'edit') this.#renderEditList();
+  }
+
+  // ------------------------------------------------------------ saved state
+
+  /** Save the draft on this device now (it also autosaves on every change). */
+  save() {
+    this.#saveDraft();
+    this.#status(t('admin.saved.now'));
+    this.#updateSaved();
+  }
+
+  /** 'published' once the server has the current draft; else 'local'. */
+  get savedState() {
+    return this.#published ? 'published' : 'local';
+  }
+
+  #updateSaved() {
+    this.#f('saved').textContent = t(
+      this.#published ? 'admin.saved.published' : 'admin.saved.local'
+    );
   }
 
   #status(text) {
@@ -298,8 +378,11 @@ export class AdminPanel {
   }
 
   #changed() {
+    this.#published = false;
     this.#saveDraft();
     this.#updateExport();
+    this.#updateSaved();
+    if (this.#tab === 'edit') this.#renderEditList();
     this.#opts.floorplan.render();
   }
 
@@ -551,6 +634,171 @@ export class AdminPanel {
     ctx.restore();
   }
 
+  // ------------------------------------------------------------ edit existing
+
+  /** Places and markers matching the search box, for the list. */
+  editCandidates(query = this.#f('edit-search').value) {
+    const q = String(query ?? '')
+      .trim()
+      .toLowerCase();
+    const hit = (v) =>
+      !q ||
+      String(v ?? '')
+        .toLowerCase()
+        .includes(q);
+    const floorName = (i) => this.#draft.floorByIndex(i)?.name ?? String(i);
+    const out = [];
+    for (const p of this.#draft.pois) {
+      const node = this.#draft.nodeById(p.node);
+      if (hit(p.name) || (p.aliases ?? []).some(hit) || hit(p.id)) {
+        out.push({
+          kind: 'poi',
+          id: p.id,
+          name: p.name,
+          floor: floorName(p.floor ?? node?.floor ?? 0),
+        });
+      }
+    }
+    for (const a of this.#draft.anchors) {
+      if (hit(a.name) || hit(a.id))
+        out.push({ kind: 'anchor', id: a.id, name: a.name ?? a.id, floor: floorName(a.floor) });
+    }
+    return out;
+  }
+
+  #renderEditList() {
+    const list = this.#f('edit-list');
+    list.textContent = '';
+    const items = this.editCandidates();
+    if (items.length === 0) {
+      const li = this.#doc.createElement('li');
+      li.textContent = t('admin.edit.none');
+      list.appendChild(li);
+      return;
+    }
+    for (const item of items) {
+      const li = this.#doc.createElement('li');
+      const btn = this.#doc.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('role', 'option');
+      btn.dataset.kind = item.kind;
+      btn.dataset.id = item.id;
+      btn.setAttribute(
+        'aria-selected',
+        String(this.#editing?.id === item.id && this.#editing?.kind === item.kind)
+      );
+      btn.innerHTML = '<span class="name"></span><span class="kind"></span>';
+      btn.querySelector('.name').textContent = item.name;
+      btn.querySelector('.kind').textContent =
+        `${t(`admin.edit.kind.${item.kind}`)} · ${item.floor}`;
+      btn.addEventListener('click', () => this.openEdit(item.kind, item.id));
+      li.appendChild(btn);
+      list.appendChild(li);
+    }
+  }
+
+  /** Open the edit form for a place ('poi') or marker ('anchor'). */
+  openEdit(kind, id) {
+    const form = this.#f('edit-form');
+    const isPoi = kind === 'poi';
+    const item = isPoi
+      ? this.#draft.pois.find((p) => p.id === id)
+      : this.#draft.anchors.find((a) => a.id === id);
+    if (!item) throw new Error(`unknown ${kind} ${id}`);
+    this.#editing = { kind, id };
+    this.#f('edit-kind').textContent = t(`admin.edit.kind.${kind}`);
+    this.#f('edit-name').value = item.name ?? '';
+    this.#f('edit-name').required = isPoi;
+    this.#f('edit-alias-row').hidden = !isPoi;
+    this.#f('edit-cat-row').hidden = !isPoi;
+    this.#f('edit-access-row').hidden = !isPoi;
+    this.#f('edit-heading-row').hidden = isPoi;
+    if (isPoi) {
+      this.#f('edit-alias').value = (item.aliases ?? []).join(', ');
+      this.#f('edit-cat').value = item.category ?? '';
+      this.#f('edit-access').value = item.access ?? 'public';
+      this.#f('edit-note').textContent = '';
+    } else {
+      this.#f('edit-heading').value = String(item.heading ?? 0);
+      this.#f('edit-note').textContent = t('admin.edit.markerId', { id });
+    }
+    this.#f('edit-move').disabled = !this.#pose;
+    form.hidden = false;
+    this.#renderEditList();
+    this.#f('edit-name').focus?.();
+  }
+
+  #closeEdit() {
+    this.#editing = null;
+    this.#f('edit-form').hidden = true;
+    this.#renderEditList();
+  }
+
+  /** Apply the edit form. */
+  saveEdit() {
+    if (!this.#editing) return null;
+    const { kind, id } = this.#editing;
+    let item;
+    if (kind === 'poi') {
+      item = this.#draft.updatePoi(id, {
+        name: this.#f('edit-name').value,
+        aliases: this.#f('edit-alias').value.split(','),
+        category: this.#f('edit-cat').value || null,
+        access: this.#f('edit-access').value === 'staff' ? 'staff' : null,
+      });
+    } else {
+      item = this.#draft.updateAnchor(id, {
+        name: this.#f('edit-name').value.trim() || null,
+        heading: Number(this.#f('edit-heading').value) || 0,
+      });
+    }
+    this.#status(t('admin.edit.saved', { name: item.name ?? item.id }));
+    this.#closeEdit();
+    this.#changed();
+    return item;
+  }
+
+  /** Move the edited place/marker to the current position. */
+  moveEditedHere() {
+    if (!this.#editing || !this.#pose) return null;
+    const { kind, id } = this.#editing;
+    let item;
+    if (kind === 'poi') {
+      // A place lives on a node: reuse a node within 1.5 m or make one here.
+      const node = this.#draft.addNode(
+        { x: this.#pose.x, y: this.#pose.y, z: this.#pose.z, floor: this.#pose.floor },
+        { snap: 1.5 }
+      );
+      item = this.#draft.movePoi(id, node.id);
+    } else {
+      item = this.#draft.updateAnchor(id, {
+        x: this.#pose.x,
+        y: this.#pose.y,
+        z: this.#pose.z,
+        floor: this.#pose.floor,
+        heading: this.#pose.heading,
+      });
+      this.#f('edit-heading').value = String(item.heading);
+    }
+    this.#status(t('admin.edit.moved', { name: item.name ?? item.id }));
+    this.#changed();
+    return item;
+  }
+
+  removeEdited() {
+    if (!this.#editing) return false;
+    const { kind, id } = this.#editing;
+    const item =
+      kind === 'poi'
+        ? this.#draft.pois.find((p) => p.id === id)
+        : this.#draft.anchors.find((a) => a.id === id);
+    const ok = kind === 'poi' ? this.#draft.removePoi(id) : this.#draft.removeAnchor(id);
+    if (ok) this.#status(t('admin.edit.removed', { name: item?.name ?? id }));
+    this.#closeEdit();
+    this.#changed();
+    return ok;
+  }
+
   // ----------------------------------------------------------------- export
 
   #updateExport() {
@@ -640,6 +888,8 @@ export class AdminPanel {
     } catch {
       // ignore
     }
+    this.#published = true;
+    this.#updateSaved();
     this.#status(t('admin.export.published'));
     return body;
   }

@@ -222,6 +222,46 @@ export class VenueDraft {
     return p;
   }
 
+  /**
+   * Change a POI's name, aliases, category, access or description.
+   * @param {string} id
+   * @param {{ name?: string, aliases?: string[], category?: string | null, access?: 'public' | 'staff' | null, description?: string | null }} patch
+   */
+  updatePoi(id, patch) {
+    const p = this.pois.find((x) => x.id === id);
+    if (!p) throw new Error(`unknown poi ${id}`);
+    const before = { ...p };
+    if (p.aliases) before.aliases = [...p.aliases];
+    if (patch.name !== undefined) {
+      if (!patch.name.trim()) throw new TypeError('a POI needs a name');
+      p.name = patch.name.trim();
+    }
+    if (patch.aliases !== undefined) {
+      const aliases = patch.aliases.map((a) => a.trim()).filter(Boolean);
+      if (aliases.length) p.aliases = aliases;
+      else delete p.aliases;
+    }
+    for (const k of ['category', 'access', 'description']) {
+      if (patch[k] === undefined) continue;
+      if (patch[k]) p[k] = patch[k];
+      else delete p[k];
+    }
+    this.#record({ type: 'updatePoi', poi: id, before });
+    return p;
+  }
+
+  /** Attach a POI to a different node (e.g. "move here"). */
+  movePoi(id, nodeId) {
+    const p = this.pois.find((x) => x.id === id);
+    if (!p) throw new Error(`unknown poi ${id}`);
+    if (!this.nodeById(nodeId)) throw new Error(`unknown node ${nodeId}`);
+    const before = { ...p };
+    p.node = nodeId;
+    if (p.floor !== undefined) p.floor = this.nodeById(nodeId).floor;
+    this.#record({ type: 'updatePoi', poi: id, before });
+    return p;
+  }
+
   removePoi(id) {
     const i = this.pois.findIndex((p) => p.id === id);
     if (i < 0) return false;
@@ -246,6 +286,31 @@ export class VenueDraft {
     if (anchor.name) a.name = anchor.name;
     this.anchors.push(a);
     this.#record({ type: 'addAnchor', anchor: id });
+    return a;
+  }
+
+  /**
+   * Change a marker's name, position or heading. Its id — what is printed in
+   * the QR code — never changes, so existing prints keep working.
+   * @param {string} id
+   * @param {{ name?: string | null, x?: number, y?: number, z?: number, floor?: number, heading?: number }} patch
+   */
+  updateAnchor(id, patch) {
+    const a = this.anchors.find((x) => x.id === id);
+    if (!a) throw new Error(`unknown anchor ${id}`);
+    const before = { ...a };
+    if (patch.name !== undefined) {
+      if (patch.name) a.name = patch.name;
+      else delete a.name;
+    }
+    if (patch.floor !== undefined) {
+      if (!this.floorByIndex(patch.floor))
+        throw new RangeError(`floor ${patch.floor} is not defined`);
+      a.floor = patch.floor;
+    }
+    for (const k of ['x', 'y', 'z']) if (patch[k] !== undefined) a[k] = round(patch[k]);
+    if (patch.heading !== undefined) a.heading = Math.round(((patch.heading % 360) + 360) % 360);
+    this.#record({ type: 'updateAnchor', anchor: id, before });
     return a;
   }
 
@@ -307,6 +372,16 @@ export class VenueDraft {
       case 'removePoi':
         this.pois.push(entry.poi);
         break;
+      case 'updatePoi': {
+        const i = this.pois.findIndex((p) => p.id === entry.poi);
+        if (i >= 0) this.pois[i] = entry.before;
+        break;
+      }
+      case 'updateAnchor': {
+        const i = this.anchors.findIndex((a) => a.id === entry.anchor);
+        if (i >= 0) this.anchors[i] = entry.before;
+        break;
+      }
       case 'addAnchor':
         this.anchors = this.anchors.filter((a) => a.id !== entry.anchor);
         break;

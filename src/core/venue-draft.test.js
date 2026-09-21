@@ -145,3 +145,55 @@ describe('VenueDraft — from an existing venue', () => {
     expect(demo.nodes).toHaveLength(16);
   });
 });
+
+describe('VenueDraft — editing existing places and markers', () => {
+  it('updates a place in place, keeping its id, and undoes', () => {
+    const d = new VenueDraft(demo);
+    const before = structuredClone(d.pois.find((p) => p.id === 'poi-clinic-b'));
+    const updated = d.updatePoi('poi-clinic-b', {
+      name: 'Ward 4 North',
+      aliases: ['Dermatology', ' Skin clinic ', ''],
+      category: 'clinic',
+      access: 'staff',
+    });
+    expect(updated.id).toBe('poi-clinic-b');
+    expect(updated).toMatchObject({
+      name: 'Ward 4 North',
+      aliases: ['Dermatology', 'Skin clinic'],
+      access: 'staff',
+    });
+    expect(d.validate()).toEqual([]);
+    d.updatePoi('poi-clinic-b', { access: null, aliases: [] });
+    expect(updated.access).toBeUndefined();
+    expect(updated.aliases).toBeUndefined();
+    expect(() => d.updatePoi('poi-clinic-b', { name: ' ' })).toThrow(/needs a name/);
+    expect(() => d.updatePoi('nope', { name: 'x' })).toThrow(/unknown poi/);
+    d.undo();
+    d.undo();
+    expect(d.pois.find((p) => p.id === 'poi-clinic-b')).toEqual(before);
+  });
+
+  it('moves a place to another node (and its floor follows)', () => {
+    const d = new VenueDraft(demo);
+    const moved = d.movePoi('poi-clinic-b', 'n-clinic-a');
+    expect(moved.node).toBe('n-clinic-a');
+    expect(moved.floor).toBe(0);
+    expect(() => d.movePoi('poi-clinic-b', 'n-nope')).toThrow(/unknown node/);
+    d.undo();
+    expect(d.pois.find((p) => p.id === 'poi-clinic-b').node).toBe('n-clinic-b');
+  });
+
+  it('updates a marker without changing its id', () => {
+    const d = new VenueDraft(demo);
+    const a = d.updateAnchor('a-entrance', { name: 'Front doors', heading: 450, x: 1.234, y: 2 });
+    expect(a).toMatchObject({ id: 'a-entrance', name: 'Front doors', heading: 90, x: 1.23, y: 2 });
+    d.updateAnchor('a-entrance', { name: null });
+    expect(a.name).toBeUndefined();
+    expect(() => d.updateAnchor('a-entrance', { floor: 9 })).toThrow(/floor 9/);
+    expect(d.validate()).toEqual([]);
+    d.undo();
+    d.undo();
+    expect(d.anchors.find((x) => x.id === 'a-entrance').name).toBeUndefined(); // demo anchor had no name
+    expect(d.anchors.find((x) => x.id === 'a-entrance').heading).toBe(0);
+  });
+});
