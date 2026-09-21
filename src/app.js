@@ -487,8 +487,13 @@ export async function bootApp(options = {}) {
     speech.announceCancelled();
   }
 
+  let returnToPlanAfterScan = false;
   function onPose(pose) {
     lastPose = pose;
+    if (returnToPlanAfterScan && pose.confidence >= 1) {
+      returnToPlanAfterScan = false;
+      showView('floorplan', { manual: true });
+    }
     arScene.setPose(pose);
     arrow.setPose(pose);
     floorplan.setPose(pose);
@@ -628,10 +633,20 @@ export async function bootApp(options = {}) {
       mount: root,
       storage,
       initialPose: lastPose,
-      onClose: () => admin?.destroy(),
+      onScanRequest: () => {
+        // Show the camera; come back to the plan on the next exact fix (a scan).
+        returnToPlanAfterScan = true;
+        showView('ar', { manual: true });
+      },
+      onClose: () => {
+        admin?.destroy();
+        admin = null;
+        hud.setCompact(false);
+      },
       ...options.adminOptions,
     });
     if (view !== 'floorplan') showView('floorplan', { manual: true }); // editing happens on the plan
+    hud.setCompact(true); // give the map the screen; the HUD keeps only the status line
   }
 
   // --- QR entry: the scanned entrance marker fixes the starting position.

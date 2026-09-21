@@ -31,7 +31,7 @@ describe('places library', () => {
     for (const p of HOSPITAL_PLACES) {
       expect(p.aliases.length, p.name).toBeGreaterThan(0);
       expect(
-        ['clinic', 'facility', 'service', 'retail', 'food', 'exit', 'staff'],
+        ['clinic', 'facility', 'service', 'retail', 'food', 'exit', 'staff', 'ward'],
         p.name
       ).toContain(p.category);
       if (p.access) expect(['public', 'staff']).toContain(p.access);

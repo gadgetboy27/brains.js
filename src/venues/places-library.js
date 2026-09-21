@@ -194,8 +194,8 @@ export const HOSPITAL_PLACES = Object.freeze([
   {
     name: 'Ward',
     aliases: ['Inpatients'],
-    category: 'clinic',
-    note: 'Duplicate this per ward with its real name/number (e.g. "Ward 4 North").',
+    category: 'ward',
+    note: 'Pick the Ward category and enter the number; the name is filled in (e.g. "Ward 12").',
   },
   {
     name: 'Theatre reception',

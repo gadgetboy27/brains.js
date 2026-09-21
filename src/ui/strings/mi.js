@@ -89,6 +89,8 @@ export default {
     'category.food': 'Kai me te inu',
     'category.exit': 'Ngā putanga',
     'category.staff': 'Kaimahi',
+    'category.ward': 'Ngā wāri',
+
     'category.other': 'Ētahi atu',
 
     // Spoken guidance
@@ -235,6 +237,12 @@ export default {
     'admin.saved.local': 'Kua tiakina ki tēnei waea · kāore anō kia whakaputaina',
     'admin.saved.published': 'Kua whakaputaina — kei te katoa tēnei putanga',
     'admin.saved.now': 'Kua tiakina',
+    'admin.ward.number': 'Tau wāri (1–99)',
+    'admin.ward.name': 'Wāri {n}',
+    'admin.collapse': 'Huna ngā utauta',
+    'admin.expand': 'Whakaatu ngā utauta',
+    'admin.record.scan': 'Matawaia he tohu hei whakaū i tōku wāhi',
+    'admin.record.scanning': 'Tohua te kāmera ki tētahi tohu i te pakitara…',
     'admin.draft.restored': 'Kua whakahokia te tauira mai i tēnei pūrere.',
     'admin.close': 'Kati te whakahaere',
     'admin.ok': 'Āe',

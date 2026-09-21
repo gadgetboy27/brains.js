@@ -36,6 +36,8 @@ const CSS = `
 .hud-notices { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .hud-notices:empty { display: none; }
 .hud-notices li { border: 2px solid var(--color-warn); border-radius: var(--radius); padding: 8px 12px; }
+.hud.hud-compact .hud-speech, .hud.hud-compact [data-f="nav-actions"] { display: none; }
+.hud.hud-compact { padding-top: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
 .hud-speech { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .hud-speech[hidden] { display: none; }
 .hud-speech label { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
@@ -319,6 +321,19 @@ export class Hud {
     this.#f('error').hidden = true;
     this.#f('error-message').textContent = '';
     this.#errorRetry = null;
+  }
+
+  /**
+   * Compact mode hides the navigation and voice controls (e.g. while the
+   * admin panel is open) so the map gets the space on a phone.
+   * @param {boolean} on
+   */
+  setCompact(on) {
+    this.#el.classList.toggle('hud-compact', Boolean(on));
+  }
+
+  get compact() {
+    return this.#el.classList.contains('hud-compact');
   }
 
   // --------------------------------------------------------------- lifecycle

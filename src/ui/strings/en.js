@@ -88,6 +88,8 @@ export default {
     'category.food': 'Food & drink',
     'category.exit': 'Exits',
     'category.staff': 'Staff',
+    'category.ward': 'Wards',
+
     'category.other': 'Other',
 
     // Spoken guidance (Web Speech API); also mirrored to a live region.
@@ -228,6 +230,12 @@ export default {
     'admin.saved.local': 'Saved on this phone · not yet published',
     'admin.saved.published': 'Published — everyone has this version',
     'admin.saved.now': 'Saved',
+    'admin.ward.number': 'Ward number (1–99)',
+    'admin.ward.name': 'Ward {n}',
+    'admin.collapse': 'Hide tools',
+    'admin.expand': 'Show tools',
+    'admin.record.scan': 'Scan a marker to fix my position',
+    'admin.record.scanning': 'Point the camera at a marker on the wall…',
     'admin.draft.restored': 'Draft restored from this device.',
     'admin.close': 'Close admin',
     'admin.ok': 'OK',

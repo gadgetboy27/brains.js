@@ -195,6 +195,18 @@ describe('Hud — speech controls and live region', () => {
   });
 });
 
+describe('Hud — compact mode', () => {
+  it('hides navigation and voice controls while compact', () => {
+    const hud = createHud();
+    expect(hud.compact).toBe(false);
+    hud.setCompact(true);
+    expect(hud.compact).toBe(true);
+    expect(hud.el.classList.contains('hud-compact')).toBe(true);
+    hud.setCompact(false);
+    expect(hud.compact).toBe(false);
+  });
+});
+
 function matchesTemplate(template, text) {
   const re = new RegExp(
     `^${template.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{\w+\\\}/g, '.+')}$`

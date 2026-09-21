@@ -874,3 +874,35 @@ describe('bootApp — admin mode', () => {
     expect(document.querySelector('.admin')).toBeNull();
   });
 });
+
+describe('bootApp — admin on a phone', () => {
+  it('compacts the HUD while admin is open, and "scan a marker" shows the camera until an exact fix', async () => {
+    const { app } = await boot({
+      config: { admin: true },
+      options: {
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: {
+        mock: { path: [{ x: 0, y: 0, floor: 0 }], fixIntervalMs: 100000, speedMps: 0 },
+      },
+    });
+    expect(app.hud.compact).toBe(true);
+    expect(app.view).toBe('floorplan');
+
+    app.admin.el.querySelector('[data-f="rec-scan"]').click();
+    expect(app.view).toBe('ar');
+    // A dead-reckoned pose does not bring the plan back; an exact fix (a scan) does.
+    app.chain.active.forceLowConfidence(0.4);
+    app.chain.active.teleport({ x: 1, y: 1, floor: 0 });
+    expect(app.view).toBe('ar');
+    app.chain.active.clearForcedConfidence();
+    app.chain.active.forceLowConfidence(1);
+    app.chain.active.teleport({ x: 2, y: 2, floor: 0 });
+    expect(app.view).toBe('floorplan');
+
+    app.admin.el.querySelector('[data-f="close"]').click();
+    expect(app.hud.compact).toBe(false);
+    expect(document.querySelector('.admin')).toBeNull();
+    await app.destroy();
+  });
+});

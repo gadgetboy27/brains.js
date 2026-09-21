@@ -498,3 +498,73 @@ describe('AdminPanel — edit existing and saved state', () => {
     expect(admin.draft.validate()).toEqual([]);
   });
 });
+
+describe('AdminPanel — wards, phone layout, scan', () => {
+  it('Ward category takes a number and names the place "Ward N" with search aliases', () => {
+    const { admin, provider } = make();
+    provider.emit(pose(12, 6));
+    admin.addPoiHere();
+    const cat = admin.el.querySelector('[data-f="poi-cat"]');
+    expect([...cat.options].map((o) => o.value)).toContain('ward');
+    cat.value = 'ward';
+    cat.dispatchEvent(new Event('change'));
+    expect(admin.el.querySelector('[data-f="poi-ward-row"]').hidden).toBe(false);
+    const num = admin.el.querySelector('[data-f="poi-ward"]');
+    num.value = '12';
+    num.dispatchEvent(new Event('input'));
+    expect(admin.el.querySelector('[data-f="poi-name"]').value).toBe('Ward 12');
+    const poi = admin.submitPoi({ category: 'ward', ward: 12, aliases: ['Cardiac ward'] });
+    expect(poi).toMatchObject({
+      name: 'Ward 12',
+      category: 'ward',
+      aliases: ['W12', 'Ward12', 'Cardiac ward'],
+    });
+    expect(admin.submitPoi({ category: 'ward', ward: 100 })).toBeUndefined(); // out of range: nothing added
+    expect(admin.draft.validate()).toEqual([]);
+  });
+
+  it('editing a ward keeps the number in sync', () => {
+    const { admin, provider } = make();
+    provider.emit(pose(12, 6));
+    admin.addPoiHere();
+    const poi = admin.submitPoi({ category: 'ward', ward: 4 });
+    admin.showTab('edit');
+    admin.openEdit('poi', poi.id);
+    expect(admin.el.querySelector('[data-f="edit-ward"]').value).toBe('4');
+    expect(admin.el.querySelector('[data-f="edit-ward-row"]').hidden).toBe(false);
+    admin.el.querySelector('[data-f="edit-ward"]').value = '7';
+    admin.el.querySelector('[data-f="edit-ward"]').dispatchEvent(new Event('input'));
+    expect(admin.el.querySelector('[data-f="edit-name"]').value).toBe('Ward 7');
+    expect(admin.saveEdit()).toMatchObject({
+      id: poi.id,
+      name: 'Ward 7',
+      aliases: ['W7', 'Ward7'],
+    });
+  });
+
+  it('collapses to the tab row and back', () => {
+    const { admin } = make();
+    const btn = admin.el.querySelector('[data-f="collapse"]');
+    expect(admin.collapsed).toBe(false);
+    btn.click();
+    expect(admin.collapsed).toBe(true);
+    expect(btn.textContent).toBe(t('admin.expand'));
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    btn.click();
+    expect(admin.collapsed).toBe(false);
+  });
+
+  it('offers "scan a marker" only when the app can show the camera', () => {
+    const { admin } = make();
+    expect(admin.el.querySelector('[data-f="rec-scan"]').hidden).toBe(true);
+    const onScanRequest = vi.fn();
+    const { admin: withScan } = make({ onScanRequest });
+    const btn = withScan.el.querySelector('[data-f="rec-scan"]');
+    expect(btn.hidden).toBe(false);
+    btn.click();
+    expect(onScanRequest).toHaveBeenCalledOnce();
+    expect(withScan.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.record.scanning')
+    );
+  });
+});

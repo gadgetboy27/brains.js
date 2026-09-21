@@ -33,8 +33,15 @@ const CSS = `
 .admin[hidden] { display: none; }
 .admin h2 { margin: 0 0 4px; font-size: 1em; }
 .admin p { margin: 4px 0; }
-.admin-tabs { display: flex; gap: 6px; margin: 6px 0; }
+.admin-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .admin-tabs .btn { min-height: 40px; padding: 6px 12px; }
+.admin.admin-collapsed > :not(.admin-tabs):not([data-f="status"]):not([data-f="saved"]) { display: none; }
+.admin.admin-collapsed { max-height: none; }
+@media (max-width: 600px) {
+  .admin { top: calc(56px + env(safe-area-inset-top)); left: 4px; right: 4px; max-height: 42vh; padding: 8px 10px; font-size: 14px; }
+  .admin h2, .admin > p[data-f="hint"] { display: none; }
+  .admin-tabs .btn { min-height: 36px; padding: 4px 10px; font-size: 14px; }
+}
 .admin-tool[hidden] { display: none; }
 .admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
 .admin label { display: grid; gap: 4px; margin: 6px 0; }
@@ -90,6 +97,7 @@ export class AdminPanel {
    * @param {string} [options.publishUrl]             API base; default `/api/venues/<id>` on this origin.
    * @param {Storage | null} [options.sessionStorage] Keeps the publishing key for the session.
    * @param {ReadonlyArray<object>} [options.places]  Place templates for the POI form (default: hospital library).
+   * @param {() => void} [options.onScanRequest]   Show the camera so a marker can be scanned to fix position.
    * @param {object | null} [options.initialPose]  Last known pose, if positioning started before this panel.
    * @param {Function} [options.getComputedStyle]
    */
@@ -132,6 +140,7 @@ export class AdminPanel {
         <button type="button" class="btn" role="tab" data-tab="export"></button>
         <button type="button" class="btn" data-f="save"></button>
         <button type="button" class="btn" data-f="undo"></button>
+        <button type="button" class="btn" data-f="collapse" aria-expanded="true"></button>
         <button type="button" class="btn" data-f="close"></button>
       </div>
       <p class="admin-status" data-f="status" role="status" aria-live="polite"></p>
@@ -143,6 +152,7 @@ export class AdminPanel {
           <button type="button" class="btn" data-f="rec-node"></button>
           <button type="button" class="btn" data-f="rec-poi"></button>
           <button type="button" class="btn" data-f="rec-anchor"></button>
+          <button type="button" class="btn" data-f="rec-scan"></button>
         </div>
         <p data-f="rec-status"></p>
       </div>
@@ -166,6 +176,7 @@ export class AdminPanel {
           <label><span data-f="edit-name-label"></span><input data-f="edit-name" required /></label>
           <label data-f="edit-alias-row"><span data-f="edit-alias-label"></span><input data-f="edit-alias" /></label>
           <label data-f="edit-cat-row"><span data-f="edit-cat-label"></span><select data-f="edit-cat"></select></label>
+          <label data-f="edit-ward-row" hidden><span data-f="edit-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="edit-ward" /></label>
           <label data-f="edit-access-row"><span data-f="edit-access-label"></span>
             <select data-f="edit-access"><option value="public"></option><option value="staff"></option></select></label>
           <label data-f="edit-heading-row"><span data-f="edit-heading-label"></span><input type="number" min="0" max="359" data-f="edit-heading" /></label>
@@ -195,6 +206,7 @@ export class AdminPanel {
         <label><span data-f="poi-name-label"></span><input data-f="poi-name" list="admin-places" autocomplete="off" required /></label>
         <datalist id="admin-places" data-f="places"></datalist>
         <label><span data-f="poi-cat-label"></span><select data-f="poi-cat"></select></label>
+        <label data-f="poi-ward-row" hidden><span data-f="poi-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="poi-ward" /></label>
         <label><span data-f="poi-alias-label"></span><input data-f="poi-alias" /></label>
         <div class="admin-actions">
           <button type="submit" class="btn btn-primary" data-f="poi-ok"></button>
@@ -255,7 +267,22 @@ export class AdminPanel {
     }
     // Choosing a library place fills in its aliases and category.
     this.#f('poi-name').addEventListener('change', () => this.#applyPlaceTemplate());
-    for (const c of ['clinic', 'facility', 'service', 'retail', 'food', 'exit', 'staff', 'other']) {
+    this.#f('poi-ward-label').textContent = t('admin.ward.number');
+    this.#f('edit-ward-label').textContent = t('admin.ward.number');
+    this.#f('collapse').textContent = t('admin.collapse');
+    this.#f('rec-scan').textContent = t('admin.record.scan');
+    this.#f('rec-scan').hidden = typeof options.onScanRequest !== 'function';
+    for (const c of [
+      'clinic',
+      'ward',
+      'facility',
+      'service',
+      'retail',
+      'food',
+      'exit',
+      'staff',
+      'other',
+    ]) {
       for (const sel of ['poi-cat', 'edit-cat']) {
         const o = this.#doc.createElement('option');
         o.value = c === 'other' ? '' : c;
@@ -265,6 +292,21 @@ export class AdminPanel {
     }
 
     this.#f('save').addEventListener('click', () => this.save());
+    this.#f('collapse').addEventListener('click', () => this.setCollapsed(!this.collapsed));
+    this.#f('rec-scan').addEventListener('click', () => {
+      this.#status(t('admin.record.scanning'));
+      options.onScanRequest?.();
+    });
+    // Ward category: show the number field; the name follows the number.
+    for (const prefix of ['poi', 'edit']) {
+      const cat = this.#f(`${prefix}-cat`);
+      const ward = this.#f(`${prefix}-ward`);
+      cat.addEventListener('change', () => this.#syncWardRow(prefix));
+      ward.addEventListener('input', () => {
+        const n = Number(ward.value);
+        if (n >= 1 && n <= 99) this.#f(`${prefix}-name`).value = t('admin.ward.name', { n });
+      });
+    }
     this.#f('edit-search').addEventListener('input', () => this.#renderEditList());
     this.#f('edit-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -545,14 +587,22 @@ export class AdminPanel {
   #submitPoiForm() {
     const form = this.#f('poi-form');
     const name = this.#f('poi-name').value.trim();
-    if (!name) return;
+    const isWard = this.#f('poi-cat').value === 'ward';
+    if (!name && !(isWard && AdminPanel.wardFields(this.#f('poi-ward').value))) return;
     const aliases = this.#f('poi-alias')
       .value.split(',')
       .map((s) => s.trim())
       .filter(Boolean);
     const category = this.#f('poi-cat').value || undefined;
     const access = form.dataset.access === 'staff' ? 'staff' : undefined;
-    const poi = this.#draft.addPoi({ name, node: form.dataset.node, aliases, category, access });
+    const ward = category === 'ward' ? AdminPanel.wardFields(this.#f('poi-ward').value) : null;
+    const poi = this.#draft.addPoi({
+      name: ward?.name ?? name,
+      node: form.dataset.node,
+      aliases: ward ? [...new Set([...ward.aliases, ...aliases])] : aliases,
+      category,
+      access,
+    });
     form.dataset.access = '';
     form.hidden = true;
     this.#status(t('admin.record.added', { name: poi.name }));
@@ -571,10 +621,12 @@ export class AdminPanel {
   }
 
   /** Submit the POI form programmatically (tests). */
-  submitPoi({ name, aliases = [], category }) {
+  submitPoi({ name = '', aliases = [], category, ward }) {
     this.#f('poi-name').value = name;
     this.#f('poi-alias').value = aliases.join(', ');
     this.#f('poi-cat').value = category ?? '';
+    this.#syncWardRow('poi');
+    if (ward !== undefined) this.#f('poi-ward').value = String(ward);
     return this.#submitPoiForm();
   }
 
@@ -718,6 +770,9 @@ export class AdminPanel {
       this.#f('edit-cat').value = item.category ?? '';
       this.#f('edit-access').value = item.access ?? 'public';
       this.#f('edit-note').textContent = '';
+      const n = /^\D*(\d{1,2})\b/.exec(item.name ?? '')?.[1];
+      this.#f('edit-ward').value = item.category === 'ward' && n ? n : '';
+      this.#syncWardRow('edit');
     } else {
       this.#f('edit-heading').value = String(item.heading ?? 0);
       this.#f('edit-note').textContent = t('admin.edit.markerId', { id });
@@ -726,6 +781,30 @@ export class AdminPanel {
     form.hidden = false;
     this.#renderEditList();
     this.#f('edit-name').focus?.();
+  }
+
+  #syncWardRow(prefix) {
+    const isWard = this.#f(`${prefix}-cat`).value === 'ward';
+    this.#f(`${prefix}-ward-row`).hidden = !isWard;
+    if (isWard) this.#f(`${prefix}-ward`).focus?.();
+  }
+
+  /** Ward number → canonical name and aliases (e.g. "Ward 12", ["W12", "Ward12"]). */
+  static wardFields(n) {
+    const num = Number(n);
+    if (!(Number.isInteger(num) && num >= 1 && num <= 99)) return null;
+    return { name: t('admin.ward.name', { n: num }), aliases: [`W${num}`, `Ward${num}`] };
+  }
+
+  /** Collapse the panel to its tab row so the map is visible on a phone. */
+  setCollapsed(on) {
+    this.#el.classList.toggle('admin-collapsed', Boolean(on));
+    this.#f('collapse').textContent = t(on ? 'admin.expand' : 'admin.collapse');
+    this.#f('collapse').setAttribute('aria-expanded', String(!on));
+  }
+
+  get collapsed() {
+    return this.#el.classList.contains('admin-collapsed');
   }
 
   #closeEdit() {
@@ -740,10 +819,15 @@ export class AdminPanel {
     const { kind, id } = this.#editing;
     let item;
     if (kind === 'poi') {
+      const category = this.#f('edit-cat').value || null;
+      const ward = category === 'ward' ? AdminPanel.wardFields(this.#f('edit-ward').value) : null;
+      const typed = this.#f('edit-alias').value.split(',');
+      // On renumbering, old W4 / Ward4 style aliases are replaced, not kept.
+      const kept = typed.map((v) => v.trim()).filter((v) => v && !/^(w|ward)\s*\d{1,2}$/i.test(v));
       item = this.#draft.updatePoi(id, {
-        name: this.#f('edit-name').value,
-        aliases: this.#f('edit-alias').value.split(','),
-        category: this.#f('edit-cat').value || null,
+        name: ward?.name ?? this.#f('edit-name').value,
+        aliases: ward ? [...new Set([...ward.aliases, ...kept])] : typed,
+        category,
         access: this.#f('edit-access').value === 'staff' ? 'staff' : null,
       });
     } else {
