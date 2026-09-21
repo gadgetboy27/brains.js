@@ -125,67 +125,83 @@ describe('PoseFusion — confidence decays with time', () => {
   });
 });
 
-describe('PoseFusion — dead reckoning from device motion', () => {
-  it('integrates forward acceleration into +y when heading is 0', () => {
+describe('PoseFusion — pedestrian dead reckoning (step counting)', () => {
+  /** One footstep: a peak in acceleration magnitude, then a fall — the bounce of a walking gait. */
+  function walkStep(f) {
+    f.handleMotion({ acceleration: { x: 0, y: 2.5, z: 0 } }); // rising to a peak above the default threshold
+    f.handleMotion({ acceleration: { x: 0, y: 0.2, z: 0 } }); // falling: the step is counted here
+  }
+
+  it('advances one stride along the heading per detected step, not along the acceleration axis', () => {
     const clock = fakeClock();
-    // Disable time decay so we can isolate distance.
     const f = new PoseFusion({ now: clock.now, timeHalfLifeMs: 0, distanceHalfLifeM: 0 });
     f.applyFix(fix(clock));
 
-    // 1 m/s² forward for 1 s in 10 × 100 ms steps: v = 1 m/s, s = ½·a·t² = 0.5 m.
-    for (let i = 0; i < 10; i += 1) {
-      f.handleMotion({ acceleration: { x: 0, y: 1, z: 0 }, interval: 100 });
-    }
+    walkStep(f);
+    clock.advance(400); // clear the refractory window before the next step
+    walkStep(f);
+
     const pose = f.getPose();
     expect(pose.x).toBeCloseTo(0, 9);
-    expect(pose.y).toBeCloseTo(0.5, 9);
+    expect(pose.y).toBeCloseTo(2 * 0.73, 9); // default strideM, heading 0 = venue +y
     expect(pose.z).toBeCloseTo(0, 9);
-    expect(f.distanceSinceFix).toBeCloseTo(0.5, 9);
+    expect(f.distanceSinceFix).toBeCloseTo(2 * 0.73, 9);
   });
 
-  it('rotates device-frame acceleration by the current heading', () => {
+  it('steps along the current heading, whatever axis the accelerometer spike came from', () => {
     const clock = fakeClock();
     const f = new PoseFusion({ now: clock.now, timeHalfLifeMs: 0, distanceHalfLifeM: 0 });
-    // Facing venue +x (90° clockwise from +y): device "forward" is venue +x.
+    // Facing venue +x (90° clockwise from +y): a step moves +x, not +y.
     f.applyFix(fix(clock, { heading: 90 }));
-    for (let i = 0; i < 10; i += 1) {
-      f.handleMotion({ acceleration: { x: 0, y: 1, z: 0 }, interval: 100 });
-    }
+    walkStep(f);
     const pose = f.getPose();
-    expect(pose.x).toBeCloseTo(0.5, 9);
+    expect(pose.x).toBeCloseTo(0.73, 9);
     expect(pose.y).toBeCloseTo(0, 9);
   });
 
-  it('falls back to the injected clock when interval is absent', () => {
+  it('ignores a second peak inside the refractory window (one footstep, not two)', () => {
     const clock = fakeClock();
     const f = new PoseFusion({ now: clock.now, timeHalfLifeMs: 0, distanceHalfLifeM: 0 });
     f.applyFix(fix(clock));
-
-    f.handleMotion({ acceleration: { x: 0, y: 1, z: 0 } }); // first sample: dt unknown, ignored
-    clock.advance(1_000);
-    f.handleMotion({ acceleration: { x: 0, y: 1, z: 0 } }); // dt = 1 s
-    // One Euler step: v = 1 m/s, s = ½·(0+1)·1 = 0.5 m.
-    expect(f.getPose().y).toBeCloseTo(0.5, 9);
+    walkStep(f);
+    walkStep(f); // no time advanced: the same footstep's bounce, not a second step
+    expect(f.distanceSinceFix).toBeCloseTo(0.73, 9);
   });
 
-  it('treats null / missing acceleration components as 0', () => {
+  it('ignores jostling below the step threshold', () => {
+    const clock = fakeClock();
+    const f = new PoseFusion({ now: clock.now, strideM: 1, stepThreshold: 1.5 });
+    f.applyFix(fix(clock));
+    f.handleMotion({ acceleration: { x: 0, y: 0.8, z: 0 } });
+    f.handleMotion({ acceleration: { x: 0, y: 0.1, z: 0 } });
+    expect(f.distanceSinceFix).toBe(0);
+  });
+
+  it('a calibrated stride changes the distance per step', () => {
+    const clock = fakeClock();
+    const f = new PoseFusion({ now: clock.now, strideM: 0.9 });
+    f.applyFix(fix(clock));
+    walkStep(f);
+    expect(f.getPose().y).toBeCloseTo(0.9, 9);
+  });
+
+  it('treats null / missing acceleration components as 0 (no phantom step)', () => {
     const clock = fakeClock();
     const f = new PoseFusion({ now: clock.now });
     f.applyFix(fix(clock));
-    expect(() => f.handleMotion({ acceleration: null, interval: 100 })).not.toThrow();
-    expect(() => f.handleMotion({ acceleration: { x: null }, interval: 100 })).not.toThrow();
+    expect(() => f.handleMotion({ acceleration: null })).not.toThrow();
+    expect(() => f.handleMotion({ acceleration: { x: null } })).not.toThrow();
     expect(f.getPose()).toMatchObject({ x: 0, y: 0, z: 0 });
   });
 
-  it('emits "pose" on every motion sample', () => {
+  it('emits "pose" for each step counted, not for every raw sample', () => {
     const clock = fakeClock();
     const f = new PoseFusion({ now: clock.now });
     const onPose = vi.fn();
     f.applyFix(fix(clock));
     f.on('pose', onPose);
-    f.handleMotion({ acceleration: { x: 1, y: 0, z: 0 }, interval: 50 });
-    f.handleMotion({ acceleration: { x: 1, y: 0, z: 0 }, interval: 50 });
-    expect(onPose).toHaveBeenCalledTimes(2);
+    walkStep(f);
+    expect(onPose).toHaveBeenCalledOnce();
   });
 });
 
@@ -225,35 +241,43 @@ describe('PoseFusion — heading from device orientation', () => {
 });
 
 describe('PoseFusion — confidence decays with distance', () => {
+  /** N footsteps of a 0.5 m stride, well clear of the refractory window. */
+  function walk(f, clock, steps) {
+    for (let i = 0; i < steps; i += 1) {
+      f.handleMotion({ acceleration: { x: 0, y: 2.5, z: 0 } });
+      f.handleMotion({ acceleration: { x: 0, y: 0.2, z: 0 } });
+      clock.advance(400);
+    }
+  }
+
   it('halves at the distance half-life', () => {
     const clock = fakeClock();
-    const f = new PoseFusion({ now: clock.now, timeHalfLifeMs: 0, distanceHalfLifeM: 5 });
+    const f = new PoseFusion({
+      now: clock.now,
+      timeHalfLifeMs: 0,
+      distanceHalfLifeM: 5,
+      strideM: 0.5,
+    });
     f.applyFix(fix(clock));
 
-    // Walk exactly 5 m: 1 m/s² for 1 s (0.5 m), then coast at 1 m/s for 4.5 s.
-    for (let i = 0; i < 10; i += 1) {
-      f.handleMotion({ acceleration: { x: 0, y: 1, z: 0 }, interval: 100 });
-    }
-    for (let i = 0; i < 45; i += 1) {
-      f.handleMotion({ acceleration: { x: 0, y: 0, z: 0 }, interval: 100 });
-    }
-    expect(f.distanceSinceFix).toBeCloseTo(5, 6);
-    expect(f.getConfidence()).toBeCloseTo(0.5, 6);
+    walk(f, clock, 10); // 10 × 0.5 m = 5 m, one distance half-life
+    expect(f.distanceSinceFix).toBeCloseTo(5, 9);
+    expect(f.getConfidence()).toBeCloseTo(0.5, 9);
   });
 
   it('compounds time and distance decay', () => {
     const clock = fakeClock();
-    const f = new PoseFusion({ now: clock.now, timeHalfLifeMs: 1_000, distanceHalfLifeM: 5 });
+    const f = new PoseFusion({
+      now: clock.now,
+      timeHalfLifeMs: 1_000,
+      distanceHalfLifeM: 5,
+      strideM: 0.5,
+    });
     f.applyFix(fix(clock));
-    for (let i = 0; i < 10; i += 1) {
-      f.handleMotion({ acceleration: { x: 0, y: 1, z: 0 }, interval: 100 });
-    }
-    for (let i = 0; i < 45; i += 1) {
-      f.handleMotion({ acceleration: { x: 0, y: 0, z: 0 }, interval: 100 });
-    }
-    clock.advance(1_000);
+    walk(f, clock, 10); // 5 m distance decay
+    clock.advance(1_000 - 10 * 400); // land exactly one time half-life after the fix
     // 0.5 (time) × 0.5 (distance)
-    expect(f.getConfidence()).toBeCloseTo(0.25, 6);
+    expect(f.getConfidence()).toBeCloseTo(0.25, 9);
   });
 });
 
@@ -312,18 +336,21 @@ describe('PoseFusion — "rescan-needed" event', () => {
       timeHalfLifeMs: 0,
       distanceHalfLifeM: 1,
       rescanThreshold: 0.3,
+      strideM: 0.5,
     });
     const onRescan = vi.fn();
     f.on('rescan-needed', onRescan);
     f.applyFix(fix(clock));
 
-    // Accelerate hard: 10 m/s² for 1 s → 5 m travelled → 0.5^5 ≈ 0.03.
+    // 10 steps of 0.5 m → 5 m travelled → 0.5^5 ≈ 0.03.
     for (let i = 0; i < 10; i += 1) {
-      f.handleMotion({ acceleration: { x: 0, y: 10, z: 0 }, interval: 100 });
+      f.handleMotion({ acceleration: { x: 0, y: 2.5, z: 0 } });
+      f.handleMotion({ acceleration: { x: 0, y: 0.2, z: 0 } });
+      clock.advance(400);
     }
     expect(f.tick()).toBe(true);
     expect(onRescan).toHaveBeenCalledOnce();
-    expect(onRescan.mock.calls[0][0].distanceSinceFix).toBeCloseTo(5, 6);
+    expect(onRescan.mock.calls[0][0].distanceSinceFix).toBeCloseTo(5, 9);
   });
 
   it('respects a configurable threshold', () => {

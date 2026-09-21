@@ -8,8 +8,13 @@
  *
  *  1. holds the last known pose;
  *  2. dead-reckons from device motion — `DeviceOrientationEvent` updates
- *     heading, `DeviceMotionEvent` acceleration is integrated to velocity and
- *     displacement in the venue frame;
+ *     heading; `DeviceMotionEvent` acceleration is used to *count footsteps*
+ *     (peaks in acceleration magnitude), and each detected step advances the
+ *     position by a fixed stride along the current heading. This is
+ *     pedestrian dead reckoning (PDR): double-integrating raw acceleration
+ *     into velocity and position (the naive approach) drifts by metres
+ *     within seconds because sensor noise is integrated twice; step counting
+ *     only errs by the stride estimate, a few percent of distance walked;
  *  3. decays confidence with elapsed time and with distance travelled since
  *     the last fix, because integrated IMU error grows with both;
  *  4. emits `"rescan-needed"` once confidence drops below a threshold, so the
@@ -40,6 +45,17 @@ import { validatePose } from './positioning.js';
  * @property {number} [headingOffsetDeg=0]
  *   Rotation from the device's compass frame to venue +y, in degrees
  *   clockwise. Set by the venue JSON so compass headings become venue headings.
+ * @property {number} [strideM=0.73]
+ *   Metres advanced per detected step. The average adult stride; calibrate
+ *   per surveyor by walking a known distance and dividing by the step count
+ *   (`docs/mapping.md`) for better accuracy than the population average.
+ * @property {number} [stepThreshold=1.5]
+ *   Acceleration-magnitude (m/s²) a peak must reach to count as a footstep.
+ *   Below the bump of an ordinary walking gait; raise it if a phone in a
+ *   pocket triggers false steps from incidental jostling.
+ * @property {number} [stepRefractoryMs=300]
+ *   Minimum time between counted steps, so one footstep's up-down bounce
+ *   isn't counted twice. 300 ms allows a cadence of up to ~3.3 steps/s.
  * @property {() => number} [now=Date.now]
  *   Clock, in milliseconds. Injected for tests.
  */
@@ -49,6 +65,9 @@ const DEFAULTS = Object.freeze({
   timeHalfLifeMs: 10_000,
   distanceHalfLifeM: 5,
   headingOffsetDeg: 0,
+  strideM: 0.73,
+  stepThreshold: 1.5,
+  stepRefractoryMs: 300,
   now: () => Date.now(),
 });
 
@@ -70,14 +89,17 @@ export class PoseFusion {
   /** @type {Pose | null} Current fused estimate. */
   #estimate = null;
 
-  /** Velocity in venue frame, m/s, integrated from device motion. */
-  #velocity = { x: 0, y: 0, z: 0 };
-
   /** Metres travelled since the last fix (path length, not displacement). */
   #distanceSinceFix = 0;
 
-  /** Timestamp of the last motion sample, for integration dt. */
-  #lastMotionAt = null;
+  /** Most recent acceleration-magnitude sample, for peak detection. */
+  #lastMag = 0;
+
+  /** Whether magnitude is currently rising towards a peak. */
+  #magRising = false;
+
+  /** Clock time of the last counted step, for the refractory window. */
+  #lastStepAt = null;
 
   /** Whether "rescan-needed" has fired since the last fix. */
   #rescanEmitted = false;
@@ -88,7 +110,14 @@ export class PoseFusion {
   /** @param {FusionOptions} [options] */
   constructor(options = {}) {
     this.#opts = { ...DEFAULTS, ...options };
-    for (const key of ['rescanThreshold', 'timeHalfLifeMs', 'distanceHalfLifeM']) {
+    for (const key of [
+      'rescanThreshold',
+      'timeHalfLifeMs',
+      'distanceHalfLifeM',
+      'strideM',
+      'stepThreshold',
+      'stepRefractoryMs',
+    ]) {
       const v = this.#opts[key];
       if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) {
         throw new RangeError(`${key} must be a non-negative finite number, got ${v}`);
@@ -138,9 +167,10 @@ export class PoseFusion {
     validatePose(pose);
     this.#fix = { ...pose };
     this.#estimate = { ...pose };
-    this.#velocity = { x: 0, y: 0, z: 0 };
     this.#distanceSinceFix = 0;
-    this.#lastMotionAt = null;
+    this.#lastMag = 0;
+    this.#magRising = false;
+    this.#lastStepAt = null;
     this.#rescanEmitted = false;
     this.#emit('pose', this.getPose());
   }
@@ -172,59 +202,50 @@ export class PoseFusion {
   }
 
   /**
-   * Integrate a DeviceMotionEvent-shaped object into position.
+   * Feed a DeviceMotionEvent-shaped sample into the step counter.
    *
-   * Uses `acceleration` (gravity removed) in the device frame, rotated into
-   * the venue frame by the current heading. Integration is deliberately
-   * simple — trapezoidal velocity, Euler position — because anything more
-   * sophisticated belongs in a provider, not here. `interval` is in
-   * milliseconds per the DOM spec; if absent the wall clock is used.
+   * A footstep produces a clear peak in acceleration magnitude (the vertical
+   * bounce of a gait); this looks for that peak crossing `stepThreshold` and,
+   * once one is found (and the refractory window has passed), advances the
+   * position by `strideM` along the *current heading* — not along whatever
+   * direction the accelerometer happened to be pointing, which for a phone
+   * held loosely is not a reliable indicator of travel direction. This is
+   * pedestrian dead reckoning; see the module doc for why it replaces
+   * integrating acceleration directly.
    *
-   * @param {{ acceleration?: { x?: number | null, y?: number | null, z?: number | null } | null, interval?: number }} event
+   * @param {{ acceleration?: { x?: number | null, y?: number | null, z?: number | null } | null }} event
    */
   handleMotion(event) {
     if (!this.#estimate) return;
-
-    const now = this.#opts.now();
-    let dtMs;
-    if (typeof event.interval === 'number' && Number.isFinite(event.interval)) {
-      dtMs = event.interval;
-    } else if (this.#lastMotionAt !== null) {
-      dtMs = now - this.#lastMotionAt;
-    } else {
-      dtMs = 0;
-    }
-    this.#lastMotionAt = now;
-    if (dtMs <= 0) return;
-    const dt = dtMs / 1000;
 
     const acc = event.acceleration ?? {};
     const ax = Number.isFinite(acc.x) ? acc.x : 0;
     const ay = Number.isFinite(acc.y) ? acc.y : 0;
     const az = Number.isFinite(acc.z) ? acc.z : 0;
+    const mag = Math.hypot(ax, ay, az);
 
-    // Device frame: +x right, +y towards top of screen (forward when the
-    // phone is held up for AR), +z out of the screen. Rotate the horizontal
-    // components by heading (clockwise from venue +y) into the venue frame.
+    if (mag > this.#lastMag) {
+      this.#magRising = true;
+    } else if (this.#magRising) {
+      // Just passed a peak: #lastMag holds its value.
+      this.#magRising = false;
+      if (this.#lastMag >= this.#opts.stepThreshold) this.#step();
+    }
+    this.#lastMag = mag;
+  }
+
+  /** Advance the estimate by one stride along the current heading. */
+  #step() {
+    const now = this.#opts.now();
+    if (this.#lastStepAt !== null && now - this.#lastStepAt < this.#opts.stepRefractoryMs) return;
+    this.#lastStepAt = now;
+
     const θ = this.#estimate.heading * DEG_TO_RAD;
-    const sin = Math.sin(θ);
-    const cos = Math.cos(θ);
-    const vx = ax * cos + ay * sin;
-    const vy = -ax * sin + ay * cos;
-
-    const before = { ...this.#velocity };
-    this.#velocity.x += vx * dt;
-    this.#velocity.y += vy * dt;
-    this.#velocity.z += az * dt;
-
-    const dx = ((before.x + this.#velocity.x) / 2) * dt;
-    const dy = ((before.y + this.#velocity.y) / 2) * dt;
-    const dz = ((before.z + this.#velocity.z) / 2) * dt;
-
+    const dx = this.#opts.strideM * Math.sin(θ);
+    const dy = this.#opts.strideM * Math.cos(θ);
     this.#estimate.x += dx;
     this.#estimate.y += dy;
-    this.#estimate.z += dz;
-    this.#distanceSinceFix += Math.hypot(dx, dy, dz);
+    this.#distanceSinceFix += this.#opts.strideM;
 
     this.#emit('pose', this.getPose());
   }

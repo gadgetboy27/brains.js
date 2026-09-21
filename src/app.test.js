@@ -1054,18 +1054,27 @@ describe('bootApp — sticker survey of a new venue', () => {
     });
     expect(app.state.hasPose).toBe(true);
 
-    // Walk 2 m forward (device motion, heading 0 = +y): the position follows
+    // Walk forward (device motion, heading 0 = +y): step counting follows
     // between scans even though the QR provider only reports exact fixes.
-    for (let i = 0; i < 2; i += 1) {
+    // Each footstep is a peak-then-fall in acceleration magnitude; steps
+    // 400 ms apart clear the default refractory window.
+    const step = () => {
       window.dispatchEvent(
-        Object.assign(new Event('devicemotion'), {
-          acceleration: { x: 0, y: 1, z: 0 },
-          interval: 1000,
-        })
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y: 2.5, z: 0 } })
       );
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y: 0.2, z: 0 } })
+      );
+    };
+    const stepsFor2m = Math.ceil(2 / 0.73); // default strideM
+    for (let i = 0; i < stepsFor2m; i += 1) {
+      step();
+      vi.advanceTimersByTime(400);
     }
     await vi.advanceTimersByTimeAsync(300);
-    expect(app.floorplan.summary).toContain('You are at 0.0, 2.0 metres');
+    expect(app.floorplan.summary).toContain(
+      `You are at 0.0, ${(stepsFor2m * 0.73).toFixed(1)} metres`
+    );
 
     // The next code gets those coordinates and is linked to the first.
     app.admin.el.querySelector('[data-f="survey-name"]').value = 'Lift lobby';
@@ -1073,7 +1082,7 @@ describe('bootApp — sticker survey of a new venue', () => {
     app.chain.active.handleScan('A04');
     const lift = app.admin.draft.anchors.at(-1);
     expect(lift).toMatchObject({ code: 'A04', name: 'Lift lobby' });
-    expect(lift.y).toBeCloseTo(2, 5);
+    expect(lift.y).toBeCloseTo(stepsFor2m * 0.73, 5);
     expect(app.admin.draft.edges).toHaveLength(1);
     expect(app.admin.draft.validate()).toEqual([]);
 

@@ -421,10 +421,11 @@ describe('ImmersalProvider — fixes and fusion', () => {
     expect(() => validatePose(poses[0])).not.toThrow();
   });
 
-  it('between fixes, emits PoseFusion estimates from device motion with decaying confidence', async () => {
+  it('between fixes, emits PoseFusion estimates from footsteps with decaying confidence', async () => {
     const { provider, sdk, motionTarget } = make({
       emitIntervalMs: 0,
-      fusion: { timeHalfLifeMs: 1000, distanceHalfLifeM: 0 },
+      // A small stride and short refractory so 10 steps land inside the 1 s window below.
+      fusion: { timeHalfLifeMs: 1000, distanceHalfLifeM: 0, strideM: 0.05, stepRefractoryMs: 50 },
     });
     const { poses } = collect(provider);
     await provider.start();
@@ -434,15 +435,16 @@ describe('ImmersalProvider — fixes and fusion', () => {
     expect(poses).toHaveLength(1);
     expect(poses[0].confidence).toBeCloseTo(0.9, 9);
 
-    // Simulate walking forward for 1 s at 1 m/s² via device motion events.
+    // Simulate walking forward for 1 s: a footstep every 100 ms via device motion events.
     const onMotion = motionTarget.listeners.get('devicemotion');
     for (let i = 0; i < 10; i += 1) {
       vi.advanceTimersByTime(100);
-      onMotion({ acceleration: { x: 0, y: 1, z: 0 }, interval: 100 });
+      onMotion({ acceleration: { x: 0, y: 2.5, z: 0 } });
+      onMotion({ acceleration: { x: 0, y: 0.2, z: 0 } });
     }
     const last = poses.at(-1);
     expect(poses.length).toBeGreaterThan(5);
-    expect(last.y).toBeCloseTo(0.5, 6); // dead-reckoned 0.5 m
+    expect(last.y).toBeCloseTo(0.5, 6); // 10 steps × 0.05 m stride
     expect(last.confidence).toBeCloseTo(0.9 * 0.5, 3); // 1 s at a 1 s half-life
     expect(provider.fixCount).toBe(1); // no new Immersal fix
   });
