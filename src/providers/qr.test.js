@@ -3,7 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PositionProvider, validateProvider } from '../core/positioning.js';
 import { createVenue } from '../core/venue.js';
 import sample from '../venues/fixtures/sample-venue.json';
-import { QrProvider, formatQrPayload, parseQrPayload } from './qr.js';
+import { BarcodeDetector as PonyfillBarcodeDetector } from 'barcode-detector/ponyfill';
+
+import {
+  CAMERA_CONSTRAINTS,
+  QrProvider,
+  chooseDetector,
+  formatQrPayload,
+  parseQrPayload,
+  requestContinuousFocus,
+} from './qr.js';
 
 const venue = () => createVenue(structuredClone(sample));
 
@@ -153,9 +162,11 @@ describe('QrProvider — camera lifecycle', () => {
 
     await provider.start();
 
-    expect(getUserMedia).toHaveBeenCalledWith({
-      video: { facingMode: 'environment' },
-      audio: false,
+    expect(getUserMedia).toHaveBeenCalledWith(CAMERA_CONSTRAINTS);
+    expect(CAMERA_CONSTRAINTS.video).toMatchObject({
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1280 }, // a 4 cm sticker at arm's length needs more than 640×480
+      advanced: [{ focusMode: 'continuous' }],
     });
     expect(BarcodeDetector).toHaveBeenCalledWith({ formats: ['qr_code'] });
     expect(video.srcObject).toBe(stream);
@@ -238,16 +249,56 @@ describe('QrProvider — camera permission and availability', () => {
     }
   );
 
-  it('reports unsupported when getUserMedia or BarcodeDetector is missing', async () => {
+  it('reports unsupported when getUserMedia is missing', async () => {
     const a = make({ getUserMedia: undefined });
     await a.provider.start();
     expect(a.provider.status).toBe('unsupported');
     expect(a.provider.error.message).toMatch(/getUserMedia/);
+  });
 
-    const b = make({ BarcodeDetector: undefined });
-    await b.provider.start();
-    expect(b.provider.status).toBe('unsupported');
-    expect(b.provider.error.message).toMatch(/BarcodeDetector/);
+  it('decodes with the browser detector only when it can read QR codes, else the bundled ZXing', async () => {
+    const explicit = class {};
+    const good = class {
+      static getSupportedFormats = async () => ['qr_code', 'ean_13'];
+    };
+    const empty = class {
+      static getSupportedFormats = async () => []; // some Android builds: API present, no formats
+    };
+    const broken = class {
+      static getSupportedFormats = async () => Promise.reject(new Error('nope'));
+    };
+    expect(await chooseDetector(explicit, good)).toBe(explicit);
+    expect(await chooseDetector(null, good)).toBe(good);
+    expect(await chooseDetector(null, empty)).toBe(PonyfillBarcodeDetector);
+    expect(await chooseDetector(null, broken)).toBe(PonyfillBarcodeDetector);
+    expect(await chooseDetector(null, undefined)).toBe(PonyfillBarcodeDetector); // iOS Safari
+  });
+
+  it('asks the camera for continuous autofocus when it offers it', async () => {
+    const applyConstraints = vi.fn(async () => {});
+    const track = (caps) => ({ getCapabilities: () => caps, applyConstraints });
+    expect(
+      await requestContinuousFocus({
+        getVideoTracks: () => [track({ focusMode: ['manual', 'continuous'] })],
+      })
+    ).toBe(true);
+    expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ focusMode: 'continuous' }] });
+    expect(await requestContinuousFocus({ getVideoTracks: () => [track({})] })).toBe(false); // iOS
+    expect(await requestContinuousFocus({ getVideoTracks: () => [] })).toBe(false);
+    expect(applyConstraints).toHaveBeenCalledOnce();
+  });
+
+  it('does not try to decode before the camera has delivered a frame', async () => {
+    const { provider, video, BarcodeDetector } = make();
+    video.readyState = 0;
+    video.videoWidth = 0;
+    await provider.start();
+    await vi.advanceTimersByTimeAsync(350);
+    expect(BarcodeDetector.mock.instances[0].detect).not.toHaveBeenCalled();
+    video.readyState = 4;
+    video.videoWidth = 1280;
+    await vi.advanceTimersByTimeAsync(150);
+    expect(BarcodeDetector.mock.instances[0].detect).toHaveBeenCalled();
   });
 
   it('reports error for an unexpected failure and releases the stream', async () => {

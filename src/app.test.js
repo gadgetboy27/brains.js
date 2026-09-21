@@ -1083,3 +1083,34 @@ describe('bootApp — sticker survey of a new venue', () => {
     await app.destroy();
   });
 });
+
+describe('bootApp — every scan gets a visible reaction', () => {
+  it('names an unknown or foreign code in the HUD; a recognised marker clears it', async () => {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const vibrate = vi.fn();
+    const { app } = await boot({
+      config: { provider: null },
+      options: { navigator: { vibrate, onLine: true } },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    app.chain.active.handleScan('https://stickers.example/print/A07');
+    expect(app.hud.text.notices).toContain('Code “A07” is not a marker for this venue.');
+    expect(vibrate).toHaveBeenCalledWith(40);
+
+    app.chain.active.handleScan('brains://other-venue/a-1');
+    expect(app.hud.text.notices).toContain('Code “a-1” belongs to a different venue.');
+
+    app.chain.active.handleScan(`brains://${app.venue.id}/${app.venue.anchors[0].id}`);
+    expect(app.hud.text.notices.some((n) => n.startsWith('Code “'))).toBe(false);
+    expect(app.state.hasPose).toBe(true);
+    await app.destroy();
+  });
+});

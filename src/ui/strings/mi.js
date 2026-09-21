@@ -262,6 +262,8 @@ export default {
     'admin.export.markerCode': 'Waehere: {text}',
     'notice.venueNew':
       'Wāhi hou “{id}” — kāore anō he mea kua whakaputaina. Rūritia, kātahi ka Whakaputa.',
+    'scan.unrecognised': 'Ehara te waehere “{text}” i te tohu mō tēnei wāhi.',
+    'scan.wrongVenue': 'Nō tētahi atu wāhi te waehere “{text}”.',
     'admin.tab.survey': 'Rūri pihi',
     'admin.survey.hint':
       'E tū ki tētahi waehere kua tāia, whakaingoatia te wāhi, kātahi ka matawai. Ka hopukina te waehere, tō wāhi me te wāhi ingoa — ka hono ki tērā o mua.',

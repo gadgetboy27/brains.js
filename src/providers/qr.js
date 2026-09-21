@@ -40,9 +40,24 @@
  * element, timers) is injectable so the provider is unit-testable in Node.
  */
 
-import { BarcodeDetector as PonyfillBarcodeDetector } from 'barcode-detector/ponyfill';
+import {
+  BarcodeDetector as PonyfillBarcodeDetector,
+  prepareZXingModule,
+} from 'barcode-detector/ponyfill';
+import zxingReaderWasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
 
 import { PositionProvider } from '../core/positioning.js';
+
+// The ponyfill decodes with ZXing compiled to WebAssembly. By default it
+// fetches that .wasm from a public CDN the first time a frame is decoded —
+// slow on a hospital network and impossible offline, and a failed fetch
+// looked like "the camera never recognises anything". Ship it with the app
+// instead (Vite emits it as a hashed asset next to the bundle).
+prepareZXingModule({
+  overrides: {
+    locateFile: (path, prefix) => (path.endsWith('.wasm') ? zxingReaderWasmUrl : prefix + path),
+  },
+});
 
 /** @typedef {import('../core/positioning.js').Pose} Pose */
 /** @typedef {import('../core/venue.js').Venue} Venue */
@@ -56,7 +71,7 @@ import { PositionProvider } from '../core/positioning.js';
  * @property {Venue} venue                     The venue whose anchors are valid.
  * @property {HTMLVideoElement} [video]        Element to attach the camera stream to.
  *   Created (off-screen) if omitted; supply one to show a viewfinder.
- * @property {number} [scanIntervalMs=250]     How often to try decoding a frame.
+ * @property {number} [scanIntervalMs=150]     How often to try decoding a frame.
  * @property {number} [repeatSuppressMs=3000]  Ignore the same code again within this window.
  * @property {(constraints: MediaStreamConstraints) => Promise<MediaStream>} [getUserMedia]
  * @property {typeof BarcodeDetector} [BarcodeDetector]
@@ -152,10 +167,10 @@ export class QrProvider extends PositionProvider {
       throw new TypeError('QrProvider requires a Venue (see createVenue())');
     }
     this.#opts = {
-      scanIntervalMs: 250,
+      scanIntervalMs: 150,
       repeatSuppressMs: 3000,
       getUserMedia: (c) => globalThis.navigator?.mediaDevices?.getUserMedia?.(c),
-      BarcodeDetector: globalThis.BarcodeDetector ?? PonyfillBarcodeDetector,
+      BarcodeDetector: null, // chosen at start(): see chooseDetector()
       createVideo: () => globalThis.document?.createElement('video'),
       now: () => Date.now(),
       setTimeout: (...a) => globalThis.setTimeout(...a),
@@ -231,8 +246,9 @@ export class QrProvider extends PositionProvider {
     if (this.#status === 'starting' || this.#status === 'scanning') return;
     this.#setStatus('starting');
 
-    const { BarcodeDetector, getUserMedia, createVideo } = this.#opts;
+    const { getUserMedia, createVideo } = this.#opts;
 
+    const BarcodeDetector = await chooseDetector(this.#opts.BarcodeDetector);
     if (typeof BarcodeDetector !== 'function') {
       this.#setStatus('unsupported', new Error('BarcodeDetector is not available'));
       return;
@@ -244,12 +260,13 @@ export class QrProvider extends PositionProvider {
 
     let stream;
     try {
-      stream = await getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      stream = await getUserMedia(CAMERA_CONSTRAINTS);
       if (!stream) throw new TypeError('getUserMedia returned nothing');
     } catch (err) {
       this.#setStatus(classifyCameraError(err), err);
       return;
     }
+    await requestContinuousFocus(stream);
 
     try {
       this.#detector = new BarcodeDetector({ formats: ['qr_code'] });
@@ -308,6 +325,12 @@ export class QrProvider extends PositionProvider {
     this.#timer = null;
     if (this.#status !== 'scanning') return;
     try {
+      // Nothing to decode until the camera has delivered a frame; asking
+      // earlier throws on some browsers and wastes a decode on others.
+      if (!frameReady(this.#video)) {
+        this.#scheduleScan();
+        return;
+      }
       const codes = await this.#detector.detect(this.#video);
       for (const code of codes ?? []) {
         if (this.#status !== 'scanning') return;
@@ -373,6 +396,72 @@ export class QrProvider extends PositionProvider {
     });
     return emitScan('accepted', { venueId, anchorId });
   }
+}
+
+/**
+ * A sharp, well-lit frame is what decodes: ask for 720p-class frames from
+ * the rear camera (the default 640×480 makes a 4 cm sticker a smear at arm's
+ * length) and continuous autofocus where the platform exposes it.
+ */
+export const CAMERA_CONSTRAINTS = Object.freeze({
+  video: {
+    facingMode: { ideal: 'environment' },
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    // Chrome/Android honour focusMode here; other browsers ignore unknown keys.
+    advanced: [{ focusMode: 'continuous' }],
+  },
+  audio: false,
+});
+
+/**
+ * Turn continuous autofocus on for the video track when the camera supports
+ * it (Android Chrome exposes `focusMode`; iOS autofocuses regardless and
+ * exposes nothing). Best-effort: a refusal changes nothing.
+ * @param {MediaStream} stream
+ */
+export async function requestContinuousFocus(stream) {
+  const [track] = stream?.getVideoTracks?.() ?? [];
+  if (!track?.applyConstraints) return false;
+  try {
+    const caps = track.getCapabilities?.() ?? {};
+    if (!caps.focusMode?.includes?.('continuous')) return false;
+    await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Which BarcodeDetector to decode with. An explicit class (tests, or a
+ * caller that knows better) is used as given. Otherwise the browser's own
+ * is preferred when it says it can read QR codes — some Android builds
+ * expose the API but support no formats, and then detect() finds nothing
+ * forever — and the bundled ZXing ponyfill is the fallback everywhere else
+ * (iOS Safari has no BarcodeDetector at all).
+ * @param {Function | null | undefined} explicit
+ * @param {Function | undefined} [native]
+ */
+export async function chooseDetector(explicit, native = globalThis.BarcodeDetector) {
+  if (typeof explicit === 'function') return explicit;
+  if (typeof native === 'function') {
+    try {
+      const formats = await native.getSupportedFormats?.();
+      if (Array.isArray(formats) && formats.includes('qr_code')) return native;
+    } catch {
+      // fall through to the ponyfill
+    }
+  }
+  return PonyfillBarcodeDetector;
+}
+
+/** Whether a video element has decoded at least one frame. */
+function frameReady(video) {
+  if (!video) return false;
+  if (typeof video.readyState === 'number' && video.readyState < 2) return false; // < HAVE_CURRENT_DATA
+  if (typeof video.videoWidth === 'number' && video.videoWidth === 0) return false;
+  return true;
 }
 
 /** Map a getUserMedia rejection to a status. */

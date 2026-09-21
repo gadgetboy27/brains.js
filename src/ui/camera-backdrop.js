@@ -27,6 +27,8 @@ export class CameraBackdrop {
   #doc;
   #mount;
   #video;
+  /** The element this module created; #video may be a provider's adopted one. */
+  #own;
   #ownStream = null;
   #opts;
   #source = 'none';
@@ -52,6 +54,7 @@ export class CameraBackdrop {
     this.#video.setAttribute('playsinline', '');
     this.#video.setAttribute('aria-hidden', 'true');
     this.#video.hidden = true;
+    this.#own = this.#video;
     this.#mount.insertBefore(this.#video, this.#mount.firstChild);
     // Make sure the mount stacks its children (canvas above video).
     if (this.#mount.style && !this.#mount.style.position) this.#mount.style.position = 'absolute';
@@ -75,7 +78,12 @@ export class CameraBackdrop {
     this.#stopOwn();
     const stream = provider?.video?.srcObject;
     if (stream) {
-      this.#video.srcObject = stream;
+      // Show the scanner's own element rather than a second decode of the
+      // same stream: one <video>, visible and in the document, is what the
+      // decoder reads from — an off-screen element is not guaranteed to
+      // keep delivering frames on every phone.
+      if (provider.video.nodeType === 1) this.#adopt(provider.video);
+      else this.#video.srcObject = stream;
       this.#source = 'provider';
     } else if (provider?.constructor?.name === 'ImmersalProvider' || provider?.mountsOwnCamera) {
       // The SDK manages its own camera element inside the AR view.
@@ -107,9 +115,30 @@ export class CameraBackdrop {
     return this.#source;
   }
 
-  /** Hide the feed (e.g. when the floor plan is showing) and release any preview stream. */
+  #adopt(el) {
+    if (el === this.#video) return;
+    this.#own.hidden = true;
+    this.#own.srcObject = null;
+    el.classList?.add('camera-backdrop');
+    el.setAttribute?.('aria-hidden', 'true');
+    el.setAttribute?.('playsinline', '');
+    el.muted = true;
+    if (el.parentNode !== this.#mount) this.#mount.insertBefore(el, this.#mount.firstChild);
+    el.hidden = false;
+    this.#video = el;
+  }
+
+  /**
+   * Hide the feed (e.g. when the floor plan is showing) and release any
+   * preview stream. An adopted scanner element is only hidden — its stream
+   * belongs to the provider, which keeps scanning.
+   */
   detach() {
     this.#stopOwn();
+    if (this.#video !== this.#own) {
+      this.#video.hidden = true;
+      this.#video = this.#own;
+    }
     this.#video.srcObject = null;
     this.#video.hidden = true;
     this.#source = 'none';

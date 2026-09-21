@@ -738,29 +738,41 @@ export async function bootApp(options = {}) {
     if (view !== 'floorplan') showView('floorplan', { manual: true }); // editing happens on the plan
     hud.setCompact(true); // give the map the screen; the HUD keeps only the status line
     if (config.survey) admin.showTab('survey');
-    // Registering a printed sticker: unknown codes seen by the scanner become markers.
-    const watchScans = (provider) => {
-      scanOff?.();
-      scanOff = null;
-      if (provider && typeof provider.onScan === 'function') {
-        scanOff = provider.onScan((scan) => {
-          if (scan.result !== 'unrecognised' || !admin) return;
+  }
+
+  // --- Every decoded code gets a visible reaction, so "the camera saw it"
+  // is never in doubt: a recognised marker produces a pose (and the HUD's
+  // position notice goes); anything else is named in the HUD. In admin
+  // mode an unknown code may be a sticker being registered or surveyed.
+  const watchScans = (provider) => {
+    scanOff?.();
+    scanOff = null;
+    if (provider && typeof provider.onScan === 'function') {
+      scanOff = provider.onScan((scan) => {
+        if (scan.result === 'accepted' || scan.result === 'repeat') {
+          hud.hideNotice('scan');
+          return;
+        }
+        nav?.vibrate?.(40);
+        if (scan.result === 'unrecognised' && admin) {
           if (admin.registering || admin.surveying) {
             const anchor = admin.registerCode(scan.text);
             if (anchor) {
               returnToPlanAfterScan = false;
               showView('floorplan', { manual: true });
             }
-          } else {
-            // A code recorded on this device but not yet published.
-            admin.fixToCode(scan.text);
+            return;
           }
-        });
-      }
-    };
-    watchScans(chain.active);
-    scanWatchOff = chain.onChange((e) => watchScans(e.state.provider));
-  }
+          // A code recorded on this device but not yet published.
+          if (admin.fixToCode(scan.text)) return;
+        }
+        const key = scan.result === 'wrong-venue' ? 'scan.wrongVenue' : 'scan.unrecognised';
+        hud.showNotice('scan', t(key, { text: shortCode(scan.text) }));
+      });
+    }
+  };
+  watchScans(chain.active);
+  scanWatchOff = chain.onChange((e) => watchScans(e.state.provider));
 
   // --- QR entry: the scanned entrance marker fixes the starting position.
   if (config.anchorId) {
@@ -906,6 +918,24 @@ export function blankVenue(id) {
     edges: [],
     pois: [],
   };
+}
+
+/** A scanned code's text, shortened for a notice (URLs keep their last path segment). */
+export function shortCode(text) {
+  const s = String(text ?? '').trim();
+  const brains = /^brains:\/\/[^/]+\/([^/?#]+)/i.exec(s);
+  if (brains) return brains[1];
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const u = new URL(s);
+      const last = u.pathname.split('/').filter(Boolean).at(-1);
+      const anchor = u.searchParams.get('anchor');
+      return anchor ?? last ?? u.hostname;
+    } catch {
+      // fall through
+    }
+  }
+  return s.length > 24 ? `${s.slice(0, 21)}…` : s;
 }
 
 /** Where routes start when the user's position is unknown: an entrance/exit POI, else the first node. */

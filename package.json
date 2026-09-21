@@ -32,7 +32,8 @@
     "@ar-js-org/ar.js": "^3.4.5",
     "barcode-detector": "^3.2.2",
     "qrcode": "^1.5.4",
-    "three": "^0.186.0"
+    "three": "^0.186.0",
+    "zxing-wasm": "3.1.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

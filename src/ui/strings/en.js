@@ -252,6 +252,8 @@ export default {
     'admin.export.noMarkers': 'No markers yet — add them with "Add QR marker here".',
     'admin.export.markerCode': 'Code: {text}',
     'notice.venueNew': 'New venue “{id}” — nothing is published yet. Survey it, then Publish.',
+    'scan.unrecognised': 'Code “{text}” is not a marker for this venue.',
+    'scan.wrongVenue': 'Code “{text}” belongs to a different venue.',
     'admin.tab.survey': 'Sticker survey',
     'admin.survey.hint':
       'Stand at a printed code, name the area, then scan the code. Each scan records the code, your position and the place — and links it to the previous one.',
