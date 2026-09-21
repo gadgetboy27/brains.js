@@ -22,6 +22,7 @@
  */
 
 import { VenueDraft } from '../core/venue-draft.js';
+import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
 import { categoryName, t } from './strings/index.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
@@ -80,6 +81,7 @@ export class AdminPanel {
    * @param {typeof fetch} [options.fetch]            For publishing (default global fetch).
    * @param {string} [options.publishUrl]             API base; default `/api/venues/<id>` on this origin.
    * @param {Storage | null} [options.sessionStorage] Keeps the publishing key for the session.
+   * @param {ReadonlyArray<object>} [options.places]  Place templates for the POI form (default: hospital library).
    * @param {object | null} [options.initialPose]  Last known pose, if positioning started before this panel.
    * @param {Function} [options.getComputedStyle]
    */
@@ -158,7 +160,8 @@ export class AdminPanel {
       </div>
 
       <form class="admin-form" data-f="poi-form" hidden>
-        <label><span data-f="poi-name-label"></span><input data-f="poi-name" required /></label>
+        <label><span data-f="poi-name-label"></span><input data-f="poi-name" list="admin-places" autocomplete="off" required /></label>
+        <datalist id="admin-places" data-f="places"></datalist>
         <label><span data-f="poi-cat-label"></span><select data-f="poi-cat"></select></label>
         <label><span data-f="poi-alias-label"></span><input data-f="poi-alias" /></label>
         <div class="admin-actions">
@@ -197,6 +200,15 @@ export class AdminPanel {
     this.#f('poi-alias-label').textContent = t('admin.poi.aliases');
     this.#f('poi-ok').textContent = t('admin.ok');
     this.#f('poi-cancel').textContent = t('admin.cancel');
+    const places = this.#f('places');
+    for (const place of options.places ?? HOSPITAL_PLACES) {
+      const o = this.#doc.createElement('option');
+      o.value = place.name;
+      o.label = place.aliases.slice(0, 3).join(', ');
+      places.appendChild(o);
+    }
+    // Choosing a library place fills in its aliases and category.
+    this.#f('poi-name').addEventListener('change', () => this.#applyPlaceTemplate());
     for (const c of ['clinic', 'facility', 'service', 'retail', 'food', 'exit', 'staff', 'other']) {
       const o = this.#doc.createElement('option');
       o.value = c === 'other' ? '' : c;
@@ -456,11 +468,23 @@ export class AdminPanel {
       .map((s) => s.trim())
       .filter(Boolean);
     const category = this.#f('poi-cat').value || undefined;
-    const poi = this.#draft.addPoi({ name, node: form.dataset.node, aliases, category });
+    const access = form.dataset.access === 'staff' ? 'staff' : undefined;
+    const poi = this.#draft.addPoi({ name, node: form.dataset.node, aliases, category, access });
+    form.dataset.access = '';
     form.hidden = true;
     this.#status(t('admin.record.added', { name: poi.name }));
     this.#changed();
     return poi;
+  }
+
+  #applyPlaceTemplate() {
+    const template = findPlace(this.#f('poi-name').value, this.#opts.places ?? HOSPITAL_PLACES);
+    if (!template) return;
+    this.#f('poi-name').value = template.name;
+    if (!this.#f('poi-alias').value.trim())
+      this.#f('poi-alias').value = template.aliases.join(', ');
+    this.#f('poi-cat').value = template.category === 'other' ? '' : template.category;
+    this.#f('poi-form').dataset.access = template.access ?? '';
   }
 
   /** Submit the POI form programmatically (tests). */

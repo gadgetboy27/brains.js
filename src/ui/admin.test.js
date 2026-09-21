@@ -364,3 +364,31 @@ describe('AdminPanel — publishing', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('AdminPanel — places library', () => {
+  it('offers library places and fills aliases, category and access from the chosen one', () => {
+    const { admin, provider } = make();
+    expect(admin.el.querySelectorAll('#admin-places option').length).toBeGreaterThan(40);
+    provider.emit(pose(5, 5));
+    admin.addPoiHere();
+    const name = admin.el.querySelector('[data-f="poi-name"]');
+    name.value = 'ED reception'; // an alias
+    name.dispatchEvent(new Event('change'));
+    expect(name.value).toBe('Emergency Department reception');
+    expect(admin.el.querySelector('[data-f="poi-alias"]').value).toContain('Triage');
+    expect(admin.el.querySelector('[data-f="poi-cat"]').value).toBe('service');
+    const poi = admin.submitPoi({
+      name: name.value,
+      aliases: ['ED reception', 'Triage'],
+      category: 'service',
+    });
+    expect(poi.access).toBeUndefined();
+
+    admin.addPoiHere();
+    name.value = 'Staff room';
+    name.dispatchEvent(new Event('change'));
+    const staff = admin.submitPoi({ name: 'Staff room', aliases: ['Tea room'], category: 'staff' });
+    expect(staff.access).toBe('staff');
+    expect(admin.draft.validate()).toEqual([]);
+  });
+});
