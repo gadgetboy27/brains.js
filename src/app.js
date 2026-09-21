@@ -90,7 +90,9 @@ export function readConfig({
   const q = new URLSearchParams(search);
   const provider = q.get('provider') ?? env.POSITIONING_PROVIDER ?? null;
   const view = q.get('view') ?? 'auto';
-  const venueId = q.get('v');
+  // Default venue id: the bundled demo, so the deployed site still loads a
+  // *published* version of it (admin "Publish") when one exists.
+  const venueId = q.get('v') ?? env.DEFAULT_VENUE_ID ?? null;
   const base = env.VENUE_BASE_URL ?? '/venues/';
   const venueUrl =
     q.get('venue') ??
@@ -101,7 +103,7 @@ export function readConfig({
     null;
   return {
     venueUrl,
-    venueId: venueId ?? null,
+    venueId,
     anchorId: q.get('anchor') ?? null,
     runtimeConfigUrl: q.get('runtime') ?? env.RUNTIME_CONFIG_URL ?? null,
     provider,
@@ -202,7 +204,11 @@ export async function bootApp(options = {}) {
         venue = await (options.loadVenue ?? loadVenue)(config.venueUrl);
         saveVenueCache(config.venueUrl, venue.toJSON(), storage);
       } catch (err) {
-        const cached = loadVenueCache(config.venueUrl, storage);
+        if (config.venueId === demoVenue.id && /HTTP 404/.test(err.message)) {
+          // Nothing published yet for the demo: use the bundled copy.
+          venue = createVenue(structuredClone(demoVenue));
+        }
+        const cached = venue ? null : loadVenueCache(config.venueUrl, storage);
         if (cached) {
           try {
             venue = createVenue(cached.json);

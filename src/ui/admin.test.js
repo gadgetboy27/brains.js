@@ -260,3 +260,107 @@ describe('AdminPanel — export and drafts', () => {
     expect(document.querySelector('.admin')).toBeNull();
   });
 });
+
+describe('AdminPanel — publishing', () => {
+  const session = () => {
+    const data = {};
+    return {
+      getItem: (k) => data[k] ?? null,
+      setItem: (k, v) => (data[k] = v),
+      removeItem: (k) => delete data[k],
+      data,
+    };
+  };
+  const response = (status, body, type = 'application/json') => ({
+    status,
+    ok: status >= 200 && status < 300,
+    headers: { get: () => type },
+    json: async () => body,
+  });
+
+  it('asks for the key once, PUTs the validated JSON, remembers the key and clears the draft', async () => {
+    const fetch = vi.fn(async () => response(200, { ok: true, id: 'demo-health-centre' }));
+    const sessionStorage = session();
+    const { admin, prompt, storage, provider } = make({ fetch, sessionStorage });
+    prompt.mockReturnValueOnce('s3cret');
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
+    expect(storage.data['brains:admin-draft']).toBeDefined();
+
+    const result = await admin.publish();
+    expect(result).toEqual({ ok: true, id: 'demo-health-centre' });
+    expect(fetch).toHaveBeenCalledWith('/api/venues/demo-health-centre', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer s3cret' },
+      body: admin.json(),
+    });
+    expect(JSON.parse(fetch.mock.calls[0][1].body).nodes.some((n) => n.id === 'n-pharmacy')).toBe(
+      true
+    );
+    expect(sessionStorage.data['brains:admin-token']).toBe('s3cret');
+    expect(storage.data['brains:admin-draft']).toBeUndefined();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.export.published')
+    );
+
+    await admin.publish(); // key remembered: no prompt
+    expect(prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a rejected key (and forgets it), an unconfigured server, and validation problems', async () => {
+    const sessionStorage = session();
+    sessionStorage.setItem('brains:admin-token', 'old');
+    const fetch = vi.fn(async () => response(401, { error: 'unauthorised' }));
+    const { admin } = make({ fetch, sessionStorage });
+    expect(await admin.publish()).toBeNull();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.export.unauthorised')
+    );
+    expect(sessionStorage.data['brains:admin-token']).toBeUndefined();
+
+    fetch.mockResolvedValueOnce(response(503, { error: 'not configured' }));
+    sessionStorage.setItem('brains:admin-token', 'k');
+    await admin.publish();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.export.unconfigured')
+    );
+
+    fetch.mockResolvedValueOnce(
+      response(422, {
+        error: 'invalid venue JSON',
+        problems: [{ path: 'pois[0].node', message: 'unknown' }],
+      })
+    );
+    await admin.publish();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.export.publishFailed', { message: 'pois[0].node: unknown' })
+    );
+  });
+
+  it('recognises the dev server (no API) and a network failure', async () => {
+    const sessionStorage = session();
+    sessionStorage.setItem('brains:admin-token', 'k');
+    const fetch = vi.fn(async () => response(200, null, 'text/html'));
+    const { admin } = make({ fetch, sessionStorage });
+    await admin.publish();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.export.devServer')
+    );
+    fetch.mockRejectedValueOnce(new Error('Failed to fetch'));
+    await admin.publish();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.export.publishFailed', { message: 'Failed to fetch' })
+    );
+  });
+
+  it('does not publish an invalid draft or without a key', async () => {
+    const fetch = vi.fn();
+    const { admin, prompt } = make({ fetch, sessionStorage: session() });
+    prompt.mockReturnValueOnce(null); // cancelled
+    expect(await admin.publish()).toBeNull();
+    admin.draft.pois[0].node = 'n-ghost';
+    prompt.mockReturnValueOnce('k');
+    expect(await admin.publish()).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});

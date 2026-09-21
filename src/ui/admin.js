@@ -47,6 +47,7 @@ const CSS = `
 `;
 
 const DRAFT_KEY = 'brains:admin-draft';
+const TOKEN_KEY = 'brains:admin-token';
 
 export class AdminPanel {
   #doc;
@@ -76,6 +77,9 @@ export class AdminPanel {
    * @param {(text: string) => Promise<void>} [options.copy]
    * @param {(message: string, defaultValue?: string) => string | null} [options.prompt]  Injectable; default window.prompt.
    * @param {() => void} [options.onClose]
+   * @param {typeof fetch} [options.fetch]            For publishing (default global fetch).
+   * @param {string} [options.publishUrl]             API base; default `/api/venues/<id>` on this origin.
+   * @param {Storage | null} [options.sessionStorage] Keeps the publishing key for the session.
    * @param {object | null} [options.initialPose]  Last known pose, if positioning started before this panel.
    * @param {Function} [options.getComputedStyle]
    */
@@ -89,6 +93,8 @@ export class AdminPanel {
       download: defaultDownload,
       copy: (text) => globalThis.navigator?.clipboard?.writeText?.(text),
       prompt: (m, d) => globalThis.prompt?.(m, d),
+      fetch: (...a) => globalThis.fetch?.(...a),
+      sessionStorage: safeSession(),
       ...options,
     };
 
@@ -144,7 +150,8 @@ export class AdminPanel {
         <p data-f="valid"></p>
         <ul class="problems" data-f="problems"></ul>
         <div class="admin-actions">
-          <button type="button" class="btn btn-primary" data-f="download"></button>
+          <button type="button" class="btn btn-primary" data-f="publish"></button>
+          <button type="button" class="btn" data-f="download"></button>
           <button type="button" class="btn" data-f="copy"></button>
           <button type="button" class="btn" data-f="discard"></button>
         </div>
@@ -181,6 +188,7 @@ export class AdminPanel {
     this.#f('plan-rename').textContent = t('admin.plan.rename');
     this.#f('plan-poi').textContent = t('admin.record.addPoi');
     this.#f('plan-remove').textContent = t('admin.plan.remove');
+    this.#f('publish').textContent = t('admin.export.publish');
     this.#f('download').textContent = t('admin.export.download');
     this.#f('copy').textContent = t('admin.export.copy');
     this.#f('discard').textContent = t('admin.export.discard');
@@ -211,6 +219,7 @@ export class AdminPanel {
     this.#f('plan-rename').addEventListener('click', () => this.renameSelected());
     this.#f('plan-poi').addEventListener('click', () => this.#openPoiForm(this.#selected));
     this.#f('plan-remove').addEventListener('click', () => this.removeSelected());
+    this.#f('publish').addEventListener('click', () => this.publish());
     this.#f('download').addEventListener('click', () => this.download());
     this.#f('copy').addEventListener('click', () => this.copy());
     this.#f('discard').addEventListener('click', () => this.discard());
@@ -537,6 +546,78 @@ export class AdminPanel {
       }
     }
     this.#f('download').disabled = problems.length > 0;
+    this.#f('publish').disabled = problems.length > 0;
+  }
+
+  /**
+   * Publish the draft to the server so every visitor gets it. Asks for the
+   * admin key once per session. Returns the server's answer or null.
+   */
+  async publish() {
+    if (this.#draft.validate().length) return null;
+    let token;
+    try {
+      token = this.#opts.sessionStorage?.getItem(TOKEN_KEY) ?? null;
+    } catch {
+      token = null;
+    }
+    if (!token) {
+      token = this.#opts.prompt(t('admin.export.tokenPrompt'), '');
+      if (!token) return null;
+    }
+    const url = this.#opts.publishUrl ?? `/api/venues/${encodeURIComponent(this.#draft.id)}`;
+    this.#status(t('admin.export.publishing'));
+    let res;
+    try {
+      res = await this.#opts.fetch(url, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: this.json(),
+      });
+    } catch (err) {
+      this.#status(t('admin.export.publishFailed', { message: err.message }));
+      return null;
+    }
+    if (res.status === 401) {
+      try {
+        this.#opts.sessionStorage?.removeItem(TOKEN_KEY);
+      } catch {
+        // ignore
+      }
+      this.#status(t('admin.export.unauthorised'));
+      return null;
+    }
+    if (res.status === 503) {
+      this.#status(t('admin.export.unconfigured'));
+      return null;
+    }
+    if (res.status === 404 || (res.headers?.get?.('content-type') ?? '').includes('text/html')) {
+      // No API here (e.g. the Vite dev server serving the SPA for every path).
+      this.#status(t('admin.export.devServer'));
+      return null;
+    }
+    let body;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    if (!res.ok) {
+      const detail =
+        body?.problems?.map((p) => `${p.path}: ${p.message}`).join('; ') ??
+        body?.error ??
+        `HTTP ${res.status}`;
+      this.#status(t('admin.export.publishFailed', { message: detail }));
+      return null;
+    }
+    try {
+      this.#opts.sessionStorage?.setItem(TOKEN_KEY, token);
+      this.#opts.storage?.removeItem(DRAFT_KEY); // published: the draft is no longer "unsaved"
+    } catch {
+      // ignore
+    }
+    this.#status(t('admin.export.published'));
+    return body;
   }
 
   json() {
@@ -605,6 +686,14 @@ function defaultDownload(name, text) {
 function safeStorage() {
   try {
     return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSession() {
+  try {
+    return globalThis.sessionStorage ?? null;
   } catch {
     return null;
   }

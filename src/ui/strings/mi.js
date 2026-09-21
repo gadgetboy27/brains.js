@@ -205,6 +205,17 @@ export default {
     'admin.export.copy': 'Tārua JSON',
     'admin.export.copied': 'Kua tāruatia.',
     'admin.export.discard': 'Whakakore i te tauira',
+    'admin.export.publish': 'Whakaputa mō te katoa',
+    'admin.export.publishing': 'E whakaputa ana…',
+    'admin.export.published':
+      'Kua whakaputaina. Ka riro i ngā manuhiri tēnei putanga mai i nāianei.',
+    'admin.export.publishFailed': 'I rahua te whakaputa: {message}',
+    'admin.export.tokenPrompt': 'Kī whakaputa a te kaiwhakahaere',
+    'admin.export.unconfigured':
+      'Kāore anō te whakaputa kia whakaritea i tēnei tūmau (ADMIN_TOKEN).',
+    'admin.export.unauthorised': 'Kāore i whakaaetia taua kī whakaputa.',
+    'admin.export.devServer':
+      'Me te pae kua tukuna te whakaputa; i te tūmau whakawhanake, tikiake i te kōnae.',
     'admin.draft.restored': 'Kua whakahokia te tauira mai i tēnei pūrere.',
     'admin.close': 'Kati te whakahaere',
     'admin.ok': 'Āe',

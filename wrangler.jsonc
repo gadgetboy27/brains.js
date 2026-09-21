@@ -1,15 +1,21 @@
 {
-  // Cloudflare Workers static-assets project (Pages is now part of Workers).
-  // Deployed by .github/workflows/deploy.yml, or manually with `npm run deploy`
-  // after `npx wrangler login`. Previews: `npm run deploy:preview`.
+  // Cloudflare Worker: static app (assets/) plus the venue-publishing API in
+  // worker/index.js, backed by the VENUES KV namespace. Deployed by
+  // .github/workflows/deploy.yml or `npm run deploy`. Set the admin token once
+  // with `npx wrangler secret put ADMIN_TOKEN` (docs/publishing.md).
   "$schema": "https://developers.cloudflare.com/schemas/wrangler.json",
   "name": "brains-js",
+  "main": "worker/index.js",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "./dist",
-    // Every path serves the app (query strings kept), e.g. /?v=<venue>&anchor=<id>.
+    "binding": "ASSETS",
+    // Every unknown path serves the app (query strings kept), e.g. /?v=<venue>&anchor=<id>.
     "not_found_handling": "single-page-application",
+    // Let the Worker answer venue files (KV overrides static) and the API.
+    "run_worker_first": ["/venues/*", "/api/*"],
   },
+  "kv_namespaces": [{ "binding": "VENUES", "id": "62bfab8043de453fba59f6f0f18762c6" }],
   "workers_dev": true,
   "preview_urls": true,
   "observability": { "enabled": false },
