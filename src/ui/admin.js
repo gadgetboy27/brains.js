@@ -27,6 +27,7 @@ import { VenueDraft } from '../core/venue-draft.js';
 import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
 import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/survey-plan.js';
 import { categoryName, t } from './strings/index.js';
+import { createRouteWizard } from './route-wizard.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
 const CSS = `
@@ -64,6 +65,16 @@ const CSS = `
 .admin-toast:empty { display: none; }
 .admin-walk { margin: 6px 0; padding-left: 18px; }
 .admin-plan { margin: 6px 0; }
+.wizard-steps { display: flex; gap: 4px; list-style: none; margin: 4px 0 8px; padding: 0; font-size: 0.9em; }
+.wizard-steps li { flex: 1; display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--color-text-muted); color: var(--color-text-muted); }
+.wizard-steps li span { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--color-text-muted); color: var(--color-surface-solid); font-weight: 700; font-size: 0.85em; }
+.wizard-steps li[aria-current='true'] { border-color: var(--color-accent); color: var(--color-text); }
+.wizard-steps li[aria-current='true'] span, .wizard-steps li.done span { background: var(--color-accent); color: var(--color-accent-contrast); }
+.wizard-live { font-weight: 600; margin: 4px 0; }
+.wizard-summary { font-weight: 600; }
+.wizard-check { display: flex !important; align-items: center; gap: 8px; }
+.wizard-check input { width: 22px; height: 22px; min-height: 0; }
+@media (max-width: 600px) { .wizard-steps li b { display: none; } .wizard-steps li[aria-current='true'] b { display: inline; } }
 .admin-plan summary { cursor: pointer; font-weight: 600; }
 .admin-plan textarea { width: 100%; min-height: 6em; font: inherit; font-size: 13px; box-sizing: border-box; }
 .admin-markers { list-style: none; margin: 6px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
@@ -89,7 +100,10 @@ export class AdminPanel {
   #selected = null;
   #linking = false;
   #unsub = [];
-  #tab = 'record';
+  #tab = 'routes';
+  #wizard = null;
+  /** @type {((text: string) => unknown) | null} */
+  #codeHandler = null;
   #published = true;
   #registering = false;
   #surveying = false;
@@ -162,6 +176,7 @@ export class AdminPanel {
       <h2 data-f="title"></h2>
       <p data-f="hint"></p>
       <div class="admin-tabs" role="tablist">
+        <button type="button" class="btn" role="tab" data-tab="routes"></button>
         <button type="button" class="btn" role="tab" data-tab="survey"></button>
         <button type="button" class="btn" role="tab" data-tab="record"></button>
         <button type="button" class="btn" role="tab" data-tab="plan"></button>
@@ -174,6 +189,10 @@ export class AdminPanel {
       </div>
       <p class="admin-status" data-f="status" role="status" aria-live="polite"></p>
       <p class="admin-status" data-f="saved"></p>
+
+      <div class="admin-tool" data-tool="routes" role="tabpanel" hidden>
+        <div data-f="wizard-mount"></div>
+      </div>
 
       <div class="admin-tool" data-tool="survey" role="tabpanel" hidden>
         <p data-f="survey-hint"></p>
@@ -197,7 +216,7 @@ export class AdminPanel {
         <ul class="admin-walk" data-f="survey-list"></ul>
       </div>
 
-      <div class="admin-tool" data-tool="record" role="tabpanel">
+      <div class="admin-tool" data-tool="record" role="tabpanel" hidden>
         <div class="admin-actions">
           <button type="button" class="btn btn-primary" data-f="rec-toggle"></button>
           <button type="button" class="btn" data-f="rec-node"></button>
@@ -334,6 +353,23 @@ export class AdminPanel {
     this.#f('rec-scan').textContent = t('admin.record.scan');
     this.#f('rec-scan').hidden = typeof options.onScanRequest !== 'function';
     this.#f('rec-register').textContent = t('admin.record.register');
+    const self = this;
+    this.#wizard = createRouteWizard({
+      get draft() {
+        return self.#draft; // discard() replaces the draft; the wizard must follow
+      },
+      mount: this.#f('wizard-mount'),
+      document: this.#doc,
+      getPose: () => this.#pose,
+      setPose: (point, o) => this.setManualPose(point, o),
+      scan: (handler) => this.beginCodeScan(handler),
+      fixToCode: (text) => this.fixToCode(text),
+      toast: (text) => this.#toast(text),
+      changed: () => this.#changed(),
+      showTab: (name) => this.showTab(name),
+      wardFields: AdminPanel.wardFields,
+      places: options.places ?? HOSPITAL_PLACES,
+    });
     this.#f('survey-hint').textContent = t('admin.survey.hint');
     this.#f('survey-name-label').textContent = t('admin.survey.name');
     this.#f('survey-ward-label').textContent = t('admin.ward.number');
@@ -441,7 +477,10 @@ export class AdminPanel {
     floorSel.addEventListener('change', () => options.floorplan.showFloor(Number(floorSel.value)));
 
     // Poses drive "add here"; the floor plan gives taps and a draw hook.
-    if (options.initialPose) this.#pose = options.initialPose;
+    if (options.initialPose) {
+      this.#pose = options.initialPose;
+      this.#wizard.onPose(this.#pose);
+    }
     this.#unsub.push(options.provider.onPose((p) => this.#onPose(p)));
     this.#unsub.push(options.floorplan.onDraw((ctx, fp) => this.#drawOverlay(ctx, fp)));
     const onTap = (e) => this.#onPlanTap(e);
@@ -450,6 +489,7 @@ export class AdminPanel {
 
     this.#updateRecording();
     this.#updateExport();
+    this.showTab('routes');
     this.#published = !restored;
     this.#updateSaved();
     if (restored) this.#status(t('admin.draft.restored'));
@@ -524,6 +564,31 @@ export class AdminPanel {
   #onPose(pose) {
     this.#pose = pose;
     this.#updateRecording();
+    this.#wizard?.onPose(pose);
+  }
+
+  /** The guided start-to-finish route builder (the Routes tab). */
+  get wizard() {
+    return this.#wizard;
+  }
+
+  /**
+   * Show the camera; the next decoded code the venue does not recognise
+   * goes to `handler` (a recognised one fixes the position as usual).
+   * @param {(text: string) => unknown} handler
+   */
+  beginCodeScan(handler) {
+    this.#codeHandler = handler;
+    this.#surveying = false;
+    this.#registering = false;
+    this.#status(t('admin.survey.scanning'));
+    this.#opts.onScanRequest?.();
+    return true;
+  }
+
+  /** Whether the next unrecognised scan should come to {@link registerCode}. */
+  get expectingCode() {
+    return this.#codeHandler !== null || this.#surveying || this.#registering;
   }
 
   startRecording() {
@@ -680,6 +745,7 @@ export class AdminPanel {
   beginSurveyScan() {
     this.#surveying = true;
     this.#registering = false;
+    this.#codeHandler = null;
     this.#status(t('admin.survey.scanning'));
     this.#opts.onScanRequest?.();
     return true;
@@ -892,6 +958,8 @@ export class AdminPanel {
       return false;
     }
     this.#registering = true;
+    this.#surveying = false;
+    this.#codeHandler = null;
     this.#status(t('admin.record.registering'));
     this.#opts.onScanRequest?.();
     return true;
@@ -909,6 +977,11 @@ export class AdminPanel {
    * @returns {object | null} The anchor created, if any.
    */
   registerCode(text) {
+    if (this.#codeHandler) {
+      const handler = this.#codeHandler;
+      this.#codeHandler = null;
+      return handler(text) ?? null;
+    }
     if (this.#surveying) return this.surveyCode(text);
     if (!this.#registering || !this.#pose) return null;
     const known = this.#draft.anchors.find((a) => a.code === text);
@@ -937,10 +1010,10 @@ export class AdminPanel {
   // ----------------------------------------------------------- plan editor
 
   #onPlanTap(e) {
-    if (this.#tab !== 'plan' && this.#tab !== 'record') return;
+    if (!['plan', 'record', 'routes'].includes(this.#tab)) return;
     const rect = this.#opts.floorplan.canvas.getBoundingClientRect?.() ?? { left: 0, top: 0 };
     const point = this.#opts.floorplan.fromScreen(e.clientX - rect.left, e.clientY - rect.top);
-    if (this.#tab === 'record') {
+    if (this.#tab !== 'plan') {
       this.setManualPose(point);
       return;
     }
@@ -1505,6 +1578,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
 
   discard() {
     this.#draft = new VenueDraft(this.#opts.venue.toJSON());
+    this.#wizard?.reset();
     try {
       this.#opts.storage?.removeItem(DRAFT_KEY);
     } catch {
@@ -1534,6 +1608,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
 
   destroy() {
     for (const off of this.#unsub) off();
+    this.#wizard?.destroy();
     this.#el.remove();
   }
 }

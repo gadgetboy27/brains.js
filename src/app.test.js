@@ -1114,3 +1114,58 @@ describe('bootApp — every scan gets a visible reaction', () => {
     await app.destroy();
   });
 });
+
+describe('bootApp — route wizard', () => {
+  it('admin opens on Routes; a walk drops points from live poses and a scan mid-route corrects it', async () => {
+    const { app } = await boot({
+      config: { admin: true, venueUrl: '/venues/wing-b/venue.json', venueId: 'wing-b' },
+      options: {
+        venue: null,
+        loadVenue: async () => Promise.reject(new Error('HTTP 404')),
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+        mapMatching: false,
+      },
+      providerOptions: {
+        mock: { path: [{ x: 0, y: 0, floor: 0 }], fixIntervalMs: 1000, speedMps: 0, confidence: 1 },
+      },
+    });
+    const admin = app.admin;
+    const wizard = admin.wizard;
+    expect(admin.tab).toBe('routes');
+    expect(wizard.step).toBe('start');
+    const f = (n) => wizard.el.querySelector(`[data-f="${n}"]`);
+
+    // The mock has put us at the origin: name the start and go.
+    expect(f('start-status').textContent).toBe(
+      'Position fixed. Name the start, then Start walking.'
+    );
+    f('start-name').value = 'Main entrance';
+    f('start-next').click();
+    expect(wizard.step).toBe('walk');
+
+    // Walk 8 m east in 1 m fixes: the app feeds each pose to the panel and on to the wizard.
+    for (let x = 1; x <= 8; x += 1) app.chain.active.teleport({ x, y: 0, floor: 0 });
+    expect(wizard.route).toMatchObject({ nodes: 4 }); // exact fixes, but points within 1.5 m snap together
+    expect(f('walk-status').textContent).toMatch(/^\d+ m · \d+ points · 0 codes$/);
+
+    // A sticker on the wall that nobody has recorded yet: scan it mid-route.
+    f('walk-scan').click();
+    expect(app.view).toBe('ar');
+    expect(admin.expectingCode).toBe(true);
+    const anchor = admin.registerCode('A06');
+    expect(anchor).toMatchObject({ code: 'A06', x: 8, y: 0 });
+    expect(wizard.route.scans).toBe(1);
+    expect(admin.draft.anchors.at(-1).code).toBe('A06');
+
+    f('walk-arrive').click();
+    f('finish-name').value = 'Pharmacy';
+    f('finish-save').click();
+    expect(wizard.step).toBe('done');
+    expect(f('summary').textContent).toMatch(
+      /^Main entrance → Pharmacy: \d+ m, \d+ points, 1 codes$/
+    );
+    expect(admin.draft.pois.map((p) => p.name)).toEqual(['Main entrance', 'Pharmacy']);
+    expect(admin.draft.validate()).toEqual([]);
+    await app.destroy();
+  });
+});

@@ -5,6 +5,39 @@
 copy of the current venue and exports valid venue JSON; nothing changes for
 visitors until that JSON is published.
 
+## Routes wizard (start → walk → finish → next)
+
+The **Routes** tab — the first one, and where `?admin=1` opens — builds a
+venue one route at a time, guided:
+
+1. **Start.** Stand where the route begins. **Scan the code here** (a known
+   code fixes your position; a new one is recorded as a marker at this spot —
+   the first code of a brand-new venue becomes the map origin), or pick the
+   place from **Or an existing place**, or tap the plan. Name it (a **Ward
+   number** fills the name in), then **Start walking**. A place is created on
+   the start node if none is there.
+2. **Walk.** Walk at a normal pace. Points are dropped automatically every
+   3 m, at turns (≥ 35°), at every exact fix and whenever the floor changes;
+   each is linked to the previous one. Say what the **next section is**
+   (level walking, door, stairs, lift, ramp, escalator — this sets the edge
+   type and so its step-free default) and tick **Staff-only section** for a
+   back corridor. **Mark a turn here** drops a point the sensors missed;
+   **Scan a code** corrects the position from any sticker you pass (unknown
+   stickers are recorded). When dead reckoning goes stale the tab says
+   _Position uncertain_ and drops nothing until you scan.
+3. **Finish.** Tap **I have arrived**, name the destination (or pick an
+   existing place — the route joins the graph there), scan its code if there
+   is one, tick **Not wheelchair-friendly** if a narrow door or steep ramp
+   makes the level parts unusable for a wheelchair, then **Save route**.
+4. **Done.** A summary (_Main entrance → Ward 7: 84 m, 12 points, 2 codes_)
+   and three choices: **Next route from here** (the destination you just
+   reached is the next start — walk a whole wing in one pass), **New route
+   from elsewhere**, or **Publish…**.
+
+Everything goes through the same draft as the other tabs: **Undo** removes
+the last point, the draft autosaves on this device, and nothing reaches
+visitors until you Publish. **Stop this route** keeps what was recorded.
+
 ## Sticker survey (printed codes first)
 
 The quickest way to map a building when you already have QR stickers printed:

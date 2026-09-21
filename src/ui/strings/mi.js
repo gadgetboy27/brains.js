@@ -265,6 +265,58 @@ export default {
     'scan.unrecognised': 'Ehara te waehere “{text}” i te tohu mō tēnei wāhi.',
     'scan.wrongVenue': 'Nō tētahi atu wāhi te waehere “{text}”.',
     'admin.tab.survey': 'Rūri pihi',
+    'admin.tab.routes': 'Ngā ara',
+    'admin.wizard.step.start': 'Tīmata',
+    'admin.wizard.step.walk': 'Hīkoi',
+    'admin.wizard.step.finish': 'Mutunga',
+    'admin.wizard.step.done': 'Kua oti',
+    'admin.wizard.existing': 'He wāhi kua mōhiotia rānei',
+    'admin.wizard.existingNone': '— kāore —',
+    'admin.wizard.unnamed': 'ingoa-kore',
+    'admin.wizard.scanHere': 'Matawaia te waehere i konei',
+    'admin.wizard.codeRecorded': 'Kua hopukina te waehere {code} ki tēnei wāhi',
+    'admin.wizard.start.hint':
+      'Haere ki te tīmatanga o tēnei ara. Matawaia te waehere kua tāia i reira (ka kōwhiri rānei i te wāhi mēnā kei te mōhiotia kē, ka pā rānei ki te mahere), whakaingoatia, kātahi ka Tīmata te hīkoi.',
+    'admin.wizard.start.name': 'Wāhi tīmata',
+    'admin.wizard.start.next': 'Tīmata te hīkoi',
+    'admin.wizard.start.noPose':
+      'Kāore anō he tūnga — matawaia te waehere i konei, pāwhiria rānei tō wāhi ki te mahere.',
+    'admin.wizard.start.ready':
+      'Kua mau te tūnga. Whakaingoatia te tīmatanga, kātahi ka Tīmata te hīkoi.',
+    'admin.wizard.start.readyApprox':
+      'Kua tautuhia te tūnga mai i te mahere (tata). Matawaia he waehere kia tika ai te tīmatanga.',
+    'admin.wizard.walk.status': '{distance} m · {points} tohu · {scans} waehere',
+    'admin.wizard.walk.hint':
+      'Hīkoi māori noa. Ka tāpirihia ngā tohu ia mita ruarua, i ngā hurihanga hoki. Matawaia tētahi waehere ka pahemo koe hei whakatika i te tūnga.',
+    'admin.wizard.walk.uncertain':
+      'Kāore i te tino mōhiotia te tūnga — matawaia te waehere tata rawa i mua i te haere tonu. Kāore he tohu e tāpirihia tae noa ki reira.',
+    'admin.wizard.walk.section': 'Ko te wāhanga e whai ake nei he',
+    'admin.wizard.walk.staffOnly': 'Wāhanga mā ngā kaimahi anake',
+    'admin.wizard.walk.turn': 'Tohua he hurihanga i konei',
+    'admin.wizard.walk.scan': 'Matawaia he waehere',
+    'admin.wizard.walk.arrive': 'Kua tae au',
+    'admin.wizard.walk.cancel': 'Whakamutua tēnei ara',
+    'admin.wizard.walk.cancelled':
+      'Kua whakamutua te ara. Ka noho tonu ngā tohu kua tāpirihia — whakamahia a Wetekia hei tango.',
+    'admin.wizard.section.walk': 'Hīkoi papatahi',
+    'admin.wizard.section.door': 'Mā te kūaha',
+    'admin.wizard.section.stairs': 'Arawhata',
+    'admin.wizard.section.lift': 'Ararewa',
+    'admin.wizard.section.ramp': 'Ara pīkau',
+    'admin.wizard.section.escalator': 'Arawhata hiko',
+    'admin.wizard.finish.hint':
+      'Whakaingoatia te wāhi ka tae atu (ka kōwhiri rānei mēnā kei te mōhiotia kē), ā, matawaia te waehere i konei mēnā he waehere.',
+    'admin.wizard.finish.name': 'Wāhi ka tae atu',
+    'admin.wizard.finish.noWheelchair':
+      'Kāore e pai mō te tūru wīra (kūaha whāiti, ara pīkau pari)',
+    'admin.wizard.finish.needName':
+      'Whakaingoatia te wāhi ka tae atu, kōwhiria rānei he wāhi kua mōhiotia.',
+    'admin.wizard.finish.save': 'Tiakina te ara',
+    'admin.wizard.done.summary': '{from} → {to}: {distance} m, {points} tohu, {scans} waehere',
+    'admin.wizard.done.saved': 'Kua tiakina te ara ki te hukihuki.',
+    'admin.wizard.done.nextHere': 'Ara e whai ake nei mai i konei',
+    'admin.wizard.done.nextNew': 'Ara hou mai i wāhi kē',
+    'admin.wizard.done.publish': 'Whakaputa…',
     'admin.survey.hint':
       'E tū ki tētahi waehere kua tāia, whakaingoatia te wāhi, kātahi ka matawai. Ka hopukina te waehere, tō wāhi me te wāhi ingoa — ka hono ki tērā o mua.',
     'admin.survey.name': 'Ingoa wāhi',

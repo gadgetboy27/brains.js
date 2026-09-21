@@ -755,7 +755,7 @@ export async function bootApp(options = {}) {
         }
         nav?.vibrate?.(40);
         if (scan.result === 'unrecognised' && admin) {
-          if (admin.registering || admin.surveying) {
+          if (admin.expectingCode) {
             const anchor = admin.registerCode(scan.text);
             if (anchor) {
               returnToPlanAfterScan = false;
