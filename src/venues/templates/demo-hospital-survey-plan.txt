@@ -1,0 +1,26 @@
+# Anchor survey plan — one printed code per line: code, floor, where it is mounted
+# Floors: G = ground (0), B = basement (-1), or a number. Blank lines and # comments are ignored.
+A01, G, Main entrance - outside doors
+A02, G, Main entrance - inside lobby
+A03, G, Reception desk
+A04, G, Lift lobby - ground
+A05, G, Stairwell A - ground
+A06, G, Corridor junction - east
+A07, G, Corridor junction - west
+A08, G, Outpatients reception
+A09, G, Radiology reception
+A10, G, Emergency department entrance
+A11, G, Cafe / atrium
+A12, G, Car park link door
+A13, 1, Lift lobby - level 1
+A14, 1, Stairwell A - level 1
+A15, 1, Corridor junction - north
+A16, 1, Clinic A reception
+A17, 1, Clinic B reception
+A18, 1, Ward 1 entrance
+A19, 2, Lift lobby - level 2
+A20, 2, Stairwell A - level 2
+A21, 2, Corridor junction - south
+A22, 2, Ward 2 entrance
+A23, 2, Theatre reception
+A24, 2, Spare / overflow

@@ -659,4 +659,127 @@ describe('AdminPanel — QR codes: preview, print sheet, register a printed stic
     );
     expect(admin.registerCode('ANOTHER')).toBeNull(); // not registering any more
   });
+
+  describe('sticker survey', () => {
+    const scan = (admin, code) => {
+      admin.beginSurveyScan();
+      return admin.registerCode(code);
+    };
+
+    it('records name + code + position per scan, first scan at the origin, and links stops', () => {
+      const onScanRequest = vi.fn();
+      const onManualPose = vi.fn();
+      const { admin } = make({ ...qr, onScanRequest, onManualPose });
+      admin.showTab('survey');
+      const name = admin.el.querySelector('[data-f="survey-name"]');
+
+      name.value = 'Main reception';
+      expect(admin.beginSurveyScan()).toBe(true); // no position needed
+      expect(onScanRequest).toHaveBeenCalledOnce();
+      expect(admin.surveying).toBe(true);
+      const first = admin.registerCode('A03');
+      expect(admin.surveying).toBe(false);
+      expect(first.anchor).toMatchObject({
+        x: 0,
+        y: 0,
+        floor: 0,
+        code: 'A03',
+        name: 'Main reception',
+      });
+      expect(first.poi).toMatchObject({ name: 'Main reception', category: 'service' });
+      expect(first.poi.aliases).toContain('Front desk'); // from the places library
+      expect(admin.el.querySelector('[data-f="survey-toast"]').textContent).toBe(
+        t('admin.survey.firstAtOrigin')
+      );
+      expect(name.value).toBe(''); // cleared for the next stop
+
+      // Walk on: the app sets a new pose; the next scan links to the last stop.
+      admin.setManualPose({ x: 12, y: 3, floor: 0 });
+      const wardField = admin.el.querySelector('[data-f="survey-ward"]');
+      wardField.value = '7';
+      const second = scan(admin, 'A18');
+      expect(second.anchor).toMatchObject({ x: 12, y: 3, code: 'A18', name: 'Ward 7' });
+      expect(second.poi).toMatchObject({ name: 'Ward 7', category: 'ward' });
+      expect(second.poi.aliases).toContain('W7');
+      expect(
+        admin.draft.edges.some(
+          (e) =>
+            (e.from === first.node.id && e.to === second.node.id) ||
+            (e.from === second.node.id && e.to === first.node.id)
+        )
+      ).toBe(true);
+      expect(admin.el.querySelector('[data-f="survey-count"]').textContent).toBe(
+        t('admin.survey.count', { count: 2 })
+      );
+      expect(admin.draft.validate()).toEqual([]);
+
+      // Re-scanning a recorded code fixes the position there instead of duplicating it.
+      admin.setManualPose({ x: 40, y: 40, floor: 0 });
+      expect(scan(admin, 'A03')).toBeNull();
+      expect(onManualPose).toHaveBeenLastCalledWith(expect.objectContaining({ x: 0, y: 0 }));
+      expect(admin.draft.anchors.filter((a) => a.code === 'A03')).toHaveLength(1);
+
+      // No name typed: still recorded, by code.
+      admin.setManualPose({ x: 20, y: 3, floor: 0 });
+      const third = scan(admin, 'A06');
+      expect(third.poi).toBeNull();
+      expect(third.anchor.code).toBe('A06');
+      expect(admin.el.querySelector('[data-f="survey-toast"]').textContent).toBe(
+        t('admin.survey.recordedNoName', { code: 'A06' })
+      );
+    });
+
+    it('a printed code list fills in names and floors, tracks progress and survives reload', () => {
+      const { admin, storage } = make({ ...qr, onScanRequest: vi.fn() });
+      admin.showTab('survey');
+      const status = admin.el.querySelector('[data-f="survey-plan-status"]');
+      const name = admin.el.querySelector('[data-f="survey-name"]');
+      expect(status.textContent).toBe('');
+
+      admin.el.querySelector('[data-f="survey-plan-demo"]').click();
+      expect(admin.surveyPlan).toHaveLength(24);
+      expect(status.textContent).toContain(t('admin.survey.planStatus', { done: 0, total: 24 }));
+      expect(status.textContent).toContain('A01');
+      expect(name.value).toBe('Main entrance - outside doors'); // offered, not committed
+
+      // Scanning a *different* listed code uses that code's own name, not the offered one.
+      const r = scan(admin, 'A09');
+      expect(r.anchor).toMatchObject({ code: 'A09', name: 'Radiology reception', floor: 0 });
+      expect(r.poi.name).toBe('Radiology reception');
+      expect(status.textContent).toContain(t('admin.survey.planStatus', { done: 1, total: 24 }));
+
+      // A typed name beats the list.
+      admin.setManualPose({ x: 5, y: 0, floor: 0 });
+      name.value = 'Front desk';
+      expect(scan(admin, 'A03').anchor.name).toBe('Front desk');
+
+      // A code listed on another floor moves the survey to that floor (creating it).
+      expect(admin.draft.floorByIndex(2)).toBeNull();
+      admin.setManualPose({ x: 5, y: 5, floor: 0 });
+      const up = scan(admin, 'A22');
+      expect(admin.draft.floorByIndex(2)).toMatchObject({ id: 'l2', name: 'Level 2' });
+      expect(up.anchor).toMatchObject({ floor: 2, name: 'Ward 2' });
+      expect(up.poi).toMatchObject({ category: 'ward' });
+      expect(up.poi.aliases).toContain('W2');
+      expect(admin.draft.validate()).toEqual([]);
+
+      // Codes in a printed URL still match; unlisted codes are recorded plainly.
+      admin.setManualPose({ x: 8, y: 5, floor: 2 });
+      expect(scan(admin, 'https://s.example/A23').anchor.name).toBe('Theatre reception');
+      admin.setManualPose({ x: 9, y: 5, floor: 2 });
+      expect(scan(admin, 'ZZ99').anchor.name).toBeUndefined();
+
+      // The list is kept per venue on this device.
+      const { admin: again } = make({ storage });
+      expect(again.surveyPlan).toHaveLength(24);
+      expect(again.el.querySelector('[data-f="survey-plan"]').value).toContain('A24');
+
+      // Bad lines are reported, good lines kept.
+      const parsed = admin.setSurveyPlan('B01, G, Door\nnope');
+      expect(parsed.rows).toHaveLength(1);
+      expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+        t('admin.survey.planErrors', { count: 1, first: parsed.errors[0] })
+      );
+    });
+  });
 });

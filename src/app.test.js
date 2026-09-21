@@ -78,6 +78,7 @@ describe('readConfig', () => {
       view: 'auto',
       harness: false,
       admin: false,
+      survey: false,
       filter: { wheelchair: false, stepFree: false, accessLevel: 'visitor' },
     });
     expect(
@@ -995,6 +996,90 @@ describe('bootApp — registering a printed sticker from the scanner', () => {
       name: 'Ward door sticker',
     });
     expect(app.view).toBe('floorplan'); // back to the plan once registered
+    await app.destroy();
+  });
+});
+
+describe('bootApp — sticker survey of a new venue', () => {
+  it('?survey=1 on an unpublished venue: blank sheet, scan-name-record, dead reckoning between codes', async () => {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const { app } = await boot({
+      config: {
+        admin: true,
+        survey: true,
+        provider: null,
+        venueUrl: '/venues/north-shore/venue.json',
+        venueId: 'north-shore',
+      },
+      options: {
+        venue: null,
+        loadVenue: async () => Promise.reject(new Error('HTTP 404')),
+        adminOptions: {
+          storage: null,
+          download: vi.fn(),
+          copy: vi.fn(),
+          prompt: vi.fn(() => 'x'),
+          qrDataUrl: async () => 'data:,',
+        },
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    // Nothing published yet: staff start from a blank sheet, on the survey tab.
+    expect(app.state.venueIsNew).toBe(true);
+    expect(app.venue.name).toBe('North Shore');
+    expect(app.hud.text.notices.join(' ')).toContain('north-shore');
+    expect(app.admin.tab).toBe('survey');
+    expect(app.view).toBe('floorplan');
+    expect(app.chain.state.active).toBe('qr');
+
+    // Name the area, scan the printed code: recorded at the origin.
+    app.admin.el.querySelector('[data-f="survey-name"]').value = 'Main reception';
+    app.admin.beginSurveyScan();
+    expect(app.view).toBe('ar');
+    app.chain.active.handleScan('A03');
+    expect(app.view).toBe('floorplan');
+    expect(app.admin.draft.anchors.at(-1)).toMatchObject({
+      x: 0,
+      y: 0,
+      code: 'A03',
+      name: 'Main reception',
+    });
+    expect(app.state.hasPose).toBe(true);
+
+    // Walk 2 m forward (device motion, heading 0 = +y): the position follows
+    // between scans even though the QR provider only reports exact fixes.
+    for (let i = 0; i < 2; i += 1) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), {
+          acceleration: { x: 0, y: 1, z: 0 },
+          interval: 1000,
+        })
+      );
+    }
+    await vi.advanceTimersByTimeAsync(300);
+    expect(app.floorplan.summary).toContain('You are at 0.0, 2.0 metres');
+
+    // The next code gets those coordinates and is linked to the first.
+    app.admin.el.querySelector('[data-f="survey-name"]').value = 'Lift lobby';
+    app.admin.beginSurveyScan();
+    app.chain.active.handleScan('A04');
+    const lift = app.admin.draft.anchors.at(-1);
+    expect(lift).toMatchObject({ code: 'A04', name: 'Lift lobby' });
+    expect(lift.y).toBeCloseTo(2, 5);
+    expect(app.admin.draft.edges).toHaveLength(1);
+    expect(app.admin.draft.validate()).toEqual([]);
+
+    // The scanner now knows both stickers: re-scanning fixes the position back.
+    app.chain.active.handleScan('A03');
+    expect(app.floorplan.summary).toContain('You are at 0.0, 0.0 metres');
     await app.destroy();
   });
 });

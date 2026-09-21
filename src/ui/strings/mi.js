@@ -260,6 +260,28 @@ export default {
     'admin.export.printSheet': 'Whakatuwhera i te pepa tā',
     'admin.export.noMarkers': 'Kāore anō he tohu — tāpirihia mā "Tāpiri tohu QR ki konei".',
     'admin.export.markerCode': 'Waehere: {text}',
+    'notice.venueNew':
+      'Wāhi hou “{id}” — kāore anō he mea kua whakaputaina. Rūritia, kātahi ka Whakaputa.',
+    'admin.tab.survey': 'Rūri pihi',
+    'admin.survey.hint':
+      'E tū ki tētahi waehere kua tāia, whakaingoatia te wāhi, kātahi ka matawai. Ka hopukina te waehere, tō wāhi me te wāhi ingoa — ka hono ki tērā o mua.',
+    'admin.survey.name': 'Ingoa wāhi',
+    'admin.survey.scan': 'Matawaia te waehere kua tāia',
+    'admin.survey.scanning': 'Tohua te kāmera ki te waehere kua tāia…',
+    'admin.survey.recorded': 'Kua hopukina a {name} — waehere {code}',
+    'admin.survey.recordedNoName': 'Kua hopukina te waehere {code} ki tēnei wāhi',
+    'admin.survey.known': 'Kua noho kē taua waehere hei {name}; kei reira koe ināianei.',
+    'admin.survey.firstAtOrigin':
+      'Kua hopukina te waehere tuatahi hei pūtake mahere (0, 0). Hīkoi ki te waehere e whai ake nei, ka matawai.',
+    'admin.survey.count': '{count} waehere kua hopukina i tēnei rūri',
+    'admin.survey.plan': 'Rārangi waehere kua tāia',
+    'admin.survey.planHint':
+      'Whakapiri te rārangi o ngā waehere i tāia e koe, kotahi ki ia rārangi: waehere, papa, wāhi (hei tauira A03, G, Tari tomokanga). Ka matawaia he waehere kei te rārangi, ka whakakīia tōna ingoa me tōna papa.',
+    'admin.survey.planUse': 'Whakamahia tēnei rārangi',
+    'admin.survey.planDemo': 'Utaina te rārangi hōhipera whakaaturanga (A01–A24)',
+    'admin.survey.planStatus': '{done} o ngā waehere {total} kua hopukina',
+    'admin.survey.planNext': 'e whai ake: {code} — {name} ({floor})',
+    'admin.survey.planErrors': 'Kāore i taea te pānui i ngā rārangi {count}: {first}',
     'admin.draft.restored': 'Kua whakahokia te tauira mai i tēnei pūrere.',
     'admin.close': 'Kati te whakahaere',
     'admin.ok': 'Āe',

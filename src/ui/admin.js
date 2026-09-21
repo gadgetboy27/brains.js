@@ -25,6 +25,7 @@ import QRCode from 'qrcode';
 
 import { VenueDraft } from '../core/venue-draft.js';
 import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
+import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/survey-plan.js';
 import { categoryName, t } from './strings/index.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
@@ -62,12 +63,16 @@ const CSS = `
 .admin-toast { margin: 6px 0; padding: 8px 12px; border-radius: 8px; background: var(--color-accent); color: var(--color-accent-contrast); font-weight: 600; }
 .admin-toast:empty { display: none; }
 .admin-walk { margin: 6px 0; padding-left: 18px; }
+.admin-plan { margin: 6px 0; }
+.admin-plan summary { cursor: pointer; font-weight: 600; }
+.admin-plan textarea { width: 100%; min-height: 6em; font: inherit; font-size: 13px; box-sizing: border-box; }
 .admin-markers { list-style: none; margin: 6px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .admin-markers li { display: grid; gap: 4px; text-align: center; font-size: 13px; }
 .admin-markers img { width: 100%; max-width: 140px; margin: 0 auto; background: #fff; border-radius: 6px; }
 `;
 
 const DRAFT_KEY = 'brains:admin-draft';
+const PLAN_KEY = 'brains:survey-plan';
 const TOKEN_KEY = 'brains:admin-token';
 
 export class AdminPanel {
@@ -87,6 +92,11 @@ export class AdminPanel {
   #tab = 'record';
   #published = true;
   #registering = false;
+  #surveying = false;
+  #surveyCount = 0;
+  #surveyLastNode = null;
+  /** @type {import('../venues/survey-plan.js').SurveyPlanRow[]} */
+  #plan = [];
   #walk = [];
   #markerUrls = new Map();
   #markerRender = 0;
@@ -152,6 +162,7 @@ export class AdminPanel {
       <h2 data-f="title"></h2>
       <p data-f="hint"></p>
       <div class="admin-tabs" role="tablist">
+        <button type="button" class="btn" role="tab" data-tab="survey"></button>
         <button type="button" class="btn" role="tab" data-tab="record"></button>
         <button type="button" class="btn" role="tab" data-tab="plan"></button>
         <button type="button" class="btn" role="tab" data-tab="edit"></button>
@@ -163,6 +174,28 @@ export class AdminPanel {
       </div>
       <p class="admin-status" data-f="status" role="status" aria-live="polite"></p>
       <p class="admin-status" data-f="saved"></p>
+
+      <div class="admin-tool" data-tool="survey" role="tabpanel" hidden>
+        <p data-f="survey-hint"></p>
+        <details class="admin-plan" data-f="survey-plan-box">
+          <summary data-f="survey-plan-summary"></summary>
+          <p data-f="survey-plan-hint"></p>
+          <textarea data-f="survey-plan" rows="6" spellcheck="false" placeholder="A03, G, Reception desk"></textarea>
+          <div class="admin-actions">
+            <button type="button" class="btn btn-primary" data-f="survey-plan-use"></button>
+            <button type="button" class="btn" data-f="survey-plan-demo"></button>
+          </div>
+        </details>
+        <p data-f="survey-plan-status" role="status"></p>
+        <label><span data-f="survey-name-label"></span><input data-f="survey-name" list="admin-places" autocomplete="off" /></label>
+        <label data-f="survey-ward-row"><span data-f="survey-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="survey-ward" /></label>
+        <div class="admin-actions">
+          <button type="button" class="btn btn-primary" data-f="survey-scan"></button>
+        </div>
+        <p data-f="survey-count"></p>
+        <p class="admin-toast" data-f="survey-toast" role="status" aria-live="assertive"></p>
+        <ul class="admin-walk" data-f="survey-list"></ul>
+      </div>
 
       <div class="admin-tool" data-tool="record" role="tabpanel">
         <div class="admin-actions">
@@ -301,6 +334,24 @@ export class AdminPanel {
     this.#f('rec-scan').textContent = t('admin.record.scan');
     this.#f('rec-scan').hidden = typeof options.onScanRequest !== 'function';
     this.#f('rec-register').textContent = t('admin.record.register');
+    this.#f('survey-hint').textContent = t('admin.survey.hint');
+    this.#f('survey-name-label').textContent = t('admin.survey.name');
+    this.#f('survey-ward-label').textContent = t('admin.ward.number');
+    this.#f('survey-scan').textContent = t('admin.survey.scan');
+    this.#f('survey-scan').hidden = typeof options.onScanRequest !== 'function';
+    this.#f('survey-count').textContent = t('admin.survey.count', { count: 0 });
+    this.#f('survey-plan-summary').textContent = t('admin.survey.plan');
+    this.#f('survey-plan-hint').textContent = t('admin.survey.planHint');
+    this.#f('survey-plan-use').textContent = t('admin.survey.planUse');
+    this.#f('survey-plan-demo').textContent = t('admin.survey.planDemo');
+    this.#f('survey-plan-use').addEventListener('click', () =>
+      this.setSurveyPlan(this.#f('survey-plan').value)
+    );
+    this.#f('survey-plan-demo').addEventListener('click', () => {
+      this.#f('survey-plan').value = DEMO_HOSPITAL_PLAN;
+      this.setSurveyPlan(DEMO_HOSPITAL_PLAN);
+    });
+    this.#restorePlan();
     this.#f('rec-register').hidden = typeof options.onScanRequest !== 'function';
     this.#f('walk-title').textContent = t('admin.record.walkList');
     this.#f('print-sheet').textContent = t('admin.export.printSheet');
@@ -331,6 +382,11 @@ export class AdminPanel {
       options.onScanRequest?.();
     });
     this.#f('rec-register').addEventListener('click', () => this.beginRegister());
+    this.#f('survey-scan').addEventListener('click', () => this.beginSurveyScan());
+    this.#f('survey-ward').addEventListener('input', () => {
+      const n = Number(this.#f('survey-ward').value);
+      if (n >= 1 && n <= 99) this.#f('survey-name').value = t('admin.ward.name', { n });
+    });
     this.#f('print-sheet').addEventListener('click', () => this.openPrintSheet());
     // Ward category: show the number field; the name follows the number.
     for (const prefix of ['poi', 'edit']) {
@@ -545,20 +601,20 @@ export class AdminPanel {
    * buttons work before any marker exists. Confidence is deliberately low.
    * @param {{ x: number, y: number, floor?: number, z?: number }} point
    */
-  setManualPose(point) {
+  setManualPose(point, { confidence = 0.5, quiet = false } = {}) {
     const floor = point.floor ?? this.#pose?.floor ?? this.#draft.floors[0].index;
     const pose = {
       x: point.x,
       y: point.y,
       z: point.z ?? this.#draft.floorByIndex(floor)?.elevation ?? 0,
       floor,
-      heading: this.#pose?.heading ?? 0,
-      confidence: 0.5,
+      heading: point.heading ?? this.#pose?.heading ?? 0,
+      confidence,
       timestamp: Date.now(),
     };
     this.#pose = pose;
     this.#updateRecording();
-    this.#toast(t('admin.record.poseFromPlan'));
+    if (!quiet) this.#toast(t('admin.record.poseFromPlan'));
     this.#opts.onManualPose?.(pose);
     return pose;
   }
@@ -615,6 +671,218 @@ export class AdminPanel {
     return anchor;
   }
 
+  // ------------------------------------------------------- sticker survey
+
+  /**
+   * Start a survey scan: the next code seen is recorded here with the area
+   * name typed above. No position yet? The first code becomes the origin.
+   */
+  beginSurveyScan() {
+    this.#surveying = true;
+    this.#registering = false;
+    this.#status(t('admin.survey.scanning'));
+    this.#opts.onScanRequest?.();
+    return true;
+  }
+
+  get surveying() {
+    return this.#surveying;
+  }
+
+  /**
+   * Record a scanned printed code as a marker at the current position, with a
+   * route node (linked to the previous survey stop) and, if named, a place.
+   * @param {string} text  The code's own text.
+   */
+  surveyCode(text) {
+    this.#surveying = false;
+    if (this.fixToCode(text)) return null; // re-scanning a recorded code
+    const row = findPlanRow(this.#plan, text);
+    if (row) this.#ensureFloor(row.floor);
+    let firstAtOrigin = false;
+    if (!this.#pose) {
+      firstAtOrigin = true;
+      this.setManualPose(
+        { x: 0, y: 0, floor: row?.floor ?? this.#draft.floors[0].index },
+        { quiet: true }
+      );
+    } else if (row && row.floor !== this.#pose.floor) {
+      // The list says this code is on another floor: the survey moved floors.
+      this.setManualPose({ x: this.#pose.x, y: this.#pose.y, floor: row.floor }, { quiet: true });
+      this.#surveyLastNode = null; // do not link across floors by walking
+    }
+    const pose = this.#pose;
+    const nameField = this.#f('survey-name');
+    // A name filled in from the list only counts if the scanned code is that
+    // listed code; a typed name always wins.
+    const typed =
+      nameField.value.trim() && nameField.value.trim() !== nameField.dataset.prefill
+        ? nameField.value.trim()
+        : '';
+    const wardN = this.#f('survey-ward').value;
+    const planWard = /^ward\s*(\d{1,2})\b/i.exec(row?.name ?? '');
+    const ward = AdminPanel.wardFields(wardN || (typed ? '' : (planWard?.[1] ?? '')));
+    const name = ward?.name ?? (typed || row?.name || '');
+
+    const node = this.#draft.addNode(
+      { x: pose.x, y: pose.y, z: pose.z, floor: pose.floor, name: name || undefined },
+      { linkFrom: this.#surveyLastNode, snap: 1.5 }
+    );
+    this.#surveyLastNode = node.id;
+    const anchor = this.#draft.addAnchor({
+      x: pose.x,
+      y: pose.y,
+      z: pose.z,
+      floor: pose.floor,
+      heading: pose.heading,
+      name: name || undefined,
+    });
+    anchor.code = text;
+    let poi = null;
+    if (name) {
+      const template = findPlace(name, this.#opts.places ?? HOSPITAL_PLACES);
+      poi = this.#draft.addPoi({
+        name,
+        node: node.id,
+        aliases: [...new Set([...(ward?.aliases ?? []), ...(template?.aliases ?? [])])],
+        category: ward ? 'ward' : template?.category,
+        access: template?.access,
+      });
+    }
+    this.#surveyCount += 1;
+    this.#f('survey-count').textContent = t('admin.survey.count', { count: this.#surveyCount });
+    const li = this.#doc.createElement('li');
+    li.textContent = `${name || anchor.id} · ${text}`;
+    this.#f('survey-list').prepend(li);
+    this.#surveyToast(
+      firstAtOrigin
+        ? t('admin.survey.firstAtOrigin')
+        : name
+          ? t('admin.survey.recorded', { name, code: text })
+          : t('admin.survey.recordedNoName', { code: text })
+    );
+    this.#f('survey-name').value = '';
+    this.#f('survey-ward').value = '';
+    this.#addedOnWalk('anchor', name || anchor.id);
+    this.#changed();
+    this.#updatePlanStatus();
+    // The code now lives here, so the position is exact from this point:
+    // dead reckoning restarts from it for the walk to the next code.
+    this.setManualPose(
+      { x: anchor.x, y: anchor.y, z: anchor.z, floor: anchor.floor, heading: anchor.heading },
+      { confidence: 1, quiet: true }
+    );
+    return { anchor, node, poi };
+  }
+
+  /**
+   * Set the list of printed codes for this survey (`code, floor, where` per
+   * line). A scanned code on the list gets its name and floor filled in, and
+   * the tab shows what is still to do. Kept on this device per venue.
+   * @param {string} text
+   * @returns {{ rows: object[], errors: string[] }}
+   */
+  setSurveyPlan(text) {
+    const parsed = parseSurveyPlan(text);
+    this.#plan = parsed.rows;
+    try {
+      const key = `${PLAN_KEY}:${this.#draft.id}`;
+      if (parsed.rows.length) this.#opts.storage?.setItem(key, text);
+      else this.#opts.storage?.removeItem(key);
+    } catch {
+      /* storage unavailable */
+    }
+    if (parsed.errors.length) {
+      this.#toast(
+        t('admin.survey.planErrors', { count: parsed.errors.length, first: parsed.errors[0] })
+      );
+    } else if (parsed.rows.length) {
+      this.#f('survey-plan-box').open = false;
+    }
+    this.#updatePlanStatus();
+    return parsed;
+  }
+
+  get surveyPlan() {
+    return this.#plan;
+  }
+
+  #restorePlan() {
+    try {
+      const text = this.#opts.storage?.getItem(`${PLAN_KEY}:${this.#draft.id}`);
+      if (text) {
+        this.#f('survey-plan').value = text;
+        this.#plan = parseSurveyPlan(text).rows;
+      }
+    } catch {
+      /* storage unavailable */
+    }
+    this.#updatePlanStatus();
+  }
+
+  /** Listed codes not yet recorded, in list order. */
+  #planRemaining() {
+    const done = new Set(this.#draft.anchors.map((a) => a.code).filter(Boolean));
+    return this.#plan.filter((r) => !done.has(r.code));
+  }
+
+  #updatePlanStatus() {
+    const el = this.#f('survey-plan-status');
+    const nameField = this.#f('survey-name');
+    if (!this.#plan.length) {
+      el.textContent = '';
+      delete nameField.dataset.prefill;
+      return;
+    }
+    const remaining = this.#planRemaining();
+    const next = remaining[0] ?? null;
+    el.textContent =
+      t('admin.survey.planStatus', {
+        done: this.#plan.length - remaining.length,
+        total: this.#plan.length,
+      }) +
+      (next
+        ? ` · ${t('admin.survey.planNext', { code: next.code, name: next.name, floor: next.floorLabel })}`
+        : '');
+    // Offer the next listed name; it is only used if that code is scanned.
+    if (next && (!nameField.value.trim() || nameField.value === nameField.dataset.prefill)) {
+      nameField.value = next.name;
+      nameField.dataset.prefill = next.name;
+    } else if (!next) {
+      delete nameField.dataset.prefill;
+    }
+  }
+
+  #ensureFloor(index) {
+    if (this.#draft.floorByIndex(index)) return;
+    const name = index === 0 ? 'Ground' : index < 0 ? `Basement ${-index}` : `Level ${index}`;
+    const id = index === 0 ? 'ground' : index < 0 ? `b${-index}` : `l${index}`;
+    this.#draft.addFloor({ index, id, name, elevation: index * 4 });
+  }
+
+  /**
+   * A scan of a code this draft already knows (recorded on this device but
+   * not yet published, so the scanner itself cannot place it): fix the
+   * position at that marker. Returns whether the code was known.
+   * @param {string} text
+   */
+  fixToCode(text) {
+    const known = this.#draft.anchors.find((a) => a.code === text);
+    if (!known) return false;
+    this.setManualPose(
+      { x: known.x, y: known.y, z: known.z, floor: known.floor, heading: known.heading },
+      { confidence: 1, quiet: true }
+    );
+    this.#surveyToast(t('admin.survey.known', { name: known.name ?? known.id }));
+    return true;
+  }
+
+  #surveyToast(text) {
+    const el = this.#f('survey-toast');
+    el.textContent = text;
+    this.#toast(text);
+  }
+
   // ------------------------------------------------- register a printed code
 
   /** Next scanned code that the venue does not know becomes a marker here. */
@@ -641,6 +909,7 @@ export class AdminPanel {
    * @returns {object | null} The anchor created, if any.
    */
   registerCode(text) {
+    if (this.#surveying) return this.surveyCode(text);
     if (!this.#registering || !this.#pose) return null;
     const known = this.#draft.anchors.find((a) => a.code === text);
     if (known) {

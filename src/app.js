@@ -29,6 +29,7 @@
  * Every browser dependency is injectable so the whole boot runs under jsdom.
  */
 
+import { PoseFusion } from './core/fusion.js';
 import { MapMatcher } from './core/map-matching.js';
 import { createNavigator } from './core/navigation.js';
 import { findRoute } from './core/router.js';
@@ -111,7 +112,8 @@ export function readConfig({
     allowMock: q.get('mock') === '1' || provider === 'mock' || Boolean(env.DEV),
     view: ['ar', 'floorplan', 'auto'].includes(view) ? view : 'auto',
     harness: q.get('harness') === '1',
-    admin: q.get('admin') === '1',
+    admin: q.get('admin') === '1' || q.get('survey') === '1',
+    survey: q.get('survey') === '1',
     filter: {
       wheelchair: q.get('wheelchair') === '1',
       stepFree: q.get('stepFree') === '1',
@@ -198,6 +200,7 @@ export async function bootApp(options = {}) {
   // a failed fetch; see docs/handled-states.md)
   let venue = options.venue ?? null;
   let venueFromCache = false;
+  let venueIsNew = false;
   if (!venue) {
     if (!config.venueUrl) {
       venue = createVenue(structuredClone(demoVenue));
@@ -209,6 +212,10 @@ export async function bootApp(options = {}) {
         if (config.venueId === demoVenue.id && /HTTP 404/.test(err.message)) {
           // Nothing published yet for the demo: use the bundled copy.
           venue = createVenue(structuredClone(demoVenue));
+        } else if (config.admin && config.venueId && /HTTP 404/.test(err.message)) {
+          // A venue that does not exist yet: staff start it from a blank sheet.
+          venue = createVenue(blankVenue(config.venueId));
+          venueIsNew = true;
         }
         const cached = venue ? null : loadVenueCache(config.venueUrl, storage);
         if (cached) {
@@ -241,6 +248,7 @@ export async function bootApp(options = {}) {
   doc.documentElement.lang = langCode;
   speech.setLanguage(langCode);
   if (venueFromCache) hud.showNotice('venue-cached', t('notice.venueCached'));
+  if (venueIsNew) hud.showNotice('venue-new', t('notice.venueNew', { id: venue.id }));
 
   // --- map matching: snap dead-reckoned poses to the corridors and notice
   // known places as they are passed (src/core/map-matching.js).
@@ -499,6 +507,10 @@ export async function bootApp(options = {}) {
   let returnToPlanAfterScan = false;
   let scanOff = null;
   let scanWatchOff = null;
+  // Whoever wants the app's final pose (after dead reckoning and map
+  // matching) rather than the provider's raw one: the admin panel, so the
+  // coordinates it records are the ones the visitor's map will show.
+  const poseListeners = new Set();
   function onPose(raw) {
     let pose = raw;
     hud.hideNotice('position'); // we have one now, however it was obtained
@@ -524,6 +536,7 @@ export async function bootApp(options = {}) {
     arScene.setPose(pose);
     arrow.setPose(pose);
     floorplan.setPose(pose);
+    for (const fn of poseListeners) fn(pose);
     if (navigator) {
       const state = navigator.update(pose);
       hud.setProgress(state, { floorName });
@@ -532,7 +545,48 @@ export async function bootApp(options = {}) {
       else arrow.setTarget(state.nextNode, state.distanceToNext);
     }
   }
-  const offPose = chain.onPose(onPose);
+  // Providers that only produce occasional exact fixes (QR) get dead reckoning
+  // here, so the position keeps moving between scans and a walk from one
+  // sticker to the next gives the next one coordinates.
+  const appFusion = new PoseFusion({ headingOffsetDeg: venue.headingOffsetDeg ?? 0 });
+  let fusionDetach = null;
+  let fusionTimer = null;
+  const usesAppFusion = () => {
+    const active = chain.active ?? chainNoCamera?.active ?? null;
+    return Boolean(active) && !active.fusion && active.constructor?.name === 'QrProvider';
+  };
+  const startAppFusion = () => {
+    if (fusionTimer !== null) return;
+    if (win?.addEventListener) fusionDetach = appFusion.attach(win);
+    fusionTimer = (options.setInterval ?? ((f, ms) => win.setInterval(f, ms)))(() => {
+      if (!usesAppFusion()) return;
+      const fused = appFusion.getPose();
+      if (fused && fused.confidence < 1) onPose(fused);
+      appFusion.tick();
+    }, options.fusionIntervalMs ?? 250);
+  };
+  const stopAppFusion = () => {
+    fusionDetach?.();
+    fusionDetach = null;
+    if (fusionTimer !== null)
+      (options.clearInterval ?? ((id) => win.clearInterval(id)))(fusionTimer);
+    fusionTimer = null;
+  };
+  const offFusionRescan = appFusion.on('rescan-needed', () => {
+    if (!usesAppFusion()) return;
+    hud.showRescan();
+    speech.announceRescan();
+  });
+  // An exact fix (a scan, or staff fixing their position in admin mode)
+  // re-seeds the dead reckoning.
+  const onFix = (pose) => {
+    if (usesAppFusion() && pose.confidence >= 1) {
+      appFusion.applyFix(pose);
+      startAppFusion();
+    }
+    onPose(pose);
+  };
+  const offPose = chain.onPose(onFix);
 
   // Positioning problems → HUD, never alert().
   const offChange = chain.onChange((event) => {
@@ -656,7 +710,12 @@ export async function bootApp(options = {}) {
   if (config.admin) {
     admin = createAdminPanel({
       venue,
-      provider: chain,
+      provider: {
+        onPose(fn) {
+          poseListeners.add(fn);
+          return () => poseListeners.delete(fn);
+        },
+      },
       floorplan,
       document: doc,
       mount: root,
@@ -667,7 +726,7 @@ export async function bootApp(options = {}) {
         returnToPlanAfterScan = true;
         showView('ar', { manual: true });
       },
-      onManualPose: (pose) => onPose(pose),
+      onManualPose: (pose) => onFix(pose),
       publicBaseUrl: options.publicBaseUrl ?? globalThis.location?.origin,
       onClose: () => {
         admin?.destroy();
@@ -678,18 +737,23 @@ export async function bootApp(options = {}) {
     });
     if (view !== 'floorplan') showView('floorplan', { manual: true }); // editing happens on the plan
     hud.setCompact(true); // give the map the screen; the HUD keeps only the status line
+    if (config.survey) admin.showTab('survey');
     // Registering a printed sticker: unknown codes seen by the scanner become markers.
     const watchScans = (provider) => {
       scanOff?.();
       scanOff = null;
       if (provider && typeof provider.onScan === 'function') {
         scanOff = provider.onScan((scan) => {
-          if (scan.result === 'unrecognised' && admin?.registering) {
+          if (scan.result !== 'unrecognised' || !admin) return;
+          if (admin.registering || admin.surveying) {
             const anchor = admin.registerCode(scan.text);
             if (anchor) {
               returnToPlanAfterScan = false;
               showView('floorplan', { manual: true });
             }
+          } else {
+            // A code recorded on this device but not yet published.
+            admin.fixToCode(scan.text);
           }
         });
       }
@@ -773,6 +837,7 @@ export async function bootApp(options = {}) {
         lowPower,
         online: nav?.onLine !== false,
         venueFromCache,
+        venueIsNew,
         positioning: chain.state.status,
         hasPose: lastPose !== null,
       };
@@ -796,6 +861,8 @@ export async function bootApp(options = {}) {
       battery?.removeEventListener?.('chargingchange', applyBattery);
       offPose();
       offPose2?.();
+      offFusionRescan();
+      stopAppFusion();
       await chainNoCamera?.stop();
       firstRun?.destroy();
       harness?.destroy();
@@ -825,6 +892,20 @@ function safeStorage() {
   } catch {
     return null;
   }
+}
+
+/** A minimal valid venue to start surveying from: one floor, one node at the origin. */
+export function blankVenue(id) {
+  const name = id.replace(/[-_.]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return {
+    schemaVersion: 1,
+    id,
+    name,
+    floors: [{ index: 0, id: 'ground', name: 'Ground', elevation: 0 }],
+    nodes: [{ id: 'n-start', x: 0, y: 0, z: 0, floor: 0, name: 'Start' }],
+    edges: [],
+    pois: [],
+  };
 }
 
 /** Where routes start when the user's position is unknown: an entrance/exit POI, else the first node. */

@@ -5,6 +5,38 @@
 copy of the current venue and exports valid venue JSON; nothing changes for
 visitors until that JSON is published.
 
+## Sticker survey (printed codes first)
+
+The quickest way to map a building when you already have QR stickers printed:
+open `/?v=<venue-id>&survey=1`. A venue id that has never been published
+starts as a blank sheet — no plan image, one floor — and the panel opens on
+the **Sticker survey** tab.
+
+1. **Printed code list** (optional). Paste the list you printed, one per line
+   as `code, floor, where it goes` — e.g. `A03, G, Reception desk` — and tap
+   **Use this list**. Scanning a listed code then fills in its name and floor,
+   the tab shows _n of 24 recorded · next: A04 — Lift lobby (G)_, and the
+   list is kept on this device per venue. **Load the demo hospital list** puts
+   in the A01–A24 plan from `src/venues/templates/demo-hospital-survey-plan.txt`.
+2. Stand at a sticker, type the **Area name** (or a **Ward number**), tap
+   **Scan the printed code** and point the camera at it. The scan records:
+   - a **marker** with the code's own text (so the scanner recognises that
+     sticker from now on, and re-scanning it fixes your position there),
+   - a **route node** at your position, linked to the previous stop, and
+   - a **place** with that name (aliases and category from the places
+     library, or `Ward N` / `W N` for wards), if you named it.
+3. Walk to the next sticker. Between scans the app dead-reckons from the
+   phone's motion sensors, so the next code lands at the distance and
+   direction you walked; a scan of any recorded code snaps you back exactly.
+   The first code of a survey becomes the map origin (0, 0).
+4. Tap **Save** as you go (the draft also survives a reload), then
+   **Publish** from the Export tab so every visitor gets the codes and
+   places. Positions can be tidied later in the plan editor.
+
+A typed name always wins over the list; a listed code scanned with the name
+box untouched uses the list's name; an unlisted code with no name is still
+recorded, by code, and can be named in the Edit tab.
+
 ## Record a route (walk it)
 
 1. Get positioned: scan an entrance QR marker, or let the camera provider
