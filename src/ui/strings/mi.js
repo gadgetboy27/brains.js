@@ -266,6 +266,22 @@ export default {
     'scan.wrongVenue': 'Nō tētahi atu wāhi te waehere “{text}”.',
     'admin.tab.survey': 'Rūri pihi',
     'admin.tab.routes': 'Ngā ara',
+    'admin.stride.title': 'Whakarite te takahanga',
+    'admin.stride.hint':
+      'Hīkoia he tawhiti kua ine, ā, ka whakaritea tō roa takahanga — ka tino tika ake ngā tohu i waenga i ngā waehere i te taunoa toharite.',
+    'admin.stride.distance': 'Te tawhiti hei hīkoi (mita)',
+    'admin.stride.start': 'Tīmata te hīkoi',
+    'admin.stride.stop': 'Kua hīkoi au',
+    'admin.stride.walking':
+      'E hīkoi ana… pāwhiritia "Kua hīkoi au" i te mutunga o te tawhiti kua ine.',
+    'admin.stride.counting': '{steps} ngā takahanga tae noa ki nāianei…',
+    'admin.stride.tooFewSteps':
+      '{steps} noa iho ngā takahanga — hīkoia he roa ake, ka whakamātau anō.',
+    'admin.stride.saved':
+      'Kua whakaritea te takahanga ki {m} m ({steps} takahanga i runga i te tawhiti kua ine).',
+    'admin.stride.current': 'Takahanga o nāianei: {m} m.',
+    'admin.stride.default': 'E whakamahia ana te takahanga taunoa (0.73 m).',
+    'admin.stride.unavailable': 'Kāore ngā pūoko nekehanga e wātea ana i tēnei pūrere.',
     'admin.wizard.step.start': 'Tīmata',
     'admin.wizard.step.walk': 'Hīkoi',
     'admin.wizard.step.finish': 'Mutunga',

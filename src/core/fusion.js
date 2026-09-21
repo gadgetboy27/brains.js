@@ -48,7 +48,7 @@ import { validatePose } from './positioning.js';
  * @property {number} [strideM=0.73]
  *   Metres advanced per detected step. The average adult stride; calibrate
  *   per surveyor by walking a known distance and dividing by the step count
- *   (`docs/mapping.md`) for better accuracy than the population average.
+ *   (`docs/admin.md`) for better accuracy than the population average.
  * @property {number} [stepThreshold=1.5]
  *   Acceleration-magnitude (m/s²) a peak must reach to count as a footstep.
  *   Below the bump of an ordinary walking gait; raise it if a phone in a
@@ -100,6 +100,9 @@ export class PoseFusion {
 
   /** Clock time of the last counted step, for the refractory window. */
   #lastStepAt = null;
+
+  /** Steps counted since the last fix, independent of `strideM` — used to calibrate it. */
+  #stepCount = 0;
 
   /** Whether "rescan-needed" has fired since the last fix. */
   #rescanEmitted = false;
@@ -171,6 +174,7 @@ export class PoseFusion {
     this.#lastMag = 0;
     this.#magRising = false;
     this.#lastStepAt = null;
+    this.#stepCount = 0;
     this.#rescanEmitted = false;
     this.#emit('pose', this.getPose());
   }
@@ -246,6 +250,7 @@ export class PoseFusion {
     this.#estimate.x += dx;
     this.#estimate.y += dy;
     this.#distanceSinceFix += this.#opts.strideM;
+    this.#stepCount += 1;
 
     this.#emit('pose', this.getPose());
   }
@@ -306,6 +311,15 @@ export class PoseFusion {
   /** Metres travelled (path length) since the last fix. */
   get distanceSinceFix() {
     return this.#distanceSinceFix;
+  }
+
+  /**
+   * Steps counted since the last fix, independent of `strideM`. Divide a
+   * known walked distance by this to calibrate a surveyor's actual stride —
+   * see `docs/admin.md`.
+   */
+  get stepCount() {
+    return this.#stepCount;
   }
 
   /**

@@ -31,6 +31,11 @@
         "headingOffsetDeg": {
           "description": "Degrees, clockwise, from the device compass's north to the venue's +y axis. Lets dead reckoning turn compass headings into venue headings. Default 0.",
           "type": "number"
+        },
+        "strideM": {
+          "description": "Metres advanced per detected footstep in pedestrian dead reckoning (see fusion.js). Default 0.73 (an average adult stride); calibrate per venue by walking a measured distance in the admin panel.",
+          "type": "number",
+          "exclusiveMinimum": 0
         }
       }
     },

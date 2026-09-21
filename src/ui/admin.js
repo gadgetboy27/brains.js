@@ -27,6 +27,7 @@ import { VenueDraft } from '../core/venue-draft.js';
 import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
 import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/survey-plan.js';
 import { categoryName, t } from './strings/index.js';
+import { PoseFusion } from '../core/fusion.js';
 import { createRouteWizard } from './route-wizard.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
@@ -117,6 +118,8 @@ export class AdminPanel {
   #toastTimer = null;
   /** @type {{ kind: 'poi' | 'anchor', id: string } | null} */
   #editing = null;
+  /** @type {{ fusion: import('../core/fusion.js').PoseFusion, detach: () => void } | null} */
+  #strideCal = null;
 
   /**
    * @param {Object} options
@@ -155,6 +158,7 @@ export class AdminPanel {
       prompt: (m, d) => globalThis.prompt?.(m, d),
       fetch: (...a) => globalThis.fetch?.(...a),
       sessionStorage: safeSession(),
+      window: globalThis.window,
       ...options,
     };
 
@@ -189,6 +193,19 @@ export class AdminPanel {
       </div>
       <p class="admin-status" data-f="status" role="status" aria-live="polite"></p>
       <p class="admin-status" data-f="saved"></p>
+
+      <details class="admin-plan" data-f="stride-box">
+        <summary data-f="stride-summary"></summary>
+        <p data-f="stride-hint"></p>
+        <label>
+          <span data-f="stride-distance-label"></span>
+          <input type="number" min="1" step="0.1" value="20" data-f="stride-distance" />
+        </label>
+        <div class="admin-actions">
+          <button type="button" class="btn btn-primary" data-f="stride-toggle"></button>
+        </div>
+        <p data-f="stride-status" role="status"></p>
+      </details>
 
       <div class="admin-tool" data-tool="routes" role="tabpanel" hidden>
         <div data-f="wizard-mount"></div>
@@ -388,6 +405,12 @@ export class AdminPanel {
       this.setSurveyPlan(DEMO_HOSPITAL_PLAN);
     });
     this.#restorePlan();
+    this.#f('stride-summary').textContent = t('admin.stride.title');
+    this.#f('stride-hint').textContent = t('admin.stride.hint');
+    this.#f('stride-distance-label').textContent = t('admin.stride.distance');
+    this.#f('stride-toggle').textContent = t('admin.stride.start');
+    this.#f('stride-status').textContent = this.#strideStatusText();
+    this.#f('stride-toggle').addEventListener('click', () => this.#toggleStrideCalibration());
     this.#f('rec-register').hidden = typeof options.onScanRequest !== 'function';
     this.#f('walk-title').textContent = t('admin.record.walkList');
     this.#f('print-sheet').textContent = t('admin.export.printSheet');
@@ -734,6 +757,64 @@ export class AdminPanel {
     this.#addedOnWalk('anchor', anchor.name ?? anchor.id);
     this.#changed();
     return anchor;
+  }
+
+  // ---------------------------------------------------- stride calibration
+
+  #strideStatusText() {
+    const set = this.#draft.frame?.strideM;
+    return set ? t('admin.stride.current', { m: set.toFixed(2) }) : t('admin.stride.default');
+  }
+
+  /**
+   * Walk a measured distance, then divide it by the steps counted to set
+   * this venue's `strideM` (see `src/core/fusion.js`) — closer to this
+   * surveyor's actual stride than the population-average default, so
+   * dead-reckoned points between codes land more accurately.
+   */
+  #toggleStrideCalibration() {
+    if (this.#strideCal) {
+      const steps = this.#strideCal.fusion.stepCount;
+      this.#strideCal.detach();
+      this.#strideCal = null;
+      this.#f('stride-toggle').textContent = t('admin.stride.start');
+      const distanceM = Number(this.#f('stride-distance').value);
+      if (!(distanceM > 0) || steps < 3) {
+        this.#f('stride-status').textContent = t('admin.stride.tooFewSteps', { steps });
+        return;
+      }
+      const strideM = Math.round((distanceM / steps) * 100) / 100;
+      this.#draft.frame = { ...(this.#draft.frame ?? {}), strideM };
+      this.#f('stride-status').textContent = t('admin.stride.saved', { m: strideM, steps });
+      this.#toast(t('admin.stride.saved', { m: strideM, steps }));
+      this.#changed();
+      return;
+    }
+    const win = this.#opts.window;
+    if (!win?.addEventListener) {
+      this.#f('stride-status').textContent = t('admin.stride.unavailable');
+      return;
+    }
+    const fusion = new PoseFusion({ now: () => Date.now() });
+    fusion.applyFix({
+      x: 0,
+      y: 0,
+      z: 0,
+      floor: 0,
+      heading: 0,
+      confidence: 1,
+      timestamp: Date.now(),
+    });
+    const detach = fusion.attach(win);
+    this.#strideCal = { fusion, detach };
+    this.#f('stride-toggle').textContent = t('admin.stride.stop');
+    this.#f('stride-status').textContent = t('admin.stride.walking');
+    fusion.on('pose', () => {
+      if (!this.#strideCal) return;
+      this.#f('stride-status').textContent = t('admin.stride.counting', {
+        steps: fusion.stepCount,
+      });
+    });
   }
 
   // ------------------------------------------------------- sticker survey
@@ -1608,6 +1689,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
 
   destroy() {
     for (const off of this.#unsub) off();
+    this.#strideCal?.detach();
     this.#wizard?.destroy();
     this.#el.remove();
   }

@@ -362,6 +362,7 @@ export class ImmersalProvider extends PositionProvider {
 
     this.#fusion = new PoseFusion({
       headingOffsetDeg: options.venue.headingOffsetDeg ?? 0,
+      ...(options.venue.strideM !== undefined ? { strideM: options.venue.strideM } : {}),
       now: this.#opts.now,
       ...this.#opts.fusion,
     });

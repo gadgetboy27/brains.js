@@ -194,6 +194,19 @@ describe('PoseFusion — pedestrian dead reckoning (step counting)', () => {
     expect(f.getPose()).toMatchObject({ x: 0, y: 0, z: 0 });
   });
 
+  it('exposes a raw step count, independent of strideM, for calibration', () => {
+    const clock = fakeClock();
+    const f = new PoseFusion({ now: clock.now, strideM: 5 }); // wildly wrong stride
+    f.applyFix(fix(clock));
+    expect(f.stepCount).toBe(0);
+    walkStep(f);
+    clock.advance(400);
+    walkStep(f);
+    expect(f.stepCount).toBe(2); // steps counted regardless of the (wrong) stride
+    f.applyFix(fix(clock));
+    expect(f.stepCount).toBe(0); // reset on the next fix
+  });
+
   it('emits "pose" for each step counted, not for every raw sample', () => {
     const clock = fakeClock();
     const f = new PoseFusion({ now: clock.now });

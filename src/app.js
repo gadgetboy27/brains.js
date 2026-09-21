@@ -548,7 +548,10 @@ export async function bootApp(options = {}) {
   // Providers that only produce occasional exact fixes (QR) get dead reckoning
   // here, so the position keeps moving between scans and a walk from one
   // sticker to the next gives the next one coordinates.
-  const appFusion = new PoseFusion({ headingOffsetDeg: venue.headingOffsetDeg ?? 0 });
+  const appFusion = new PoseFusion({
+    headingOffsetDeg: venue.headingOffsetDeg ?? 0,
+    ...(venue.strideM !== undefined ? { strideM: venue.strideM } : {}),
+  });
   let fusionDetach = null;
   let fusionTimer = null;
   const usesAppFusion = () => {

@@ -32,6 +32,8 @@ export class Venue {
   /** @type {string} */ id;
   /** @type {string} */ name;
   /** @type {number} */ headingOffsetDeg;
+  /** @type {number | undefined} Calibrated footstep length in metres, if set (see fusion.js). */
+  strideM;
   /** @type {object} */ providers;
   /** @type {Array<object>} floors sorted by index */ floors;
   /** @type {{ nodes: object[], edges: object[] }} */ graph;
@@ -60,6 +62,7 @@ export class Venue {
     this.description = json.description;
     this.runtimeConfigUrl = json.runtimeConfigUrl;
     this.headingOffsetDeg = json.frame?.headingOffsetDeg ?? 0;
+    this.strideM = json.frame?.strideM;
     this.languages = Object.freeze(
       Object.entries(json.languages ?? {}).map(([code, l]) =>
         Object.freeze({ code, name: l.name, strings: Object.freeze({ ...l.strings }) })
@@ -218,7 +221,10 @@ export class Venue {
       schemaVersion: 1,
       id: this.id,
       name: this.name,
-      frame: { headingOffsetDeg: this.headingOffsetDeg },
+      frame: {
+        headingOffsetDeg: this.headingOffsetDeg,
+        ...(this.strideM !== undefined ? { strideM: this.strideM } : {}),
+      },
       floors: this.floors.map((f) => ({ ...f })),
       nodes: this.graph.nodes.map((n) => ({ ...n })),
       edges: this.graph.edges.map((e) => ({ ...e })),

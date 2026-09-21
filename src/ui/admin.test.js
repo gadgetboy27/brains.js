@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PositionProvider } from '../core/positioning.js';
 import { createVenue } from '../core/venue.js';
@@ -780,6 +780,63 @@ describe('AdminPanel — QR codes: preview, print sheet, register a printed stic
       expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
         t('admin.survey.planErrors', { count: 1, first: parsed.errors[0] })
       );
+    });
+  });
+
+  describe('stride calibration', () => {
+    const walkStep = () => {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y: 2.5, z: 0 } })
+      );
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y: 0.2, z: 0 } })
+      );
+    };
+
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('sets frame.strideM from a measured walk, and the wizard picks it up', () => {
+      const { admin } = make();
+      const distance = admin.el.querySelector('[data-f="stride-distance"]');
+      const toggle = admin.el.querySelector('[data-f="stride-toggle"]');
+      const status = admin.el.querySelector('[data-f="stride-status"]');
+      expect(status.textContent).toBe(t('admin.stride.default'));
+
+      distance.value = '7.3';
+      toggle.click();
+      expect(toggle.textContent).toBe(t('admin.stride.stop'));
+      // 10 steps, 400 ms apart — clear of the fusion's default refractory window.
+      for (let i = 0; i < 10; i += 1) {
+        walkStep();
+        vi.advanceTimersByTime(400);
+      }
+      expect(status.textContent).toBe(t('admin.stride.counting', { steps: 10 }));
+
+      toggle.click();
+      expect(toggle.textContent).toBe(t('admin.stride.start'));
+      expect(status.textContent).toBe(t('admin.stride.saved', { m: 0.73, steps: 10 }));
+      expect(admin.draft.frame.strideM).toBe(0.73);
+      expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+        t('admin.stride.saved', { m: 0.73, steps: 10 })
+      );
+
+      admin.showTab('routes');
+      expect(admin.wizard.el.textContent).toBeTruthy(); // still renders with a custom stride
+    });
+
+    it('refuses too short a walk and stops listening for motion afterwards', () => {
+      const { admin } = make();
+      const toggle = admin.el.querySelector('[data-f="stride-toggle"]');
+      const status = admin.el.querySelector('[data-f="stride-status"]');
+      toggle.click();
+      walkStep();
+      toggle.click();
+      expect(status.textContent).toBe(t('admin.stride.tooFewSteps', { steps: 1 }));
+      expect(admin.draft.frame?.strideM).toBeUndefined();
+
+      walkStep(); // no longer listening: does nothing
+      expect(status.textContent).toBe(t('admin.stride.tooFewSteps', { steps: 1 }));
     });
   });
 });

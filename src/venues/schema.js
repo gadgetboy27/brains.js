@@ -15,7 +15,8 @@
  *   "id": "westfield-north",            // slug, unique per operator
  *   "name": "Westfield North",
  *   "frame": {                           // optional
- *     "headingOffsetDeg": 12.5           // compass → venue +y (see fusion.js)
+ *     "headingOffsetDeg": 12.5,          // compass → venue +y (see fusion.js)
+ *     "strideM": 0.71                    // calibrated footstep length (see fusion.js)
  *   },
  *   "floors": [
  *     { "index": 0, "id": "g", "name": "Ground", "elevation": 0 },
@@ -312,6 +313,7 @@ export function validateVenue(venue) {
   if (venue.frame !== undefined && c.isObject(venue.frame, 'frame')) {
     c.noGps(venue.frame, 'frame');
     c.isNumber(venue.frame.headingOffsetDeg, 'frame.headingOffsetDeg', { required: false });
+    c.isNumber(venue.frame.strideM, 'frame.strideM', { required: false, min: 0.01 });
   }
 
   if (venue.languages !== undefined && c.isObject(venue.languages, 'languages')) {

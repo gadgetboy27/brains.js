@@ -5,6 +5,19 @@
 copy of the current venue and exports valid venue JSON; nothing changes for
 visitors until that JSON is published.
 
+## Calibrate stride (better accuracy between codes)
+
+Between scans, the app estimates how far you've walked by counting footsteps
+and multiplying by a stride length — 0.73 m (an average adult) until a venue
+sets its own. The **Calibrate stride** panel, open from any tab, measures
+yours: enter a distance you can walk out exactly (a marked corridor, a tape
+measure — 15–20 m gives a good step count), tap **Start walking**, walk it
+at a normal pace holding the phone as you would while surveying, then tap
+**I've walked it**. It divides the distance by the steps counted and saves
+the result to the venue (`frame.strideM`), used by every route recorded
+from here on. Too few steps counted (under 3) and nothing is saved — walk
+further and try again.
+
 ## Routes wizard (start → walk → finish → next)
 
 The **Routes** tab — the first one, and where `?admin=1` opens — builds a
