@@ -614,7 +614,9 @@ export async function bootApp(options = {}) {
     if (!permissions.camera) cameraUnavailable('notice.cameraDenied');
   }
 
-  if (!config.admin) picker.open(); // staff surveying want the plan, not the destination list
+  if (config.admin)
+    picker.close(); // staff surveying want the plan, not the destination list
+  else picker.open();
   if (permissions.camera || !cameraInChain) {
     await chain.start();
   } else {
