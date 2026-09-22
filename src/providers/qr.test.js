@@ -7,6 +7,7 @@ import { BarcodeDetector as PonyfillBarcodeDetector } from 'barcode-detector/pon
 
 import {
   CAMERA_CONSTRAINTS,
+  FALLBACK_CAMERA_CONSTRAINTS,
   QrProvider,
   chooseDetector,
   formatQrPayload,
@@ -254,6 +255,32 @@ describe('QrProvider — camera permission and availability', () => {
     await a.provider.start();
     expect(a.provider.status).toBe('unsupported');
     expect(a.provider.error.message).toMatch(/getUserMedia/);
+  });
+
+  it('retries with a plain camera request when the sharper one is rejected outright', async () => {
+    const fallbackStream = fakeStream();
+    const overconstrained = Object.assign(new Error('nope'), { name: 'OverconstrainedError' });
+    const getUserMedia = vi.fn(async (constraints) => {
+      if (constraints === CAMERA_CONSTRAINTS) throw overconstrained;
+      return fallbackStream;
+    });
+    const { provider } = make({ getUserMedia });
+    await provider.start();
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(getUserMedia).toHaveBeenNthCalledWith(1, CAMERA_CONSTRAINTS);
+    expect(getUserMedia).toHaveBeenNthCalledWith(2, FALLBACK_CAMERA_CONSTRAINTS);
+    expect(provider.status).toBe('scanning');
+  });
+
+  it('still reports the real failure when even the plain camera request fails', async () => {
+    const denied = Object.assign(new Error('nope'), { name: 'NotAllowedError' });
+    const overconstrained = Object.assign(new Error('nope'), { name: 'OverconstrainedError' });
+    const getUserMedia = vi.fn(async (constraints) => {
+      throw constraints === CAMERA_CONSTRAINTS ? overconstrained : denied;
+    });
+    const { provider } = make({ getUserMedia });
+    await provider.start();
+    expect(provider.status).toBe('permission-denied'); // the fallback's own error, not the first one
   });
 
   it('decodes with the browser detector only when it can read QR codes, else the bundled ZXing', async () => {

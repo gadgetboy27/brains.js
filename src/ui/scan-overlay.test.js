@@ -86,4 +86,18 @@ describe('ScanOverlay', () => {
       vi.useRealTimers();
     }
   });
+
+  it('replaces the camera view with an announced reason when there is nothing to show, and back again', () => {
+    const { overlay, mount } = make();
+    const unavailable = mount.querySelector('.scan-unavailable');
+    expect(unavailable.hidden).toBe(true);
+    expect(unavailable.getAttribute('role')).toBe('alert');
+
+    overlay.setUnavailable('Camera permission was refused.');
+    expect(unavailable.hidden).toBe(false);
+    expect(unavailable.textContent).toContain('Camera permission was refused.');
+
+    overlay.setUnavailable(null);
+    expect(unavailable.hidden).toBe(true);
+  });
 });

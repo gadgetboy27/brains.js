@@ -388,6 +388,8 @@ export async function bootApp(options = {}) {
   let view = config.view === 'floorplan' ? 'floorplan' : 'ar';
   let autoView = config.view === 'auto';
   let cameraUsable = true; // false once camera positioning is known to be unavailable
+  let cameraUnavailableReason = ''; // why, for the message shown in the camera view itself
+  let lastPositioningHint = ''; // the real provider error(s), e.g. 'qr: no-camera — OverconstrainedError'
   let permissions = { camera: true, motion: true }; // set by the first-run screen
   let lowPower = false; // true while the battery is low and not charging
   function showView(next, { manual = false } = {}) {
@@ -402,14 +404,26 @@ export async function bootApp(options = {}) {
   }
   function syncBackdrop() {
     const active = chain.active ?? chainNoCamera?.active ?? null;
-    if (view === 'ar' && permissions.camera !== false && !lowPower) {
+    // Every provider has failed — there is nothing positioning at all, camera
+    // or otherwise. Never open a "looks normal" preview stream in that
+    // state: it is indistinguishable from a working scanner and is exactly
+    // what made this confusing. Show the actual reason instead. (A camera
+    // specifically unavailable while e.g. mock still provides a position —
+    // dev/testing — is a different, harmless case: the cosmetic preview is
+    // intentional there, see the module doc on CameraBackdrop.)
+    const noPositionAtAll = !active;
+    const canShowCamera =
+      view === 'ar' && permissions.camera !== false && !lowPower && !noPositionAtAll;
+    if (canShowCamera) {
       void backdrop.attach(active);
-    } else backdrop.detach();
-    scanOverlay.setViewfinderVisible(
-      view === 'ar' &&
-        permissions.camera !== false &&
-        !lowPower &&
-        typeof active?.onScan === 'function'
+    } else {
+      backdrop.detach();
+    }
+    scanOverlay.setViewfinderVisible(canShowCamera && typeof active?.onScan === 'function');
+    scanOverlay.setUnavailable(
+      view === 'ar' && noPositionAtAll && permissions.camera !== false && !lowPower
+        ? cameraUnavailableReason
+        : null
     );
   }
   arBtn.addEventListener('click', () => showView('ar', { manual: true }));
@@ -425,8 +439,12 @@ export async function bootApp(options = {}) {
   /** Camera positioning is unavailable: fall back to the floor plan and say why. */
   function cameraUnavailable(noticeKey) {
     cameraUsable = false;
+    cameraUnavailableReason = lastPositioningHint
+      ? `${t(noticeKey ?? 'error.positioningExhausted')} (${lastPositioningHint})`
+      : t(noticeKey ?? 'error.positioningExhausted');
     if (noticeKey) hud.showNotice('camera', t(noticeKey));
     if (view === 'ar') showView('floorplan');
+    else syncBackdrop(); // the caller may stay in 'ar' regardless — never show a fake preview
   }
 
   // --- battery: on low battery, prefer the floor plan (no WebGL, no camera).
@@ -611,7 +629,14 @@ export async function bootApp(options = {}) {
   const offChange = chain.onChange((event) => {
     if (event.type === 'exhausted') {
       // Provider failed to initialise (all of them): no position at all.
-      hud.showError(t('error.positioningExhausted'), { retry: () => chain.start() });
+      // The real reason (e.g. "qr: no-camera — OverconstrainedError") is
+      // exactly what's needed to diagnose this later — never just a blank
+      // "didn't work".
+      const hint = event.state.failed
+        .map((f) => `${f.name}: ${f.reason}${f.error?.message ? ` — ${f.error.message}` : ''}`)
+        .join('; ');
+      lastPositioningHint = hint;
+      hud.showError(t('error.positioningExhausted'), { hint, retry: () => chain.start() });
       hud.showNotice('position', t('notice.noPosition'));
       cameraUnavailable(null);
       return;

@@ -263,8 +263,21 @@ export class QrProvider extends PositionProvider {
       stream = await getUserMedia(CAMERA_CONSTRAINTS);
       if (!stream) throw new TypeError('getUserMedia returned nothing');
     } catch (err) {
-      this.#setStatus(classifyCameraError(err), err);
-      return;
+      if (err?.name === 'OverconstrainedError') {
+        // The sharper-frame request (720p, continuous focus) was rejected
+        // outright by this device/camera — rare, but a plain request for
+        // *any* rear camera is far less likely to be. A usable low-res
+        // scanner beats none at all.
+        try {
+          stream = await getUserMedia(FALLBACK_CAMERA_CONSTRAINTS);
+        } catch (err2) {
+          this.#setStatus(classifyCameraError(err2), err2);
+          return;
+        }
+      } else {
+        this.#setStatus(classifyCameraError(err), err);
+        return;
+      }
     }
     await requestContinuousFocus(stream);
 
@@ -411,6 +424,17 @@ export const CAMERA_CONSTRAINTS = Object.freeze({
     // Chrome/Android honour focusMode here; other browsers ignore unknown keys.
     advanced: [{ focusMode: 'continuous' }],
   },
+  audio: false,
+});
+
+/**
+ * What to ask for if {@link CAMERA_CONSTRAINTS} is rejected outright
+ * (`OverconstrainedError`) — the plainest possible request for the rear
+ * camera, nothing the device could reasonably refuse. No resolution or
+ * focus preference, just a usable stream to decode from.
+ */
+export const FALLBACK_CAMERA_CONSTRAINTS = Object.freeze({
+  video: { facingMode: 'environment' },
   audio: false,
 });
 

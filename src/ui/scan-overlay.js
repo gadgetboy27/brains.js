@@ -19,6 +19,11 @@ import { ensureStyle } from './tokens.js';
 
 const CSS = `
 .scan-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+.scan-unavailable { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; padding: 24px; text-align: center; background: var(--color-bg); color: var(--color-text); }
+.scan-unavailable[hidden] { display: none; }
+.scan-unavailable-icon { font-size: 2.4em; }
+.scan-unavailable-text { font-weight: 600; max-width: 32em; }
 .scan-frame { width: min(62vw, 62vh); aspect-ratio: 1; box-sizing: border-box; border: 3px solid var(--color-accent); border-radius: 20px;
   opacity: 0.85; transition: border-color 150ms ease, box-shadow 150ms ease; }
 .scan-frame[hidden] { display: none; }
@@ -39,6 +44,8 @@ export class ScanOverlay {
   #frame;
   #badge;
   #badgeText;
+  #unavailable;
+  #unavailableText;
   #flashTimer = null;
 
   /**
@@ -69,6 +76,21 @@ export class ScanOverlay {
     this.#badge = el.querySelector('[data-f="badge"]');
     this.#badgeText = el.querySelector('[data-f="badge-text"]');
     options.mount.appendChild(el);
+
+    // Not decorative like the rest of the overlay — this replaces the
+    // camera view entirely when there is genuinely nothing to show, so it
+    // gets announced and is never left sitting behind a fake preview.
+    const unavailable = this.#doc.createElement('div');
+    unavailable.className = 'scan-unavailable';
+    unavailable.setAttribute('role', 'alert');
+    unavailable.hidden = true;
+    unavailable.innerHTML = `
+      <span class="scan-unavailable-icon" aria-hidden="true">📷</span>
+      <span class="scan-unavailable-text" data-f="unavailable-text"></span>
+    `;
+    this.#unavailable = unavailable;
+    this.#unavailableText = unavailable.querySelector('[data-f="unavailable-text"]');
+    options.mount.appendChild(unavailable);
   }
 
   get el() {
@@ -103,9 +125,22 @@ export class ScanOverlay {
       this.#badgeText.textContent = t('scan.recording', { distance: Math.round(distanceM) });
   }
 
+  /**
+   * There is genuinely nothing to show in the camera view — replace it with
+   * why, instead of leaving whatever was there (a live preview stream that
+   * isn't actually being scanned looks identical to one that is). `null`
+   * or an empty string hides this and lets the camera view show normally.
+   * @param {string | null} [reason]
+   */
+  setUnavailable(reason) {
+    this.#unavailable.hidden = !reason;
+    this.#unavailableText.textContent = reason ?? '';
+  }
+
   destroy() {
     this.#opts.clearTimeout(this.#flashTimer);
     this.#el.remove();
+    this.#unavailable.remove();
   }
 }
 

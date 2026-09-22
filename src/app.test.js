@@ -447,10 +447,27 @@ describe('bootApp — handled states (floor plan stays usable in every one)', ()
     expect(app.state.hasPose).toBe(false);
     expect(app.hud.text.error).toBe(t('error.positioningExhausted'));
     expect(app.hud.el.querySelector('[data-f="error-retry"]').hidden).toBe(false);
+    // The real reason is right there, not just "didn't work" — this is
+    // what makes a repeat of this actually diagnosable.
+    expect(app.hud.el.querySelector('[data-f="error-hint"]').textContent).toBe(
+      'qr: permission-denied — no'
+    );
     expect(app.hud.text.notices).toContain(t('notice.noPosition'));
     usable(app);
     // Route starts at the main entrance (the "exit" POI) when there is no pose.
     expect(app.hud.text.distance).toBe('46 m'); // entrance → Clinic B via the stairs
+
+    // Manually switching back to the camera view must never show a preview
+    // that looks like it's scanning when nothing is — that's what made a
+    // dead camera indistinguishable from a working one.
+    app.showView('ar');
+    expect(app.view).toBe('ar');
+    expect(app.backdrop.source).toBe('none');
+    const unavailable = app.scanOverlay.el.parentElement.querySelector('.scan-unavailable');
+    expect(unavailable.hidden).toBe(false);
+    expect(unavailable.textContent).toContain(t('error.positioningExhausted'));
+    expect(unavailable.textContent).toContain('qr: permission-denied — no'); // the real reason, right here
+    expect(document.querySelector('.camera-backdrop').hidden).toBe(true);
     await app.destroy();
   });
 
