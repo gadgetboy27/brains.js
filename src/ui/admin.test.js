@@ -541,12 +541,64 @@ describe('AdminPanel — edit existing and saved state', () => {
     provider.emit(pose(40, 6));
     admin.addNodeHere('Pharmacy'); // clear of every node's snap radius: a new node, no new edge
     expect(admin.savedState).toBe('local');
-    expect(saved()).toBe(t('admin.saved.local', counts({ nodes: 17 })));
+    // A change that exists only in this browser's storage says so, loudly.
+    expect(saved()).toBe(
+      `${t('admin.saved.local', counts({ nodes: 17 }))} ${t('admin.saved.noBackup')}`
+    );
     admin.el.querySelector('[data-f="save"]').click();
     expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(t('admin.saved.now'));
+    expect(saved()).toContain(t('admin.saved.noBackup')); // Save is local-only too: still no backup
     await admin.publish();
     expect(admin.savedState).toBe('published');
     expect(saved()).toBe(t('admin.saved.published', counts({ nodes: 17 })));
+    expect(saved()).not.toContain(t('admin.saved.noBackup'));
+  });
+
+  it('Download and Copy each count as a backup, clearing the warning until the next change', async () => {
+    const { admin, provider, download, copy } = make();
+    const saved = () => admin.el.querySelector('[data-f="saved"]').textContent;
+    expect(saved()).not.toContain(t('admin.saved.noBackup'));
+
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
+    expect(saved()).toContain(t('admin.saved.noBackup'));
+
+    admin.download();
+    expect(download).toHaveBeenCalledOnce();
+    expect(saved()).not.toContain(t('admin.saved.noBackup'));
+
+    admin.addPoiHere();
+    expect(saved()).toContain(t('admin.saved.noBackup')); // a further change needs its own backup
+
+    await admin.copy();
+    expect(copy).toHaveBeenCalledOnce();
+    expect(saved()).not.toContain(t('admin.saved.noBackup'));
+  });
+
+  it('warns before closing the tab with an unbacked-up change, not otherwise', () => {
+    const window = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    const { admin, provider } = make({ window });
+    const [, handler] = window.addEventListener.mock.calls.find(
+      ([type]) => type === 'beforeunload'
+    );
+    const fire = () => {
+      const e = { preventDefault: vi.fn(), returnValue: undefined };
+      handler(e);
+      return e;
+    };
+    expect(fire().preventDefault).not.toHaveBeenCalled(); // nothing recorded yet
+
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
+    const warned = fire();
+    expect(warned.preventDefault).toHaveBeenCalledOnce();
+    expect(warned.returnValue).toBe('');
+
+    admin.download();
+    expect(fire().preventDefault).not.toHaveBeenCalled(); // backed up: safe to close now
+
+    admin.destroy();
+    expect(window.removeEventListener).toHaveBeenCalledWith('beforeunload', handler);
   });
 
   it('finds places and markers by name, alias or id', () => {

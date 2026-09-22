@@ -243,6 +243,8 @@ export default {
       'Kua tiakina ki tēnei waea mō “{id}” — {nodes} tohu · {edges} hononga · {pois} wāhi · {anchors} tohu waehere · kāore anō kia whakaputaina',
     'admin.saved.published':
       'Kua whakaputaina mō “{id}” — {nodes} tohu · {edges} hononga · {pois} wāhi · {anchors} tohu waehere · kei te katoa tēnei putanga',
+    'admin.saved.noBackup':
+      '⚠ Kei tēnei pūrere anake — Tikiakehia, Tāruatia, Whakaputahia rānei i mua i te kati i tēnei pae.',
     'admin.saved.now': 'Kua tiakina',
     'admin.ward.number': 'Tau wāri (1–99)',
     'admin.ward.name': 'Wāri {n}',

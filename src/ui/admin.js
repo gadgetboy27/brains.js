@@ -102,6 +102,9 @@ export class AdminPanel {
   /** @type {((text: string) => unknown) | null} */
   #codeHandler = null;
   #published = true;
+  /** Has the current draft state been taken off this device (Download/Copy) or Published since it last changed? */
+  #backedUp = true;
+  #onBeforeUnload = null;
   #registering = false;
   #surveying = false;
   #surveyCount = 0;
@@ -524,6 +527,25 @@ export class AdminPanel {
     this.#updateSaved();
     if (restored) this.#status(t('admin.draft.restored'));
     options.floorplan.render();
+
+    // Best-effort: ask the browser not to evict this site's storage under
+    // pressure. It can still say no (and often will without the page being
+    // installed/bookmarked) — this is a second line of defence, not a
+    // substitute for actually backing work up.
+    try {
+      void globalThis.navigator?.storage?.persist?.();
+    } catch {
+      // not available; nothing to do
+    }
+
+    // The one moment worth interrupting for: leaving with changes that
+    // exist only in this browser's storage, nowhere else.
+    this.#onBeforeUnload = (e) => {
+      if (this.#published || this.#backedUp) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    this.#opts.window?.addEventListener?.('beforeunload', this.#onBeforeUnload);
   }
 
   get el() {
@@ -581,10 +603,19 @@ export class AdminPanel {
    */
   #updateSaved() {
     const { nodes, edges, pois, anchors } = this.#draft.summary;
-    this.#f('saved').textContent = t(
-      this.#published ? 'admin.saved.published' : 'admin.saved.local',
-      { id: this.#draft.id, nodes, edges, pois, anchors }
-    );
+    let text = t(this.#published ? 'admin.saved.published' : 'admin.saved.local', {
+      id: this.#draft.id,
+      nodes,
+      edges,
+      pois,
+      anchors,
+    });
+    // "Saved" here only ever means this browser's local storage — the one
+    // thing that isn't is whether a copy has left this device (a file, the
+    // clipboard, or the server). Say so plainly rather than let "Saved"
+    // read as "backed up".
+    if (!this.#published && !this.#backedUp) text += ' ' + t('admin.saved.noBackup');
+    this.#f('saved').textContent = text;
   }
 
   #status(text) {
@@ -593,6 +624,7 @@ export class AdminPanel {
 
   #changed() {
     this.#published = false;
+    this.#backedUp = false;
     this.#saveDraft();
     this.#updateExport();
     this.#updateSaved();
@@ -1660,6 +1692,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
       // ignore
     }
     this.#published = true;
+    this.#backedUp = true;
     this.#updateSaved();
     this.#status(t('admin.export.published'));
     return body;
@@ -1678,6 +1711,8 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
   download() {
     const name = this.#exportFilename();
     this.#opts.download(name, `${this.json()}\n`);
+    this.#backedUp = true;
+    this.#updateSaved();
     this.#toast(t('admin.export.downloaded', { name }));
     return name;
   }
@@ -1689,12 +1724,15 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
 
   async copy() {
     await this.#opts.copy(this.json());
+    this.#backedUp = true;
+    this.#updateSaved();
     this.#toast(t('admin.export.copied'));
   }
 
   discard() {
     this.#draft = new VenueDraft(this.#opts.venue.toJSON());
     this.#wizard?.reset();
+    this.#backedUp = true; // nothing left that isn't already wherever `venue` came from
     try {
       this.#opts.storage?.removeItem(DRAFT_KEY);
     } catch {
@@ -1702,6 +1740,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     }
     this.#select(null);
     this.#updateExport();
+    this.#updateSaved();
     this.#opts.floorplan.render();
   }
 
@@ -1726,6 +1765,9 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     for (const off of this.#unsub) off();
     this.#strideCal?.detach();
     this.#wizard?.destroy();
+    if (this.#onBeforeUnload) {
+      this.#opts.window?.removeEventListener?.('beforeunload', this.#onBeforeUnload);
+    }
     this.#el.remove();
   }
 }

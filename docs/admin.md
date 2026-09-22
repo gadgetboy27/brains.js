@@ -30,6 +30,41 @@ origin and id. This is the usual reason a device looks like it "recorded
 nothing" when it didn't — always reopen the _exact_ URL a route was
 recorded from to see it again.
 
+### Where this actually lives, and what "backup" means here
+
+There is no database on the phone, and nothing here is a file until you
+make it one. What's actually happening, precisely:
+
+1. **Browser storage** (`localStorage`, one JSON blob per origin) — every
+   change writes here immediately. This is the only thing that's automatic,
+   and it's what the status line above is reporting. It is not a file; it
+   doesn't show up in the Files app; it isn't backed up by iCloud; and it
+   can be lost — the browser clearing site data, Safari's storage limits
+   under pressure, or simply opening a different URL (see above). The app
+   also asks the browser to please not evict it (`navigator.storage.persist()`),
+   but browsers are free to say no, especially for a page that isn't
+   installed or bookmarked.
+2. **A real file, on the device** — only happens when you tap **Download**
+   in the Export tab (see below). That's the first point any of this
+   becomes an actual file in Files/iCloud Drive, AirDrop-able, backed up
+   by whatever backs up your phone.
+3. **The server database** (Cloudflare KV) — only happens when you tap
+   **Publish**, which needs `ADMIN_TOKEN` set up first (`docs/publishing.md`).
+   This is the only copy every visitor and every device shares, and the
+   only one with version history (`docs/publishing.md` covers rollback).
+
+So: recording is automatic, but **backup is not** — nothing leaves this
+one browser's storage until you Download, Copy, or Publish. To make that
+impossible to miss, the status line adds a warning the moment a change
+exists that hasn't been taken anywhere:
+
+> _⚠ Only on this device — Download, Copy or Publish before you close this
+> tab._
+
+It clears the instant any of those three succeeds, and reappears on the
+next change. Closing the tab (or admin) while it's showing also asks the
+browser's own "leave this page?" confirmation, as a last line of defence.
+
 ## Calibrate stride (better accuracy between codes)
 
 Between scans, the app estimates how far you've walked by counting footsteps

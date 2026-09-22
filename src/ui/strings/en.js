@@ -235,6 +235,8 @@ export default {
       'Saved on this phone for “{id}” — {nodes} nodes · {edges} links · {pois} places · {anchors} markers · not yet published',
     'admin.saved.published':
       'Published for “{id}” — {nodes} nodes · {edges} links · {pois} places · {anchors} markers · everyone has this version',
+    'admin.saved.noBackup':
+      '⚠ Only on this device — Download, Copy or Publish before you close this tab.',
     'admin.saved.now': 'Saved',
     'admin.ward.number': 'Ward number (1–99)',
     'admin.ward.name': 'Ward {n}',
