@@ -203,6 +203,9 @@ export default {
     'admin.export.copied': 'Copied.',
     'admin.export.downloaded': 'Saved {name} — check Files (or the share sheet) on this device.',
     'admin.export.discard': 'Discard draft',
+    'admin.export.rawJson': "Show the raw JSON (if Download and Copy don't work)",
+    'admin.export.rawJsonHint':
+      "Tap inside, select all, and copy by hand — this always shows the current draft, even when the buttons above don't work.",
     'admin.export.publish': 'Publish for everyone',
     'admin.export.publishing': 'Publishing…',
     'admin.export.published': 'Published. Visitors get this version from now on.',

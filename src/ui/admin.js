@@ -73,6 +73,7 @@ const CSS = `
 .btn-big { min-height: 56px; font-size: 1.1em; flex: 1 1 100%; }
 .admin-plan summary { cursor: pointer; font-weight: 600; }
 .admin-plan textarea { width: 100%; min-height: 6em; font: inherit; font-size: 13px; box-sizing: border-box; }
+.admin-raw-json { font-family: ui-monospace, Menlo, Consolas, monospace; min-height: 10em; }
 .admin-markers { list-style: none; margin: 6px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .admin-markers li { display: grid; gap: 4px; text-align: center; font-size: 13px; }
 .admin-markers img { width: 100%; max-width: 140px; margin: 0 auto; background: #fff; border-radius: 6px; }
@@ -292,6 +293,11 @@ export class AdminPanel {
           <button type="button" class="btn" data-f="copy"></button>
           <button type="button" class="btn" data-f="discard"></button>
         </div>
+        <details class="admin-plan" data-f="raw-json-box">
+          <summary data-f="raw-json-summary"></summary>
+          <p data-f="raw-json-hint"></p>
+          <textarea data-f="raw-json" class="admin-raw-json" readonly rows="8" spellcheck="false"></textarea>
+        </details>
       </div>
 
       <form class="admin-form" data-f="poi-form" hidden>
@@ -331,6 +337,9 @@ export class AdminPanel {
     this.#f('download').textContent = t('admin.export.download');
     this.#f('copy').textContent = t('admin.export.copy');
     this.#f('discard').textContent = t('admin.export.discard');
+    this.#f('raw-json-summary').textContent = t('admin.export.rawJson');
+    this.#f('raw-json-hint').textContent = t('admin.export.rawJsonHint');
+    this.#f('raw-json').addEventListener('focus', () => this.#f('raw-json').select());
     this.#f('save').textContent = t('admin.save');
     this.#f('edit-search-label').textContent = t('admin.edit.search');
     this.#f('edit-search').placeholder = t('admin.edit.placeholder');
@@ -1481,6 +1490,10 @@ export class AdminPanel {
     // wrong with it is exactly what it's for. Publishing broken JSON to
     // every visitor's copy is the thing actually worth stopping.
     this.#f('publish').disabled = problems.length > 0;
+    // A plain, always-visible copy of the same JSON: no download, share
+    // sheet or clipboard permission involved, so it works even when those
+    // don't — tap in, select all, copy by hand.
+    this.#f('raw-json').value = this.json();
     void this.#renderMarkers();
   }
 

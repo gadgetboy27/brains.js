@@ -314,6 +314,28 @@ describe('AdminPanel — export and drafts', () => {
     expect(JSON.parse(download.mock.calls[0][1]).pois[0].node).toBe('n-ghost');
   });
 
+  it('always shows the current draft as plain text — a fallback when Download and Copy cannot', () => {
+    const { admin, provider } = make();
+    admin.showTab('export');
+    const raw = admin.el.querySelector('[data-f="raw-json"]');
+    expect(JSON.parse(raw.value)).toEqual(demo);
+
+    // Stays in sync as the draft changes, even once it's invalid — this is
+    // the one thing on the tab that is never gated on validity.
+    admin.draft.pois[0].node = 'n-ghost';
+    admin.showTab('record'); // re-showing 'export' isn't required: #changed() updates it
+    admin.startRecording();
+    provider.emit({ x: 5, y: 5, z: 0, floor: 0, heading: 0, confidence: 1, timestamp: 0 }); // clear of every existing node's 1.5 m snap radius
+    admin.addNodeHere('New spot');
+    expect(JSON.parse(raw.value).nodes.some((n) => n.name === 'New spot')).toBe(true);
+    expect(JSON.parse(raw.value).pois[0].node).toBe('n-ghost');
+
+    // Tapping in selects everything, ready to copy by hand.
+    raw.select = vi.fn();
+    raw.dispatchEvent(new Event('focus'));
+    expect(raw.select).toHaveBeenCalledOnce();
+  });
+
   it('restores a draft for the same venue and can discard it', () => {
     const first = make();
     first.provider.emit(pose(40, 6));

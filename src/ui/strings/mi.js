@@ -209,6 +209,9 @@ export default {
     'admin.export.downloaded':
       'Kua tiakina {name} — tirohia Ngā Kōnae (te whāriki tiri rānei) i tēnei pūrere.',
     'admin.export.discard': 'Whakakore i te tauira',
+    'admin.export.rawJson': 'Whakaatuhia te JSON mata (mēnā kāore e mahi a Tikiake me Tārua)',
+    'admin.export.rawJsonHint':
+      'Pāwhiritia ki roto, tīpakohia katoatia, ka tāruatia ā-ringa — ka whakaatu tonu tēnei i te hukihuki o nāianei, ahakoa kāore ngā pātene i runga ake nei e mahi ana.',
     'admin.export.publish': 'Whakaputa mō te katoa',
     'admin.export.publishing': 'E whakaputa ana…',
     'admin.export.published':

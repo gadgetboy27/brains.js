@@ -126,6 +126,13 @@ content on the clipboard, to paste anywhere.
 Publish the file at the venue's URL (`docs/entry.md`) — visitors get it on
 their next load.
 
+If neither works — an odd browser, a locked-down device, permissions
+denied — **Show the raw JSON** is a plain, read-only text box holding the
+exact same content, always current, never gated on validity. Tap inside to
+select it all and copy it by hand (screenshot it, dictate it, anything);
+it depends on nothing but the page rendering, which is the one thing that
+was already working.
+
 ## What "training" means here
 
 Positioning quality comes from three things you can improve in this mode:
