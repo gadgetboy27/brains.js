@@ -260,6 +260,7 @@ export default {
     'notice.venueNew': 'New venue “{id}” — nothing is published yet. Survey it, then Publish.',
     'scan.unrecognised': 'Code “{text}” is not a marker for this venue.',
     'scan.wrongVenue': 'Code “{text}” belongs to a different venue.',
+    'scan.recording': 'Recording — {distance} m',
     'admin.tab.survey': 'Sticker survey',
     'admin.tab.routes': 'Routes',
     'admin.stride.title': 'Calibrate stride',

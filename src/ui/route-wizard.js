@@ -41,6 +41,7 @@ import { t } from './strings/index.js';
  * @property {(n: unknown) => { name: string, aliases: string[] } | null} wardFields
  * @property {ReadonlyArray<object>} [places]
  * @property {(code: string) => string | null} [resolveCodeName]  A printed-code list's name for this code, if any.
+ * @property {(active: boolean, distanceM?: number) => void} [onRecording]  A leg started/stopped, or its distance moved.
  */
 
 const SECTION_TYPES = ['walk', 'door', 'stairs', 'lift', 'ramp', 'escalator'];
@@ -411,6 +412,7 @@ export class RouteWizard {
     this.#route = { edges: [], nodes: 0, distance: 0, scans: 0 };
     this.#uncertain = false;
     this.#startCode = null; // set by #autoAdvance right after, for a scan-started leg
+    this.#host.onRecording?.(true, 0);
     this.#show('walk');
   }
 
@@ -477,6 +479,7 @@ export class RouteWizard {
     }
     this.#lastHeading = pose.heading ?? this.#lastHeading;
     this.#updateWalk();
+    this.#host.onRecording?.(true, this.#route.distance);
     return node;
   }
 
@@ -548,6 +551,7 @@ export class RouteWizard {
     this.#lastNode = null;
     this.#route = null;
     this.#startCode = null;
+    this.#host.onRecording?.(false);
     this.#clearFields();
     this.#show('start');
   }

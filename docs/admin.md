@@ -75,6 +75,15 @@ Everything goes through the same draft as the other tabs: **Undo** removes
 the last point, the draft autosaves on this device, and nothing reaches
 visitors until you Publish.
 
+**On the camera view itself** (not just the panel below it): a square
+viewfinder frame flashes green for a moment on every code the camera
+manages to decode — recognised or not — so it's obvious the camera is
+actually reading frames, distinct from the phone's own "camera is on"
+light. While a leg is in progress, a **"Recording — N m"** badge sits at
+the top of that view with the live distance walked since the start scan,
+so the answer to "is it tracking me right now" is on screen the whole
+time, without switching to the floor plan to check.
+
 ## Sticker survey (printed codes first)
 
 The quickest way to map a building when you already have QR stickers printed:

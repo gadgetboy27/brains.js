@@ -47,6 +47,7 @@ import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
 import { createAdminPanel } from './ui/admin.js';
 import { createCameraBackdrop } from './ui/camera-backdrop.js';
+import { createScanOverlay } from './ui/scan-overlay.js';
 import { createFirstRun, needsFirstRun } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
@@ -328,6 +329,14 @@ export async function bootApp(options = {}) {
     document: doc,
     ...options.backdropOptions,
   });
+  // The viewfinder frame and "Recording" badge — visible proof, over the
+  // camera itself, that the app is reading frames and tracking movement,
+  // distinct from the phone's own "camera is on" indicator.
+  const scanOverlay = createScanOverlay({
+    mount: arView,
+    document: doc,
+    ...options.scanOverlayOptions,
+  });
   arScene.canvas.style.position = 'relative';
   arScene.canvas.style.zIndex = '1';
   const floorplan = createFloorplan({
@@ -392,9 +401,16 @@ export async function bootApp(options = {}) {
     fit();
   }
   function syncBackdrop() {
+    const active = chain.active ?? chainNoCamera?.active ?? null;
     if (view === 'ar' && permissions.camera !== false && !lowPower) {
-      void backdrop.attach(chain.active ?? chainNoCamera?.active ?? null);
+      void backdrop.attach(active);
     } else backdrop.detach();
+    scanOverlay.setViewfinderVisible(
+      view === 'ar' &&
+        permissions.camera !== false &&
+        !lowPower &&
+        typeof active?.onScan === 'function'
+    );
   }
   arBtn.addEventListener('click', () => showView('ar', { manual: true }));
   planBtn.addEventListener('click', () => showView('floorplan', { manual: true }));
@@ -730,6 +746,7 @@ export async function bootApp(options = {}) {
         showView('ar', { manual: true });
       },
       onManualPose: (pose) => onFix(pose),
+      onRecording: (active, distanceM) => scanOverlay.setRecording(active, distanceM),
       publicBaseUrl: options.publicBaseUrl ?? globalThis.location?.origin,
       onClose: () => {
         admin?.destroy();
@@ -752,7 +769,11 @@ export async function bootApp(options = {}) {
     scanOff = null;
     if (provider && typeof provider.onScan === 'function') {
       scanOff = provider.onScan((scan) => {
+        // Proof the camera is actually decoding frames, whatever the code
+        // turns out to be — separate from whether it was useful.
+        scanOverlay.flash();
         if (scan.result === 'accepted' || scan.result === 'repeat') {
+          nav?.vibrate?.(15); // short, distinct from the longer "problem" buzz below
           hud.hideNotice('scan');
           return;
         }
@@ -843,6 +864,7 @@ export async function bootApp(options = {}) {
     admin,
     /** Explicit handled state, for tests and diagnostics. */
     backdrop,
+    scanOverlay,
     matcher,
     get state() {
       return {
@@ -890,6 +912,7 @@ export async function bootApp(options = {}) {
       rescanOff?.();
       await chain.stop();
       backdrop.destroy();
+      scanOverlay.destroy();
       arrow.dispose();
       arScene.dispose();
       floorplan.destroy();

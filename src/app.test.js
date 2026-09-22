@@ -1110,16 +1110,28 @@ describe('bootApp — every scan gets a visible reaction', () => {
         },
       },
     });
+    // The viewfinder is up (a QR-capable provider, camera view showing) and
+    // flashes on every decode — proof frames are being read, whatever the
+    // code turns out to be — separate from the HUD notice about it.
+    const frame = app.scanOverlay.el.querySelector('[data-f="frame"]');
+    expect(frame.hidden).toBe(false);
+
     app.chain.active.handleScan('https://stickers.example/print/A07');
     expect(app.hud.text.notices).toContain('Code “A07” is not a marker for this venue.');
     expect(vibrate).toHaveBeenCalledWith(40);
+    expect(frame.classList.contains('flash')).toBe(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(frame.classList.contains('flash')).toBe(false);
 
     app.chain.active.handleScan('brains://other-venue/a-1');
     expect(app.hud.text.notices).toContain('Code “a-1” belongs to a different venue.');
 
+    vibrate.mockClear();
     app.chain.active.handleScan(`brains://${app.venue.id}/${app.venue.anchors[0].id}`);
     expect(app.hud.text.notices.some((n) => n.startsWith('Code “'))).toBe(false);
     expect(app.state.hasPose).toBe(true);
+    expect(frame.classList.contains('flash')).toBe(true); // a recognised marker still flashes
+    expect(vibrate).toHaveBeenCalledWith(15); // a short, distinct buzz from the "problem" one above
     await app.destroy();
   });
 });
@@ -1146,17 +1158,22 @@ describe('bootApp — route wizard', () => {
 
     // Scan the code where the route starts: the camera shows, the scan
     // starts the route on its own, and the app returns to the plan.
+    const badge = app.scanOverlay.el.querySelector('[data-f="badge"]');
+    expect(badge.hidden).toBe(true); // nothing recorded until a route actually starts
+
     f('start-scan').click();
     expect(app.view).toBe('ar');
     expect(admin.expectingCode).toBe(true);
     expect(admin.registerCode('A03')).toMatchObject({ code: 'A03', x: 0, y: 0 });
     expect(wizard.step).toBe('walk');
     expect(app.view).toBe('floorplan');
+    expect(badge.hidden).toBe(false); // the "Recording" badge is on the instant the leg starts
 
     // Walk 8 m east in 1 m fixes: the app feeds each pose to the panel and on to the wizard.
     for (let x = 1; x <= 8; x += 1) app.chain.active.teleport({ x, y: 0, floor: 0 });
     expect(wizard.route).toMatchObject({ nodes: 4 }); // exact fixes, but points within 1.5 m snap together
     expect(f('walk-status').textContent).toMatch(/^\d+ m · \d+ points · 0 codes$/);
+    expect(badge.textContent).toContain(t('scan.recording', { distance: 8 })); // live, on the camera view itself
 
     // Scan the code at the next place: ends this route and starts the next
     // one immediately — no separate "arrived" step, no name to type.

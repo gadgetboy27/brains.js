@@ -41,6 +41,8 @@ function host(draft = new VenueDraft(blankVenue('test-site')), { plan = {} } = {
     },
     toast: (text) => h.toasts.push(text),
     wardFields: AdminPanel.wardFields,
+    recording: [], // [active, distanceM][] — every onRecording call, in order
+    onRecording: (active, distanceM) => h.recording.push([active, distanceM]),
     // A printed-code list, like AdminPanel's — most codes name themselves.
     resolveCodeName: (text) => plan[text] ?? null,
     /** The camera decoded `text`. */
@@ -77,6 +79,7 @@ describe('RouteWizard', () => {
     expect(entrance).toMatchObject({ x: 0, y: 0, code: 'A01' });
     expect(h.pose.confidence).toBe(1);
     expect(w.step).toBe('walk');
+    expect(h.recording).toEqual([[true, 0]]); // recording starts the instant the leg does
     const start = h.draft.pois.find((p) => p.name === 'Main entrance');
     expect(start).toMatchObject({ category: 'exit' }); // from the places library
     expect(start.aliases).toContain('Way out');
@@ -91,6 +94,7 @@ describe('RouteWizard', () => {
     // Walk north: dead-reckoned poses every metre; a point lands every 3 m.
     for (let y = 1; y <= 7; y += 1) walk(pose(0, y, 0, 0, 0.8));
     expect(w.route).toMatchObject({ nodes: 2, distance: 6 }); // at y=3 and y=6
+    expect(h.recording.at(-1)).toEqual([true, 6]); // the live distance keeps up with each point
     // Stale dead reckoning: nothing is dropped, the hint asks for a scan.
     walk(pose(0, 7, 0, 0, 0.1));
     expect(f('walk-hint').textContent).toBe(t('admin.wizard.walk.uncertain'));
@@ -181,5 +185,6 @@ describe('RouteWizard', () => {
     expect(w.step).toBe('start');
     expect(h.toasts.at(-1)).toBe(t('admin.wizard.walk.cancelled'));
     expect(h.draft.nodes.length).toBeGreaterThan(1); // recorded points stay (Undo removes them)
+    expect(h.recording.at(-1)).toEqual([false, undefined]); // the recording badge goes off with it
   });
 });

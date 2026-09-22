@@ -129,6 +129,7 @@ export class AdminPanel {
    * @param {(text: string) => Promise<void>} [options.copy]
    * @param {(message: string, defaultValue?: string) => string | null} [options.prompt]  Injectable; default window.prompt.
    * @param {() => void} [options.onClose]
+   * @param {(active: boolean, distanceM?: number) => void} [options.onRecording]  The route wizard's leg started/stopped or moved.
    * @param {typeof fetch} [options.fetch]            For publishing (default global fetch).
    * @param {string} [options.publishUrl]             API base; default `/api/venues/<id>` on this origin.
    * @param {Storage | null} [options.sessionStorage] Keeps the publishing key for the session.
@@ -391,6 +392,7 @@ export class AdminPanel {
       wardFields: AdminPanel.wardFields,
       places: options.places ?? HOSPITAL_PLACES,
       resolveCodeName: (text) => findPlanRow(this.#plan, text)?.name ?? null,
+      onRecording: (active, distanceM) => this.#opts.onRecording?.(active, distanceM),
     });
     this.#f('survey-hint').textContent = t('admin.survey.hint');
     this.#f('survey-name-label').textContent = t('admin.survey.name');

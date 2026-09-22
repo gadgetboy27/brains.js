@@ -271,6 +271,7 @@ export default {
       'Wāhi hou “{id}” — kāore anō he mea kua whakaputaina. Rūritia, kātahi ka Whakaputa.',
     'scan.unrecognised': 'Ehara te waehere “{text}” i te tohu mō tēnei wāhi.',
     'scan.wrongVenue': 'Nō tētahi atu wāhi te waehere “{text}”.',
+    'scan.recording': 'E hopu ana — {distance} m',
     'admin.tab.survey': 'Rūri pihi',
     'admin.tab.routes': 'Ngā ara',
     'admin.stride.title': 'Whakarite te takahanga',
