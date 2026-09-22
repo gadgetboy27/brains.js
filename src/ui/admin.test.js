@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PositionProvider } from '../core/positioning.js';
 import { createVenue } from '../core/venue.js';
 import demo from '../venues/demo-venue.json';
-import { createAdminPanel } from './admin.js';
+import { createAdminPanel, defaultDownload } from './admin.js';
 import { createFloorplan } from './floorplan.js';
 import { t } from './strings/index.js';
 
@@ -219,26 +219,99 @@ describe('AdminPanel — plan editor', () => {
   });
 });
 
+describe('defaultDownload — saving a file on iOS and everywhere else', () => {
+  it('uses the Web Share sheet when the browser can share a file (iOS Safari)', () => {
+    const shared = [];
+    const nav = {
+      share: vi.fn(async (data) => {
+        shared.push(data);
+      }),
+      canShare: vi.fn(() => true),
+    };
+    const restore = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+    try {
+      defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      expect(nav.canShare).toHaveBeenCalledWith({
+        files: [expect.objectContaining({ name: 'brains-demo-2026-01-01-0000.venue.json' })],
+      });
+      expect(shared).toHaveLength(1);
+      expect(shared[0].files[0].name).toBe('brains-demo-2026-01-01-0000.venue.json');
+      expect(shared[0].title).toBe('brains-demo-2026-01-01-0000.venue.json');
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
+    }
+  });
+
+  it('falls back to an <a download> link when file sharing is not available (desktop)', () => {
+    const nav = { share: undefined, canShare: undefined };
+    const restore = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+    const clicked = vi.fn();
+    const realCreate = document.createElement.bind(document);
+    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      const el = realCreate(tag);
+      if (tag === 'a') el.click = clicked;
+      return el;
+    });
+    try {
+      defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      expect(clicked).toHaveBeenCalledOnce();
+    } finally {
+      spy.mockRestore();
+      Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
+    }
+  });
+
+  it('falls back to the anchor link if canShare rejects this file (some Android browsers)', () => {
+    const nav = { share: vi.fn(), canShare: vi.fn(() => false) };
+    const restore = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+    const clicked = vi.fn();
+    const realCreate = document.createElement.bind(document);
+    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      const el = realCreate(tag);
+      if (tag === 'a') el.click = clicked;
+      return el;
+    });
+    try {
+      defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      expect(nav.share).not.toHaveBeenCalled();
+      expect(clicked).toHaveBeenCalledOnce();
+    } finally {
+      spy.mockRestore();
+      Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
+    }
+  });
+});
+
 describe('AdminPanel — export and drafts', () => {
-  it('validates, downloads and copies the venue JSON', async () => {
+  it('validates, downloads and copies the venue JSON, named obviously and confirmed with a toast', async () => {
     const { admin, download, copy } = make();
     admin.showTab('export');
     expect(admin.el.querySelector('[data-f="valid"]').textContent).toBe(t('admin.export.valid'));
-    expect(admin.download()).toBe('demo-health-centre.venue.json');
+    const name = admin.download();
+    expect(name).toMatch(/^brains-demo-health-centre-\d{4}-\d\d-\d\d-\d{4}\.venue\.json$/);
     const [, text] = download.mock.calls[0];
     expect(JSON.parse(text)).toEqual(demo);
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+      t('admin.export.downloaded', { name })
+    );
     await admin.copy();
     expect(copy).toHaveBeenCalledOnce();
-    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(t('admin.export.copied'));
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(t('admin.export.copied'));
   });
 
-  it('blocks download while the draft is invalid and lists the problems', () => {
-    const { admin } = make();
+  it('never blocks getting a broken draft out — download still works; only Publish is disabled', () => {
+    const { admin, download } = make();
     admin.draft.pois[0].node = 'n-ghost';
     admin.showTab('export');
-    expect(admin.el.querySelector('[data-f="download"]').disabled).toBe(true);
+    expect(admin.el.querySelector('[data-f="download"]').disabled).toBe(false);
+    expect(admin.el.querySelector('[data-f="publish"]').disabled).toBe(true);
     expect(admin.el.querySelector('[data-f="problems"]').textContent).toContain('pois[0].node');
-    expect(admin.download()).toBeNull();
+    const name = admin.download();
+    expect(name).toMatch(/^brains-demo-health-centre-/);
+    expect(JSON.parse(download.mock.calls[0][1]).pois[0].node).toBe('n-ghost');
   });
 
   it('restores a draft for the same venue and can discard it', () => {

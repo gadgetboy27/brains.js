@@ -1477,7 +1477,9 @@ export class AdminPanel {
         list.appendChild(li);
       }
     }
-    this.#f('download').disabled = problems.length > 0;
+    // Download is never blocked: getting a broken draft out to look at what's
+    // wrong with it is exactly what it's for. Publishing broken JSON to
+    // every visitor's copy is the thing actually worth stopping.
     this.#f('publish').disabled = problems.length > 0;
     void this.#renderMarkers();
   }
@@ -1641,16 +1643,27 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     return JSON.stringify(this.#draft.toJSON(), null, 2);
   }
 
+  /**
+   * Save the draft to a file, named obviously and by the minute so several
+   * exports never look the same: `brains-<venue-id>-<date>-<time>.venue.json`.
+   * Never blocked by validation problems — an export is exactly how you'd
+   * get an invalid draft out to look at what's wrong with it.
+   */
   download() {
-    if (this.#draft.validate().length) return null;
-    const name = `${this.#draft.id}.venue.json`;
+    const name = this.#exportFilename();
     this.#opts.download(name, `${this.json()}\n`);
+    this.#toast(t('admin.export.downloaded', { name }));
     return name;
+  }
+
+  #exportFilename() {
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+    return `brains-${this.#draft.id}-${stamp}.venue.json`;
   }
 
   async copy() {
     await this.#opts.copy(this.json());
-    this.#status(t('admin.export.copied'));
+    this.#toast(t('admin.export.copied'));
   }
 
   discard() {
@@ -1691,8 +1704,45 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
   }
 }
 
-function defaultDownload(name, text) {
+/**
+ * Save a file for the person using the browser. iOS Safari's classic
+ * `<a download>` trick is unreliable for a JSON blob — it often does
+ * nothing visible at all, which is exactly what looks like "nothing was
+ * saved". Where the Web Share API can share a *file* (iOS Safari, most
+ * mobile browsers), that is used instead: it opens the native share sheet
+ * ("Save to Files", AirDrop, Messages…), which unambiguously produces a
+ * file the person can find. Desktop browsers, which support `<a download>`
+ * properly and mostly don't support sharing files, get that instead.
+ */
+export function defaultDownload(name, text) {
   const blob = new Blob([text], { type: 'application/json' });
+  const nav = globalThis.navigator;
+  let file = null;
+  try {
+    file = new File([blob], name, { type: 'application/json' });
+  } catch {
+    // File unavailable (very old browser): fall through to the anchor trick.
+  }
+  const canShareFile =
+    file &&
+    typeof nav?.share === 'function' &&
+    (typeof nav.canShare !== 'function' || safeCanShare(nav, file));
+  if (canShareFile) {
+    nav.share({ files: [file], title: name }).catch(() => anchorDownload(name, blob));
+    return;
+  }
+  anchorDownload(name, blob);
+}
+
+function safeCanShare(nav, file) {
+  try {
+    return nav.canShare({ files: [file] });
+  } catch {
+    return false;
+  }
+}
+
+function anchorDownload(name, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

@@ -109,11 +109,22 @@ colour (selected node in amber, anchors as squares).
 
 ## Export
 
-The Export tab shows the draft's size and runs the venue schema validator;
-**Download venue.json** is enabled only when it is valid, and the problems
-are listed by field otherwise. Copy JSON is the alternative on devices
-where downloads are awkward. Publish the file at the venue's URL
-(`docs/entry.md`) — visitors get it on their next load.
+The Export tab shows the draft's size and runs the venue schema validator,
+listing any problems by field. **Download** works regardless — getting a
+draft out to look at is exactly what it's for, valid or not; only
+**Publish for everyone** is blocked while there are problems, since that's
+what every visitor would get. The file is named obviously and by the
+minute (`brains-<venue-id>-<date>-<time>.venue.json`) so several exports
+in a row are easy to tell apart.
+
+On a phone, **Download** uses the native share sheet (Save to Files,
+AirDrop, Messages…) where the browser supports sharing a file — iOS
+Safari's older download trick often produced nothing you could find. A
+toast confirms the filename either way. **Copy JSON** puts the same
+content on the clipboard, to paste anywhere.
+
+Publish the file at the venue's URL (`docs/entry.md`) — visitors get it on
+their next load.
 
 ## What "training" means here
 

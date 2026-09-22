@@ -201,6 +201,7 @@ export default {
     'admin.export.download': 'Download venue.json',
     'admin.export.copy': 'Copy JSON',
     'admin.export.copied': 'Copied.',
+    'admin.export.downloaded': 'Saved {name} — check Files (or the share sheet) on this device.',
     'admin.export.discard': 'Discard draft',
     'admin.export.publish': 'Publish for everyone',
     'admin.export.publishing': 'Publishing…',

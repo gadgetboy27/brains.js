@@ -206,6 +206,8 @@ export default {
     'admin.export.download': 'Tikiake venue.json',
     'admin.export.copy': 'Tārua JSON',
     'admin.export.copied': 'Kua tāruatia.',
+    'admin.export.downloaded':
+      'Kua tiakina {name} — tirohia Ngā Kōnae (te whāriki tiri rānei) i tēnei pūrere.',
     'admin.export.discard': 'Whakakore i te tauira',
     'admin.export.publish': 'Whakaputa mō te katoa',
     'admin.export.publishing': 'E whakaputa ana…',
