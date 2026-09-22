@@ -545,7 +545,7 @@ describe('AdminPanel — edit existing and saved state', () => {
     expect(saved()).toBe(
       `${t('admin.saved.local', counts({ nodes: 17 }))} ${t('admin.saved.noBackup')}`
     );
-    admin.el.querySelector('[data-f="save"]').click();
+    admin.save(); // no button for this any more — every change already autosaves
     expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(t('admin.saved.now'));
     expect(saved()).toContain(t('admin.saved.noBackup')); // Save is local-only too: still no backup
     await admin.publish();
@@ -680,6 +680,38 @@ describe('AdminPanel — edit existing and saved state', () => {
     expect(admin.draft.anchors.find((a) => a.id === 'a-lift-1')).toBeUndefined();
     expect(admin.undo().type).toBe('removeAnchor');
     expect(admin.draft.validate()).toEqual([]);
+  });
+});
+
+describe('AdminPanel — tab row: only what a walk needs, the rest one tap away', () => {
+  it('opens on Routes; Export, Undo, Hide tools and Close are always visible; Save is gone', () => {
+    const { admin } = make();
+    expect(admin.tab).toBe('routes');
+    const tabs = [
+      ...admin.el.querySelectorAll('.admin-tabs > [data-tab], .admin-tabs > [data-f]'),
+    ].map((el) => el.dataset.tab ?? el.dataset.f);
+    expect(tabs).toEqual(['routes', 'more-tools', 'export', 'undo', 'collapse', 'close']);
+    expect(admin.el.querySelector('[data-f="save"]')).toBeNull();
+    // Redundant with autosave, but the method itself still works for anything that wants it.
+    expect(() => admin.save()).not.toThrow();
+  });
+
+  it('tucks maintenance tabs behind "More tools", and picking one closes the menu', () => {
+    const { admin } = make();
+    const moreTools = admin.el.querySelector('[data-f="more-tools"]');
+    expect(moreTools.open).toBe(false);
+    const tucked = [...moreTools.querySelectorAll('[data-tab]')].map((el) => el.dataset.tab);
+    expect(tucked).toEqual(['survey', 'record', 'plan', 'edit']);
+
+    moreTools.open = true;
+    admin.el.querySelector('[data-tab="plan"]').click();
+    expect(admin.tab).toBe('plan');
+    expect(moreTools.open).toBe(false); // closes itself once a choice is made
+    expect(admin.el.querySelector('[data-tool="plan"]').hidden).toBe(false);
+
+    // Routes stays reachable in one tap regardless of what's tucked away.
+    admin.el.querySelector('[data-tab="routes"]').click();
+    expect(admin.tab).toBe('routes');
   });
 });
 

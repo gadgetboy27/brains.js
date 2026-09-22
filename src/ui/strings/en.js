@@ -194,6 +194,7 @@ export default {
     'admin.poi.aliases': 'Other names (comma-separated)',
     'admin.anchor.heading': 'Heading when scanning (degrees)',
     'admin.undo': 'Undo',
+    'admin.moreTools': 'More tools ▾',
     'admin.export.summary':
       '{floors} floors · {nodes} nodes · {edges} links · {pois} places · {anchors} markers',
     'admin.export.valid': 'Valid venue JSON.',

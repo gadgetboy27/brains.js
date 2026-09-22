@@ -199,6 +199,7 @@ export default {
     'admin.poi.aliases': 'Ētahi atu ingoa (wehea ki te piko)',
     'admin.anchor.heading': 'Anga i te matawai (tākiri)',
     'admin.undo': 'Wetekia',
+    'admin.moreTools': 'Ētahi atu taputapu ▾',
     'admin.export.summary':
       '{floors} papa · {nodes} pona · {edges} hononga · {pois} wāhi · {anchors} tohu',
     'admin.export.valid': 'He JSON wāhi tika.',

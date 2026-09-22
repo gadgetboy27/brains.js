@@ -5,6 +5,14 @@
 copy of the current venue and exports valid venue JSON; nothing changes for
 visitors until that JSON is published.
 
+The tab row only ever shows what a walk needs: **Routes** (opens by
+default), **Export**, **Undo**, **Hide tools**, **Close admin**. Everything
+else — **Sticker survey**, **Record a route**, **Plan editor**, **Edit
+existing** — is one tap under **More tools ▾**, for the maintenance jobs
+that happen between walks rather than during one; picking one closes the
+menu again. There is no separate Save button — every change autosaves the
+instant it happens (see "Is it actually recording anything?" below).
+
 ## Is it actually recording anything?
 
 Every scan, tap and auto-dropped point writes straight into the browser's

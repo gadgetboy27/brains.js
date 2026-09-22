@@ -38,8 +38,19 @@ const CSS = `
 .admin[hidden] { display: none; }
 .admin h2 { margin: 0 0 4px; font-size: 1em; }
 .admin p { margin: 4px 0; }
-.admin-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.admin-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: flex-start; }
 .admin-tabs .btn { min-height: 40px; padding: 6px 12px; }
+.admin-more-tools { position: relative; }
+.admin-more-tools summary { list-style: none; }
+.admin-more-tools summary::-webkit-details-marker { display: none; }
+.admin-more-tools summary { display: inline-flex; align-items: center; min-height: 40px; padding: 6px 12px;
+  border: 2px solid var(--color-accent); border-radius: var(--radius); background: var(--color-surface-solid);
+  color: var(--color-text); font: inherit; cursor: pointer; }
+.admin-more-tools[open] summary { background: var(--color-accent); color: var(--color-accent-contrast); }
+.admin-more-tools-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 1; display: flex; flex-direction: column;
+  gap: 6px; padding: 8px; min-width: 10em; border: 2px solid var(--color-accent); border-radius: var(--radius);
+  background: var(--color-surface-solid); }
+.admin-more-tools-list .btn { width: 100%; text-align: left; }
 .admin.admin-collapsed > :not(.admin-tabs):not([data-f="status"]):not([data-f="saved"]) { display: none; }
 .admin.admin-collapsed { max-height: none; }
 @media (max-width: 600px) {
@@ -181,12 +192,16 @@ export class AdminPanel {
       <p data-f="hint"></p>
       <div class="admin-tabs" role="tablist">
         <button type="button" class="btn" role="tab" data-tab="routes"></button>
-        <button type="button" class="btn" role="tab" data-tab="survey"></button>
-        <button type="button" class="btn" role="tab" data-tab="record"></button>
-        <button type="button" class="btn" role="tab" data-tab="plan"></button>
-        <button type="button" class="btn" role="tab" data-tab="edit"></button>
+        <details class="admin-more-tools" data-f="more-tools">
+          <summary data-f="more-tools-summary"></summary>
+          <div class="admin-more-tools-list" role="tablist">
+            <button type="button" class="btn" role="tab" data-tab="survey"></button>
+            <button type="button" class="btn" role="tab" data-tab="record"></button>
+            <button type="button" class="btn" role="tab" data-tab="plan"></button>
+            <button type="button" class="btn" role="tab" data-tab="edit"></button>
+          </div>
+        </details>
         <button type="button" class="btn" role="tab" data-tab="export"></button>
-        <button type="button" class="btn" data-f="save"></button>
         <button type="button" class="btn" data-f="undo"></button>
         <button type="button" class="btn" data-f="collapse" aria-expanded="true"></button>
         <button type="button" class="btn" data-f="close"></button>
@@ -344,7 +359,7 @@ export class AdminPanel {
     this.#f('raw-json-summary').textContent = t('admin.export.rawJson');
     this.#f('raw-json-hint').textContent = t('admin.export.rawJsonHint');
     this.#f('raw-json').addEventListener('focus', () => this.#f('raw-json').select());
-    this.#f('save').textContent = t('admin.save');
+    this.#f('more-tools-summary').textContent = t('admin.moreTools');
     this.#f('edit-search-label').textContent = t('admin.edit.search');
     this.#f('edit-search').placeholder = t('admin.edit.placeholder');
     this.#f('edit-name-label').textContent = t('admin.name.prompt');
@@ -443,7 +458,6 @@ export class AdminPanel {
       }
     }
 
-    this.#f('save').addEventListener('click', () => this.save());
     this.#f('collapse').addEventListener('click', () => this.setCollapsed(!this.collapsed));
     this.#f('rec-scan').addEventListener('click', () => {
       this.#registering = false;
@@ -574,6 +588,7 @@ export class AdminPanel {
       tool.hidden = tool.dataset.tool !== name;
     for (const tab of this.#el.querySelectorAll('[data-tab]'))
       tab.setAttribute('aria-selected', String(tab.dataset.tab === name));
+    this.#f('more-tools').open = false; // picking one closes the menu; Routes is always one tap away regardless
     if (name === 'export') this.#updateExport();
     if (name === 'edit') this.#renderEditList();
   }
