@@ -1,17 +1,18 @@
 /**
- * Route wizard — the guided, start-to-finish way to build a venue's routes
- * from inside the building, one route at a time:
+ * Route wizard — building a venue's routes by scanning, nothing else:
  *
- *   1. Start   — stand at the start, scan the code there (or pick an
- *                existing place, or tap the plan), name it.
- *   2. Walk    — walk to the destination. Points are dropped automatically
- *                every few metres and at turns from the live position;
- *                say what the next section is (stairs, lift, door…), scan
- *                any code you pass to correct the position.
- *   3. Finish  — name the destination (or scan its code), note if the
- *                route is not wheelchair-friendly, save.
- *   4. Done    — summary; "Next route from here" chains straight into the
- *                next walk, so a whole wing is surveyed in one pass.
+ *   1. Scan the code where a route starts.
+ *   2. Walk to the next place. Points are dropped automatically from the
+ *      live position (step-counted dead reckoning between codes).
+ *   3. Scan the code there — that ends this route and starts the next one,
+ *      so a whole wing is surveyed by walking it once, scanning at each stop.
+ *
+ * A name for each stop is filled in automatically (from a printed-code list
+ * the venue knows about — see AdminPanel's `resolveCodeName` — or the code
+ * itself if not), so nothing needs to be typed to capture a route. Naming
+ * it properly, picking an existing place, tagging stairs/lift/staff-only,
+ * or marking a route not wheelchair-friendly are all still there, tucked
+ * under "Advanced", for whoever wants them.
  *
  * It writes only through the {@link VenueDraft} the admin panel owns, so
  * Undo, autosave and Publish all apply. Everything it needs from the panel
@@ -39,10 +40,10 @@ import { t } from './strings/index.js';
  * @property {(name: string) => void} [showTab]
  * @property {(n: unknown) => { name: string, aliases: string[] } | null} wardFields
  * @property {ReadonlyArray<object>} [places]
+ * @property {(code: string) => string | null} [resolveCodeName]  A printed-code list's name for this code, if any.
  */
 
 const SECTION_TYPES = ['walk', 'door', 'stairs', 'lift', 'ramp', 'escalator'];
-const STEPS = ['start', 'walk', 'finish', 'done'];
 
 export class RouteWizard {
   #host;
@@ -57,6 +58,8 @@ export class RouteWizard {
   #lastHeading = null;
   #route = null;
   #uncertain = false;
+  /** The code that started the current leg — re-scanning it mid-walk is a position fix, not an arrival. */
+  #startCode = null;
 
   /**
    * @param {WizardHost} host
@@ -90,31 +93,38 @@ export class RouteWizard {
     const el = this.#doc.createElement('div');
     el.className = 'wizard';
     el.innerHTML = `
-      <ol class="wizard-steps" data-f="steps">
-        ${STEPS.map((s, i) => `<li data-step-chip="${s}"><span>${i + 1}</span> <b data-f="chip-${s}"></b></li>`).join('')}
-      </ol>
       <section data-step="start">
-        <p data-f="start-hint"></p>
-        <label><span data-f="start-existing-label"></span><select data-f="start-existing"><option value=""></option></select></label>
-        <label><span data-f="start-name-label"></span><input data-f="start-name" list="admin-places" autocomplete="off" /></label>
-        <label><span data-f="start-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="start-ward" /></label>
+        <p class="wizard-live" data-f="start-status" role="status" aria-live="polite"></p>
         <div class="admin-actions">
-          <button type="button" class="btn btn-primary" data-f="start-scan"></button>
-          <button type="button" class="btn" data-f="start-next"></button>
+          <button type="button" class="btn btn-primary btn-big" data-f="start-scan"></button>
         </div>
-        <p class="admin-status" data-f="start-status"></p>
+        <details class="admin-plan">
+          <summary data-f="advanced-label"></summary>
+          <p data-f="start-hint"></p>
+          <label><span data-f="start-existing-label"></span><select data-f="start-existing"><option value=""></option></select></label>
+          <label><span data-f="start-name-label"></span><input data-f="start-name" list="admin-places" autocomplete="off" /></label>
+          <label><span data-f="start-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="start-ward" /></label>
+          <div class="admin-actions">
+            <button type="button" class="btn" data-f="start-next"></button>
+          </div>
+        </details>
       </section>
       <section data-step="walk" hidden>
         <p class="wizard-live" data-f="walk-status" role="status" aria-live="polite"></p>
         <p class="admin-status" data-f="walk-hint"></p>
-        <label><span data-f="section-label"></span><select data-f="section"></select></label>
-        <label class="wizard-check"><input type="checkbox" data-f="staff" /> <span data-f="staff-label"></span></label>
         <div class="admin-actions">
-          <button type="button" class="btn" data-f="walk-turn"></button>
-          <button type="button" class="btn" data-f="walk-scan"></button>
-          <button type="button" class="btn btn-primary" data-f="walk-arrive"></button>
+          <button type="button" class="btn btn-primary btn-big" data-f="walk-scan"></button>
           <button type="button" class="btn" data-f="walk-cancel"></button>
         </div>
+        <details class="admin-plan">
+          <summary data-f="advanced-label"></summary>
+          <label><span data-f="section-label"></span><select data-f="section"></select></label>
+          <label class="wizard-check"><input type="checkbox" data-f="staff" /> <span data-f="staff-label"></span></label>
+          <div class="admin-actions">
+            <button type="button" class="btn" data-f="walk-turn"></button>
+            <button type="button" class="btn" data-f="walk-arrive"></button>
+          </div>
+        </details>
       </section>
       <section data-step="finish" hidden>
         <p data-f="finish-hint"></p>
@@ -139,13 +149,15 @@ export class RouteWizard {
     `;
     this.#el = el;
     this.#f = (n) => el.querySelector(`[data-f="${n}"]`);
-    for (const s of STEPS) this.#f(`chip-${s}`).textContent = t(`admin.wizard.step.${s}`);
+    for (const label of el.querySelectorAll('[data-f="advanced-label"]')) {
+      label.textContent = t('admin.wizard.advanced');
+    }
     const text = {
       'start-hint': 'admin.wizard.start.hint',
       'start-existing-label': 'admin.wizard.existing',
       'start-name-label': 'admin.wizard.start.name',
       'start-ward-label': 'admin.ward.number',
-      'start-scan': 'admin.wizard.scanHere',
+      'start-scan': 'admin.wizard.start.scan',
       'start-next': 'admin.wizard.start.next',
       'section-label': 'admin.wizard.walk.section',
       'staff-label': 'admin.wizard.walk.staffOnly',
@@ -202,12 +214,6 @@ export class RouteWizard {
   #show(step) {
     this.#step = step;
     for (const s of this.#el.querySelectorAll('[data-step]')) s.hidden = s.dataset.step !== step;
-    for (const chip of this.#el.querySelectorAll('[data-step-chip]')) {
-      const i = STEPS.indexOf(chip.dataset.stepChip);
-      const cur = STEPS.indexOf(step);
-      chip.setAttribute('aria-current', String(i === cur));
-      chip.classList.toggle('done', i < cur);
-    }
     if (step === 'start' || step === 'finish') this.#fillExisting(step);
     if (step === 'start') this.#updateStart();
     if (step === 'walk') this.#updateWalk();
@@ -294,6 +300,7 @@ export class RouteWizard {
       if (this.#step === 'walk') this.onPose(this.#host.getPose());
       else this.#updateStart();
       this.#updateWalk();
+      this.#autoAdvance(text);
       return null;
     }
     let pose = this.#host.getPose();
@@ -323,7 +330,47 @@ export class RouteWizard {
     this.#host.changed();
     if (this.#step === 'walk') this.onPose(this.#host.getPose());
     else this.#updateStart();
+    this.#autoAdvance(text);
     return anchor;
+  }
+
+  /**
+   * A scan drives the wizard on its own: the first code of a fresh leg
+   * starts it (named automatically — from a printed-code list if the venue
+   * has one, else the code itself, so nothing has to be typed to capture a
+   * route), and any code seen while walking ends the leg and immediately
+   * starts the next one. The one exception is re-scanning the leg's own
+   * start code (a mis-scan, or confirming position) — that only fixes the
+   * position, so a route can't be accidentally saved with itself as both
+   * ends.
+   */
+  #autoAdvance(text) {
+    if (this.#step === 'start') {
+      this.#f('start-name').value = this.#resolveScanName(text);
+      this.beginWalk();
+      this.#startCode = text;
+    } else if (this.#step === 'walk' && text !== this.#startCode) {
+      this.#f('finish-name').value = this.#resolveScanName(text);
+      this.arrive();
+      this.save();
+      this.nextFromHere();
+      this.#startCode = text;
+    }
+  }
+
+  /** The best name for a scanned code: a printed-code list, an existing record of it, or the code itself. */
+  #resolveScanName(text) {
+    const planName = this.#host.resolveCodeName?.(text);
+    if (planName) return planName;
+    const draft = this.#host.draft;
+    const anchor = draft.anchors.find((a) => a.code === text);
+    if (anchor?.name) return anchor.name;
+    if (anchor) {
+      const node = draft.snapToNode(anchor, 0.5);
+      const poi = node && draft.pois.find((p) => p.node === node.id);
+      if (poi) return poi.name;
+    }
+    return text;
   }
 
   // ------------------------------------------------------------------ steps
@@ -363,6 +410,7 @@ export class RouteWizard {
     this.#lastHeading = this.#host.getPose()?.heading ?? null;
     this.#route = { edges: [], nodes: 0, distance: 0, scans: 0 };
     this.#uncertain = false;
+    this.#startCode = null; // set by #autoAdvance right after, for a scan-started leg
     this.#show('walk');
   }
 
@@ -499,6 +547,7 @@ export class RouteWizard {
     this.#startName = '';
     this.#lastNode = null;
     this.#route = null;
+    this.#startCode = null;
     this.#clearFields();
     this.#show('start');
   }

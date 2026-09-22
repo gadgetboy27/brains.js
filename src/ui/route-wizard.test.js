@@ -18,7 +18,7 @@ const pose = (x, y, heading = 0, floor = 0, confidence = 1) => ({
 });
 
 /** A host that behaves like the admin panel: a pose the wizard can set, a draft, scans on demand. */
-function host(draft = new VenueDraft(blankVenue('test-site'))) {
+function host(draft = new VenueDraft(blankVenue('test-site')), { plan = {} } = {}) {
   const h = {
     draft,
     mount: document.body,
@@ -41,6 +41,8 @@ function host(draft = new VenueDraft(blankVenue('test-site'))) {
     },
     toast: (text) => h.toasts.push(text),
     wardFields: AdminPanel.wardFields,
+    // A printed-code list, like AdminPanel's — most codes name themselves.
+    resolveCodeName: (text) => plan[text] ?? null,
     /** The camera decoded `text`. */
     decode(text) {
       const fn = h.scanHandler;
@@ -56,8 +58,8 @@ beforeEach(() => {
 });
 
 describe('RouteWizard', () => {
-  it('walks a route start to finish: start code, auto points, turn, scan, destination, summary', () => {
-    const h = host();
+  it('a scan starts a route, a scan ends it and starts the next — no typing required', () => {
+    const h = host(undefined, { plan: { A01: 'Main entrance', A18: 'Ward 7' } });
     const w = createRouteWizard(h, { stepM: 3, turnDeg: 35 });
     const f = (n) => w.el.querySelector(`[data-f="${n}"]`);
     // As in the panel: the live position updates, then the wizard hears about it.
@@ -67,78 +69,64 @@ describe('RouteWizard', () => {
     };
     expect(w.step).toBe('start');
     expect(f('start-status').textContent).toBe(t('admin.wizard.start.noPose'));
-    expect(w.beginWalk()).toBe(false); // nowhere to start from yet
 
-    // Scan the sticker at the entrance: first code of a new venue = origin.
-    f('start-name').value = 'Main entrance';
+    // Scan the sticker at the entrance: first code of a new venue = origin,
+    // named from the printed-code list, walking begins automatically.
     w.scanHere();
     const entrance = h.decode('A01');
-    expect(entrance).toMatchObject({ x: 0, y: 0, code: 'A01', name: 'Main entrance' });
+    expect(entrance).toMatchObject({ x: 0, y: 0, code: 'A01' });
     expect(h.pose.confidence).toBe(1);
-    expect(f('start-status').textContent).toBe(t('admin.wizard.start.ready'));
-
-    expect(w.beginWalk()).toBe(true);
     expect(w.step).toBe('walk');
     const start = h.draft.pois.find((p) => p.name === 'Main entrance');
-    expect(start).toMatchObject({ category: 'exit' });
+    expect(start).toMatchObject({ category: 'exit' }); // from the places library
     expect(start.aliases).toContain('Way out');
+
+    // The camera catching the same sticker twice (or a fumbled re-tap) is a
+    // fix, not an arrival — the route doesn't end on its own start code.
+    w.scanHere();
+    expect(h.decode('A01')).toBeNull(); // known: not re-recorded
+    expect(w.step).toBe('walk');
+    expect(w.route).toMatchObject({ nodes: 0, scans: 1 });
 
     // Walk north: dead-reckoned poses every metre; a point lands every 3 m.
     for (let y = 1; y <= 7; y += 1) walk(pose(0, y, 0, 0, 0.8));
     expect(w.route).toMatchObject({ nodes: 2, distance: 6 }); // at y=3 and y=6
-    // Turn east: a 90° heading change after 1 m drops a point at the corner.
-    walk(pose(1, 7, 90, 0, 0.8));
-    expect(w.route.nodes).toBe(3);
     // Stale dead reckoning: nothing is dropped, the hint asks for a scan.
-    walk(pose(6, 7, 90, 0, 0.1));
-    expect(w.route.nodes).toBe(3);
+    walk(pose(0, 7, 0, 0, 0.1));
     expect(f('walk-hint').textContent).toBe(t('admin.wizard.walk.uncertain'));
-    // A code on the wall corrects the position: exact fix → point, counted as a scan.
-    h.draft.addAnchor({ x: 6, y: 7, z: 0, floor: 0, heading: 90, name: 'Corridor' }).code = 'A06';
-    w.scanHere();
-    expect(h.decode('A06')).toBeNull(); // known: not re-recorded
-    expect(w.route).toMatchObject({ nodes: 4, scans: 1 });
+
+    // Walk on, up to level 1 (the floor change is tagged stairs automatically).
+    walk(pose(0, 7, 90, 0, 1));
     expect(f('walk-hint').textContent).toBe(t('admin.wizard.walk.hint'));
-    // Next section is stairs to level 1: the floor change drops a point with a stairs edge.
-    f('section').value = 'stairs';
-    walk(pose(8, 7, 90, 1, 1));
+    walk(pose(6, 7, 90, 0, 1));
+    walk(pose(6, 7, 90, 1, 1));
     const stairs = h.draft.edges.at(-1);
     expect(stairs).toMatchObject({ type: 'stairs', floorChange: true });
-    f('section').value = 'walk';
-    walk(pose(12, 7, 90, 1, 1));
 
-    // Arrive: name the ward, scan its sticker, mark the route not wheelchair-friendly.
-    w.arrive();
-    expect(w.step).toBe('finish');
-    f('finish-ward').value = '7';
-    f('finish-ward').dispatchEvent(new Event('input'));
-    expect(f('finish-name').value).toBe('Ward 7');
+    // Scan the destination sticker: ends this route and starts the next,
+    // named from the list — no fields to fill in, no button but Scan.
     w.scanHere();
-    expect(h.decode('A18')).toMatchObject({ code: 'A18', name: 'Ward 7', floor: 1 });
-    f('no-wheelchair').checked = true;
-    const saved = w.save();
-    expect(saved.edges).toBeGreaterThanOrEqual(6);
-    expect(w.step).toBe('done');
+    expect(h.decode('A18')).toMatchObject({ code: 'A18', floor: 1 });
     const ward = h.draft.pois.find((p) => p.name === 'Ward 7');
-    expect(ward).toMatchObject({ category: 'ward' });
-    expect(ward.aliases).toContain('W7');
+    expect(ward).toBeTruthy();
     expect(h.draft.nodeById(ward.node).floor).toBe(1);
-    // Level edges lost wheelchair access; the stairs edge was never step-free anyway.
-    const level = h.draft.edges.filter((e) => e.type !== 'stairs');
-    expect(level.every((e) => e.wheelchair === false)).toBe(true);
     expect(f('summary').textContent).toMatch(
       /^Main entrance → Ward 7: \d+ m, \d+ points, 2 codes$/
     );
     expect(h.draft.validate()).toEqual([]);
     expect(h.toasts).toContain(t('admin.wizard.done.saved'));
-
-    // Chain: next route starts at Ward 7 without re-scanning.
-    w.nextFromHere();
-    expect(w.step).toBe('walk');
+    expect(w.step).toBe('walk'); // chained straight into the next leg
     expect(w.route).toMatchObject({ nodes: 0, distance: 0 });
-    walk(pose(16, 7, 90, 1, 1));
-    expect(w.route.nodes).toBe(1);
-    expect(h.draft.edgeBetween(ward.node, h.draft.nodes.at(-1).id)).toBeTruthy();
+
+    // Walk on and scan a code with no entry in the printed-code list: it is
+    // still recorded — by its own text — so nothing is lost for want of a name.
+    walk(pose(10, 7, 90, 1, 0.9));
+    w.scanHere();
+    expect(h.decode('C99')).toMatchObject({ code: 'C99' });
+    const c99 = h.draft.pois.find((p) => p.name === 'C99');
+    expect(c99).toBeTruthy();
+    expect(h.draft.edgeBetween(ward.node, c99.node)).toBeTruthy();
+    expect(h.draft.validate()).toEqual([]);
   });
 
   it('starts from and ends at existing places, joining the graph instead of duplicating it', () => {

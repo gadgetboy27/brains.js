@@ -66,16 +66,11 @@ const CSS = `
 .admin-toast:empty { display: none; }
 .admin-walk { margin: 6px 0; padding-left: 18px; }
 .admin-plan { margin: 6px 0; }
-.wizard-steps { display: flex; gap: 4px; list-style: none; margin: 4px 0 8px; padding: 0; font-size: 0.9em; }
-.wizard-steps li { flex: 1; display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--color-text-muted); color: var(--color-text-muted); }
-.wizard-steps li span { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--color-text-muted); color: var(--color-surface-solid); font-weight: 700; font-size: 0.85em; }
-.wizard-steps li[aria-current='true'] { border-color: var(--color-accent); color: var(--color-text); }
-.wizard-steps li[aria-current='true'] span, .wizard-steps li.done span { background: var(--color-accent); color: var(--color-accent-contrast); }
-.wizard-live { font-weight: 600; margin: 4px 0; }
+.wizard-live { font-weight: 600; margin: 4px 0; font-size: 1.05em; }
 .wizard-summary { font-weight: 600; }
 .wizard-check { display: flex !important; align-items: center; gap: 8px; }
 .wizard-check input { width: 22px; height: 22px; min-height: 0; }
-@media (max-width: 600px) { .wizard-steps li b { display: none; } .wizard-steps li[aria-current='true'] b { display: inline; } }
+.btn-big { min-height: 56px; font-size: 1.1em; flex: 1 1 100%; }
 .admin-plan summary { cursor: pointer; font-weight: 600; }
 .admin-plan textarea { width: 100%; min-height: 6em; font: inherit; font-size: 13px; box-sizing: border-box; }
 .admin-markers { list-style: none; margin: 6px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
@@ -386,6 +381,7 @@ export class AdminPanel {
       showTab: (name) => this.showTab(name),
       wardFields: AdminPanel.wardFields,
       places: options.places ?? HOSPITAL_PLACES,
+      resolveCodeName: (text) => findPlanRow(this.#plan, text)?.name ?? null,
     });
     this.#f('survey-hint').textContent = t('admin.survey.hint');
     this.#f('survey-name-label').textContent = t('admin.survey.name');

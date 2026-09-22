@@ -278,24 +278,25 @@ export default {
     'admin.wizard.unnamed': 'unnamed',
     'admin.wizard.scanHere': 'Scan the code here',
     'admin.wizard.codeRecorded': 'Code {code} recorded at this spot',
+    'admin.wizard.advanced': 'Advanced (name it, pick a place, stairs/lift, no code here…)',
     'admin.wizard.start.hint':
-      'Go to where this route starts. Scan the printed code there (or pick the place if it already exists, or tap the plan), name it, then Start walking.',
+      'Or pick the place if it already exists, or name it yourself. Tap the plan to set a position without a code.',
     'admin.wizard.start.name': 'Start place',
     'admin.wizard.start.next': 'Start walking',
-    'admin.wizard.start.noPose':
-      'No position yet — scan the code here or tap where you are on the plan.',
-    'admin.wizard.start.ready': 'Position fixed. Name the start, then Start walking.',
+    'admin.wizard.start.noPose': 'Stand where this route starts and scan the code there.',
+    'admin.wizard.start.scan': 'Scan start code',
+    'admin.wizard.start.ready': 'Scanning will name and start the route automatically.',
     'admin.wizard.start.readyApprox':
-      'Position set from the plan (approximate). Scan a code for an exact start.',
+      'Position set from the plan (approximate) — scan a code for an exact start, or open Advanced to start walking anyway.',
     'admin.wizard.walk.status': '{distance} m · {points} points · {scans} codes',
     'admin.wizard.walk.hint':
-      'Walk at a normal pace. Points are added every few metres and at turns. Scan any code you pass to correct the position.',
+      'Walk to the next place, then scan the code there — that finishes this route and starts the next one.',
     'admin.wizard.walk.uncertain':
-      'Position uncertain — scan the nearest code before going on. No points are added until then.',
+      'Position uncertain — scan the nearest code to fix it. No points are added until then.',
     'admin.wizard.walk.section': 'Next section is',
     'admin.wizard.walk.staffOnly': 'Staff-only section',
     'admin.wizard.walk.turn': 'Mark a turn here',
-    'admin.wizard.walk.scan': 'Scan a code',
+    'admin.wizard.walk.scan': 'Scan code to finish here',
     'admin.wizard.walk.arrive': 'I have arrived',
     'admin.wizard.walk.cancel': 'Stop this route',
     'admin.wizard.walk.cancelled':

@@ -1125,7 +1125,7 @@ describe('bootApp — every scan gets a visible reaction', () => {
 });
 
 describe('bootApp — route wizard', () => {
-  it('admin opens on Routes; a walk drops points from live poses and a scan mid-route corrects it', async () => {
+  it('admin opens on Routes; scan start, walk, scan destination — saved and chained, nothing typed', async () => {
     const { app } = await boot({
       config: { admin: true, venueUrl: '/venues/wing-b/venue.json', venueId: 'wing-b' },
       options: {
@@ -1144,37 +1144,32 @@ describe('bootApp — route wizard', () => {
     expect(wizard.step).toBe('start');
     const f = (n) => wizard.el.querySelector(`[data-f="${n}"]`);
 
-    // The mock has put us at the origin: name the start and go.
-    expect(f('start-status').textContent).toBe(
-      'Position fixed. Name the start, then Start walking.'
-    );
-    f('start-name').value = 'Main entrance';
-    f('start-next').click();
+    // Scan the code where the route starts: the camera shows, the scan
+    // starts the route on its own, and the app returns to the plan.
+    f('start-scan').click();
+    expect(app.view).toBe('ar');
+    expect(admin.expectingCode).toBe(true);
+    expect(admin.registerCode('A03')).toMatchObject({ code: 'A03', x: 0, y: 0 });
     expect(wizard.step).toBe('walk');
+    expect(app.view).toBe('floorplan');
 
     // Walk 8 m east in 1 m fixes: the app feeds each pose to the panel and on to the wizard.
     for (let x = 1; x <= 8; x += 1) app.chain.active.teleport({ x, y: 0, floor: 0 });
     expect(wizard.route).toMatchObject({ nodes: 4 }); // exact fixes, but points within 1.5 m snap together
     expect(f('walk-status').textContent).toMatch(/^\d+ m · \d+ points · 0 codes$/);
 
-    // A sticker on the wall that nobody has recorded yet: scan it mid-route.
+    // Scan the code at the next place: ends this route and starts the next
+    // one immediately — no separate "arrived" step, no name to type.
     f('walk-scan').click();
     expect(app.view).toBe('ar');
-    expect(admin.expectingCode).toBe(true);
-    const anchor = admin.registerCode('A06');
-    expect(anchor).toMatchObject({ code: 'A06', x: 8, y: 0 });
-    expect(wizard.route.scans).toBe(1);
-    expect(admin.draft.anchors.at(-1).code).toBe('A06');
-
-    f('walk-arrive').click();
-    f('finish-name').value = 'Pharmacy';
-    f('finish-save').click();
-    expect(wizard.step).toBe('done');
-    expect(f('summary').textContent).toMatch(
-      /^Main entrance → Pharmacy: \d+ m, \d+ points, 1 codes$/
-    );
-    expect(admin.draft.pois.map((p) => p.name)).toEqual(['Main entrance', 'Pharmacy']);
+    expect(admin.registerCode('A06')).toMatchObject({ code: 'A06', x: 8, y: 0 });
+    expect(app.view).toBe('floorplan');
+    expect(wizard.step).toBe('walk'); // chained straight into the next leg, from A06
+    expect(admin.draft.pois.map((p) => p.name)).toEqual(['A03', 'A06']); // no list, no typing: named by code
     expect(admin.draft.validate()).toEqual([]);
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+      t('admin.wizard.done.saved')
+    );
     await app.destroy();
   });
 });

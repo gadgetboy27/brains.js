@@ -291,25 +291,27 @@ export default {
     'admin.wizard.unnamed': 'ingoa-kore',
     'admin.wizard.scanHere': 'Matawaia te waehere i konei',
     'admin.wizard.codeRecorded': 'Kua hopukina te waehere {code} ki tēnei wāhi',
+    'admin.wizard.advanced':
+      'Kōwhiringa anō (whakaingoa, kōwhiri wāhi, arawhata/ararewa, kāore he waehere…)',
     'admin.wizard.start.hint':
-      'Haere ki te tīmatanga o tēnei ara. Matawaia te waehere kua tāia i reira (ka kōwhiri rānei i te wāhi mēnā kei te mōhiotia kē, ka pā rānei ki te mahere), whakaingoatia, kātahi ka Tīmata te hīkoi.',
+      'Kōwhiria rānei te wāhi mēnā kei te mōhiotia kē, whakaingoatia rānei. Pāwhiria te mahere hei tautuhi i te tūnga me te kore waehere.',
     'admin.wizard.start.name': 'Wāhi tīmata',
     'admin.wizard.start.next': 'Tīmata te hīkoi',
     'admin.wizard.start.noPose':
-      'Kāore anō he tūnga — matawaia te waehere i konei, pāwhiria rānei tō wāhi ki te mahere.',
-    'admin.wizard.start.ready':
-      'Kua mau te tūnga. Whakaingoatia te tīmatanga, kātahi ka Tīmata te hīkoi.',
+      'E tū ana koe ki te tīmatanga o tēnei ara, matawaia te waehere i reira.',
+    'admin.wizard.start.scan': 'Matawaia te waehere tīmata',
+    'admin.wizard.start.ready': 'Mā te matawai e whakaingoa, e tīmata hoki te ara.',
     'admin.wizard.start.readyApprox':
-      'Kua tautuhia te tūnga mai i te mahere (tata). Matawaia he waehere kia tika ai te tīmatanga.',
+      'Kua tautuhia te tūnga mai i te mahere (tata) — matawaia he waehere kia tika ai te tīmatanga, whakatuwheratia rānei Kōwhiringa anō hei tīmata noa te hīkoi.',
     'admin.wizard.walk.status': '{distance} m · {points} tohu · {scans} waehere',
     'admin.wizard.walk.hint':
-      'Hīkoi māori noa. Ka tāpirihia ngā tohu ia mita ruarua, i ngā hurihanga hoki. Matawaia tētahi waehere ka pahemo koe hei whakatika i te tūnga.',
+      'Hīkoi ki te wāhi e whai ake nei, kātahi ka matawai i te waehere i reira — ka mutu tēnei ara, ka tīmata te ara e whai ake nei.',
     'admin.wizard.walk.uncertain':
-      'Kāore i te tino mōhiotia te tūnga — matawaia te waehere tata rawa i mua i te haere tonu. Kāore he tohu e tāpirihia tae noa ki reira.',
+      'Kāore i te tino mōhiotia te tūnga — matawaia te waehere tata rawa hei whakatika. Kāore he tohu e tāpirihia tae noa ki reira.',
     'admin.wizard.walk.section': 'Ko te wāhanga e whai ake nei he',
     'admin.wizard.walk.staffOnly': 'Wāhanga mā ngā kaimahi anake',
     'admin.wizard.walk.turn': 'Tohua he hurihanga i konei',
-    'admin.wizard.walk.scan': 'Matawaia he waehere',
+    'admin.wizard.walk.scan': 'Matawaia te waehere hei whakamutu i konei',
     'admin.wizard.walk.arrive': 'Kua tae au',
     'admin.wizard.walk.cancel': 'Whakamutua tēnei ara',
     'admin.wizard.walk.cancelled':
