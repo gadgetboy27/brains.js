@@ -5,6 +5,31 @@
 copy of the current venue and exports valid venue JSON; nothing changes for
 visitors until that JSON is published.
 
+## Is it actually recording anything?
+
+Every scan, tap and auto-dropped point writes straight into the browser's
+own storage on that device — instantly, with no network request, before
+Export ever comes into it. The status line under the tab row says so in
+real figures, always, on every tab:
+
+> _Saved on this phone for "demo-hospital" — 14 nodes · 9 edges · 5 places
+> · 6 markers · not yet published_
+
+If that line shows zero counts (or a different venue id than expected),
+nothing has been recorded to look at yet — try a scan and watch the
+numbers move. If it shows real counts, the data exists on that device,
+whatever Export does or doesn't manage afterwards (see "Export" below for
+getting it out).
+
+**The one sharp edge**: that storage is scoped to the exact page origin
+(scheme + host + port) _and_ the venue id together — reopening under a
+different URL (the LAN dev server vs the deployed site, `http` vs
+`https`, a different `?v=`) or a different venue starts from nothing, even
+though the original recording is still sitting untouched under its own
+origin and id. This is the usual reason a device looks like it "recorded
+nothing" when it didn't — always reopen the _exact_ URL a route was
+recorded from to see it again.
+
 ## Calibrate stride (better accuracy between codes)
 
 Between scans, the app estimates how far you've walked by counting footsteps

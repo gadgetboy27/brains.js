@@ -528,17 +528,25 @@ describe('AdminPanel — edit existing and saved state', () => {
     const sessionStorage = { getItem: () => 'k', setItem: () => {}, removeItem: () => {} };
     const { admin, provider } = make({ fetch, sessionStorage });
     const saved = () => admin.el.querySelector('[data-f="saved"]').textContent;
+    const counts = (extra = {}) => ({
+      id: 'demo-health-centre',
+      nodes: 16,
+      edges: 17,
+      pois: 8,
+      anchors: 3,
+      ...extra,
+    });
     expect(admin.savedState).toBe('published');
-    expect(saved()).toBe(t('admin.saved.published'));
+    expect(saved()).toBe(t('admin.saved.published', counts()));
     provider.emit(pose(40, 6));
-    admin.addNodeHere('Pharmacy');
+    admin.addNodeHere('Pharmacy'); // clear of every node's snap radius: a new node, no new edge
     expect(admin.savedState).toBe('local');
-    expect(saved()).toBe(t('admin.saved.local'));
+    expect(saved()).toBe(t('admin.saved.local', counts({ nodes: 17 })));
     admin.el.querySelector('[data-f="save"]').click();
     expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(t('admin.saved.now'));
     await admin.publish();
     expect(admin.savedState).toBe('published');
-    expect(saved()).toBe(t('admin.saved.published'));
+    expect(saved()).toBe(t('admin.saved.published', counts({ nodes: 17 })));
   });
 
   it('finds places and markers by name, alias or id', () => {

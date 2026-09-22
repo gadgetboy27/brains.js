@@ -568,9 +568,20 @@ export class AdminPanel {
     return this.#published ? 'published' : 'local';
   }
 
+  /**
+   * The one line visible on every tab that answers "is this actually
+   * recording anything?" without digging into Export: real counts, for
+   * this venue by id, right now — not just a status word. Storage here is
+   * this browser's localStorage, scoped to this exact origin (scheme +
+   * host + port) and this venue id; opening a different URL or a
+   * different venue does not carry it over, which is the usual reason
+   * "nothing" seems to be there when something was in fact saved.
+   */
   #updateSaved() {
+    const { nodes, edges, pois, anchors } = this.#draft.summary;
     this.#f('saved').textContent = t(
-      this.#published ? 'admin.saved.published' : 'admin.saved.local'
+      this.#published ? 'admin.saved.published' : 'admin.saved.local',
+      { id: this.#draft.id, nodes, edges, pois, anchors }
     );
   }
 

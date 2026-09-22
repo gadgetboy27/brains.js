@@ -239,8 +239,10 @@ export default {
     'admin.edit.access.public': 'Te katoa',
     'admin.edit.access.staff': 'Kaimahi anake',
     'admin.save': 'Tiaki',
-    'admin.saved.local': 'Kua tiakina ki tēnei waea · kāore anō kia whakaputaina',
-    'admin.saved.published': 'Kua whakaputaina — kei te katoa tēnei putanga',
+    'admin.saved.local':
+      'Kua tiakina ki tēnei waea mō “{id}” — {nodes} tohu · {edges} hononga · {pois} wāhi · {anchors} tohu waehere · kāore anō kia whakaputaina',
+    'admin.saved.published':
+      'Kua whakaputaina mō “{id}” — {nodes} tohu · {edges} hononga · {pois} wāhi · {anchors} tohu waehere · kei te katoa tēnei putanga',
     'admin.saved.now': 'Kua tiakina',
     'admin.ward.number': 'Tau wāri (1–99)',
     'admin.ward.name': 'Wāri {n}',

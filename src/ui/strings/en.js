@@ -231,8 +231,10 @@ export default {
     'admin.edit.access.public': 'Everyone',
     'admin.edit.access.staff': 'Staff only',
     'admin.save': 'Save',
-    'admin.saved.local': 'Saved on this phone · not yet published',
-    'admin.saved.published': 'Published — everyone has this version',
+    'admin.saved.local':
+      'Saved on this phone for “{id}” — {nodes} nodes · {edges} links · {pois} places · {anchors} markers · not yet published',
+    'admin.saved.published':
+      'Published for “{id}” — {nodes} nodes · {edges} links · {pois} places · {anchors} markers · everyone has this version',
     'admin.saved.now': 'Saved',
     'admin.ward.number': 'Ward number (1–99)',
     'admin.ward.name': 'Ward {n}',
