@@ -118,6 +118,8 @@ export default {
       'E whakaatu ana i tētahi kape kua tiakina o te mahere; tērā pea kua tawhito.',
     'notice.cameraDenied':
       'Kāore i whakaaetia te kāmera — e whakamahi ana i te mahere papa. Tērā pea he iti te tautuhi wāhi.',
+    'notice.motionDenied':
+      'Kāore i whakaaetia te nekehanga — tērā pea kāore tō wāhi e whakahōu i waenga i ngā matawai.',
     'notice.noPosition': 'Kāore tō wāhi e wātea ana. Ka tīmata ngā ara i te tomokanga matua.',
     'error.venueLoadNoCache':
       'Kāore i taea te uta i te mahere, kāore hoki he kape kua tiakina. Hono ki te ipurangi, ka ngana anō.',

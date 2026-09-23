@@ -802,6 +802,43 @@ describe('bootApp — QR entry and first run', () => {
     await app.destroy();
   });
 
+  it('camera granted but motion declined: QR still starts, but a notice says position may not track', async () => {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const storage = {
+      data: {},
+      getItem: (k) => storage.data[k] ?? null,
+      setItem: (k, v) => (storage.data[k] = v),
+    };
+    const bootPromise = boot({
+      config: { provider: null },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+      options: {
+        firstRun: undefined,
+        storage,
+        permissions: { query: async () => ({ state: 'prompt' }) },
+        firstRunOptions: {
+          requestMotion: async () => 'denied',
+          warmCamera: async () => true,
+        },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    document.querySelector('.firstrun [data-f="allow"]').click();
+    const { app } = await bootPromise;
+    expect(app.permissions).toEqual({ camera: true, motion: false });
+    expect(app.chain.state.active).toBe('qr'); // camera positioning still works…
+    expect(app.hud.text.notices).toContain(t('notice.motionDenied')); // …but this is why steps won't count
+    await app.destroy();
+  });
+
   it('"floor plan only" skips camera providers and keeps the floor plan usable', async () => {
     const stream = { getTracks: () => [{ stop: vi.fn() }] };
     const bootPromise = boot({

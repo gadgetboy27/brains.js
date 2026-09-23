@@ -38,6 +38,21 @@ origin and id. This is the usual reason a device looks like it "recorded
 nothing" when it didn't — always reopen the _exact_ URL a route was
 recorded from to see it again.
 
+**The other sharp edge, specific to a camera-only (QR) venue**: two counts
+can both look right — a scan makes a new node, and the next scan makes
+another — while every single one lands at the exact same coordinates. That
+means the _walk in between never got recorded_, and the cause is almost
+always **motion permission**. Camera and motion are two separate iOS
+prompts; the app used to remember "camera granted" as "never ask again"
+even when motion was silently never resolved, which left dead reckoning
+permanently off on a device that had granted camera once, long ago. It now
+tracks the two separately and re-asks until motion gets a decisive answer
+either way — if it's declined, a notice says so outright: _"Motion access
+was declined — your position may not update between scans."_ Camera
+scanning still works fine in that state (the notice can be easy to miss if
+you're not looking for it); it's just the movement between scans that goes
+untracked.
+
 ### Where this actually lives, and what "backup" means here
 
 There is no database on the phone, and nothing here is a file until you

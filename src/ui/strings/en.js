@@ -116,6 +116,8 @@ export default {
     'notice.venueCached': 'Showing a saved copy of the venue map; it may be out of date.',
     'notice.cameraDenied':
       'Camera access was declined — using the floor plan. Positioning may be limited.',
+    'notice.motionDenied':
+      'Motion access was declined — your position may not update between scans.',
     'notice.noPosition': 'Your position is not available. Routes start from the main entrance.',
     'error.venueLoadNoCache':
       'The venue map could not be loaded and no saved copy exists. Connect to the internet and try again.',

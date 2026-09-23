@@ -70,6 +70,7 @@ describe('FirstRun', () => {
     await flush();
     expect(onContinue).toHaveBeenCalledWith({ camera: true, motion: true });
     expect(storage.data['brains:permissions']).toBe('granted');
+    expect(storage.data['brains:motion-permission']).toBe('granted');
     expect(screen.el.hidden).toBe(true);
   });
 
@@ -95,6 +96,11 @@ describe('FirstRun', () => {
       t('firstRun.motionDenied')
     );
     expect(storage.data['brains:permissions']).toBeUndefined();
+    // Recorded as a decisive "denied", not left blank — this is what stops
+    // the screen being skipped forever without motion ever having been
+    // resolved (the previous bug: camera-granted alone meant "never ask
+    // again", even when motion silently never got a real answer).
+    expect(storage.data['brains:motion-permission']).toBe('denied');
   });
 
   it('"floor plan only" continues without asking the OS', () => {
@@ -139,5 +145,41 @@ describe('needsFirstRun', () => {
       })
     ).toBe(true);
     expect(await needsFirstRun({ storage: null, permissions: undefined })).toBe(true);
+  });
+
+  it('asks again if motion was never decisively resolved, even with camera remembered', async () => {
+    const store = (data) => ({ getItem: (k) => data[k] ?? null });
+    // The exact bug this guards against: camera granted long ago, motion
+    // never recorded (an earlier build only ever persisted the camera
+    // flag) — dead reckoning then never has a chance to work, silently,
+    // forever, because this screen is never shown again to ask for it.
+    expect(await needsFirstRun({ storage: store({ 'brains:permissions': 'granted' }) })).toBe(true);
+
+    // Once motion has a decisive answer — granted or declined — the
+    // existing camera-based skip applies again, either way.
+    expect(
+      await needsFirstRun({
+        storage: store({
+          'brains:permissions': 'granted',
+          'brains:motion-permission': 'granted',
+        }),
+      })
+    ).toBe(false);
+    expect(
+      await needsFirstRun({
+        storage: store({
+          'brains:permissions': 'granted',
+          'brains:motion-permission': 'denied',
+        }),
+      })
+    ).toBe(false);
+
+    // Motion resolved, but camera never was (and isn't via the OS either): still asks.
+    expect(
+      await needsFirstRun({
+        storage: store({ 'brains:motion-permission': 'denied' }),
+        permissions: { query: async () => ({ state: 'prompt' }) },
+      })
+    ).toBe(true);
   });
 });

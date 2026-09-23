@@ -710,6 +710,13 @@ export async function bootApp(options = {}) {
     });
     firstRun.destroy();
     if (!permissions.camera) cameraUnavailable('notice.cameraDenied');
+    // Camera-only positioning (QR) leans on device motion to keep the
+    // position moving between scans — without it every scan looks exact,
+    // but the walk in between never gets recorded, which reads as "nothing
+    // is being tracked" rather than the permission problem it actually is.
+    if (!permissions.motion && chain.order.includes('qr')) {
+      hud.showNotice('motion', t('notice.motionDenied'));
+    }
   }
 
   if (config.admin)

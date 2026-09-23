@@ -29,6 +29,15 @@ const CSS = `
 `;
 
 const STORAGE_KEY = 'brains:permissions';
+// Tracked separately from STORAGE_KEY: camera and motion are two independent
+// iOS prompts. Recording camera-granted alone as "done, never ask again" —
+// the previous behaviour — meant a device that granted camera once but
+// never got a decisive answer on motion (denied silently, threw, or simply
+// wasn't asked because the screen was already being skipped for camera)
+// skipped this screen forever after, and dead reckoning never worked:
+// every scan looked exact, but position between scans never moved, which
+// is indistinguishable from "nothing is being recorded". See docs/handled-states.md.
+const MOTION_KEY = 'brains:motion-permission';
 
 export class FirstRun {
   #doc;
@@ -146,12 +155,13 @@ export class FirstRun {
       camera = false;
     }
     this.#f('status').textContent = motion ? '' : t('firstRun.motionDenied');
-    if (camera) {
-      try {
-        this.#opts.storage?.setItem(STORAGE_KEY, 'granted');
-      } catch {
-        // storage may be unavailable
-      }
+    try {
+      // Motion resolved either way — granted or declined — is still a
+      // decisive answer; recorded regardless of what camera did.
+      this.#opts.storage?.setItem(MOTION_KEY, motion ? 'granted' : 'denied');
+      if (camera) this.#opts.storage?.setItem(STORAGE_KEY, 'granted');
+    } catch {
+      // storage may be unavailable
     }
     this.#finish({ camera, motion });
   }
@@ -171,6 +181,15 @@ export async function needsFirstRun({
   storage = safeStorage(),
   permissions = globalThis.navigator?.permissions,
 } = {}) {
+  try {
+    // Motion has to be decisively resolved (granted or declined) before
+    // this screen is ever skipped — there is no cross-platform way to
+    // later query whether it was, so a device that reaches this without a
+    // recorded answer gets asked, even if camera is already sorted.
+    if (storage?.getItem(MOTION_KEY) === null) return true;
+  } catch {
+    // storage unavailable: fall through to the permission checks below
+  }
   try {
     if (storage?.getItem(STORAGE_KEY) === 'granted') return false;
   } catch {
