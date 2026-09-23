@@ -186,13 +186,19 @@ colour (selected node in amber, anchors as squares).
 
 ## Export
 
-The Export tab shows the draft's size and runs the venue schema validator,
-listing any problems by field. **Download** works regardless — getting a
-draft out to look at is exactly what it's for, valid or not; only
-**Publish for everyone** is blocked while there are problems, since that's
-what every visitor would get. The file is named obviously and by the
-minute (`brains-<venue-id>-<date>-<time>.venue.json`) so several exports
-in a row are easy to tell apart.
+Opening the tab leads with exactly what to do: the draft's size, whether
+it validates, then **Publish for everyone** / **Download** / **Copy** —
+nothing else above the fold. **Download** works regardless of validity —
+getting a draft out to look at is exactly what it's for, valid or not;
+only **Publish for everyone** is blocked while there are problems, since
+that's what every visitor would get. The file is named obviously and by
+the minute (`brains-<venue-id>-<date>-<time>.venue.json`) so several
+exports in a row are easy to tell apart.
+
+Everything else on the tab is one tap away, collapsed, instead of sitting
+in the way: **QR markers (N)** opens the sticker sheet — a code image per
+marker, only useful when you're actually printing — and **Discard draft**
+sits at the very bottom, away from the buttons you'd actually reach for.
 
 On a phone, **Download** uses the native share sheet (Save to Files,
 AirDrop, Messages…) where the browser supports sharing a file — iOS

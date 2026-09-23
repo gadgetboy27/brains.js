@@ -300,23 +300,27 @@ export class AdminPanel {
         <p data-f="summary"></p>
         <p data-f="valid"></p>
         <ul class="problems" data-f="problems"></ul>
-        <h3 data-f="markers-title"></h3>
-        <p data-f="markers-empty" hidden></p>
-        <ul class="admin-markers" data-f="markers"></ul>
-        <div class="admin-actions">
-          <button type="button" class="btn" data-f="print-sheet"></button>
-        </div>
         <div class="admin-actions">
           <button type="button" class="btn btn-primary" data-f="publish"></button>
           <button type="button" class="btn" data-f="download"></button>
           <button type="button" class="btn" data-f="copy"></button>
-          <button type="button" class="btn" data-f="discard"></button>
         </div>
         <details class="admin-plan" data-f="raw-json-box">
           <summary data-f="raw-json-summary"></summary>
           <p data-f="raw-json-hint"></p>
           <textarea data-f="raw-json" class="admin-raw-json" readonly rows="8" spellcheck="false"></textarea>
         </details>
+        <details class="admin-plan" data-f="markers-box">
+          <summary data-f="markers-title"></summary>
+          <p data-f="markers-empty" hidden></p>
+          <div class="admin-actions">
+            <button type="button" class="btn" data-f="print-sheet"></button>
+          </div>
+          <ul class="admin-markers" data-f="markers"></ul>
+        </details>
+        <div class="admin-actions">
+          <button type="button" class="btn" data-f="discard"></button>
+        </div>
       </div>
 
       <form class="admin-form" data-f="poi-form" hidden>

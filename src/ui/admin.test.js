@@ -286,6 +286,24 @@ describe('defaultDownload — saving a file on iOS and everywhere else', () => {
 });
 
 describe('AdminPanel — export and drafts', () => {
+  it('leads with what to do — Publish/Download/Copy first — and tucks the QR sticker sheet away', () => {
+    const { admin } = make();
+    admin.showTab('export');
+    const panel = admin.el.querySelector('[data-tool="export"]');
+    const order = [...panel.querySelectorAll('[data-f]')].map((el) => el.dataset.f);
+    // Publish, Download and Copy all come before anything about QR stickers —
+    // the wall of code images used to sit above them, which read as
+    // "a lot of stuff that isn't relevant" before you ever reached a button.
+    const at = (name) => order.indexOf(name);
+    expect(at('publish')).toBeGreaterThan(-1);
+    expect(at('publish')).toBeLessThan(at('markers-box'));
+    expect(at('download')).toBeLessThan(at('markers-box'));
+    expect(at('copy')).toBeLessThan(at('markers-box'));
+    // Collapsed by default: no QR images dumped on screen until asked for.
+    expect(admin.el.querySelector('[data-f="markers-box"]').open).toBe(false);
+    expect(admin.el.querySelector('[data-f="markers-title"]').tagName).toBe('SUMMARY');
+  });
+
   it('validates, downloads and copies the venue JSON, named obviously and confirmed with a toast', async () => {
     const { admin, download, copy } = make();
     admin.showTab('export');
