@@ -307,9 +307,9 @@ export default {
     'admin.wizard.walk.turn': 'Mark a turn here',
     'admin.wizard.walk.scan': 'Scan code to finish here',
     'admin.wizard.walk.arrive': 'I have arrived',
-    'admin.wizard.walk.cancel': 'Stop this route',
+    'admin.wizard.walk.cancel': 'Cancel this route',
     'admin.wizard.walk.cancelled':
-      'Route stopped. Points already added stay — use Undo to remove them.',
+      'Cancelled — no destination was saved. To finish a route, scan the code where you stopped (points already added stay; Undo removes them).',
     'admin.wizard.section.walk': 'Level walking',
     'admin.wizard.section.door': 'Through a door',
     'admin.wizard.section.stairs': 'Stairs',

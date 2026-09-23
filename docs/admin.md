@@ -129,6 +129,16 @@ starting/finishing somewhere with no code at all — all still there, under
 **Advanced**, for whoever wants them; nothing scanning captures is lost by
 skipping it.
 
+**Finishing a route is always a scan, never a button.** There is no "I'm
+done, save this" button on screen — reaching the next place and scanning
+the code there both means "I've arrived" _and_ saves the leg, in one tap.
+**Cancel this route**, next to the scan button, does the opposite of what
+it might sound like mid-walk: it throws away the destination for the leg
+in progress rather than saving it (points already dropped stay — Undo
+removes them). If there's genuinely no code at the destination, open
+**Advanced** and tap **I have arrived** instead, which does let you name
+it and save.
+
 Everything goes through the same draft as the other tabs: **Undo** removes
 the last point, the draft autosaves on this device, and nothing reaches
 visitors until you Publish.

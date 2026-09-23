@@ -324,9 +324,9 @@ export default {
     'admin.wizard.walk.turn': 'Tohua he hurihanga i konei',
     'admin.wizard.walk.scan': 'Matawaia te waehere hei whakamutu i konei',
     'admin.wizard.walk.arrive': 'Kua tae au',
-    'admin.wizard.walk.cancel': 'Whakamutua tēnei ara',
+    'admin.wizard.walk.cancel': 'Whakakorea tēnei ara',
     'admin.wizard.walk.cancelled':
-      'Kua whakamutua te ara. Ka noho tonu ngā tohu kua tāpirihia — whakamahia a Wetekia hei tango.',
+      'Kua whakakorea — kāore he wāhi i tiakina. Hei whakaoti i tētahi ara, matawaia te waehere i te wāhi i tū ai koe (ka noho tonu ngā tohu kua tāpirihia; mā Wetekia e tango).',
     'admin.wizard.section.walk': 'Hīkoi papatahi',
     'admin.wizard.section.door': 'Mā te kūaha',
     'admin.wizard.section.stairs': 'Arawhata',
