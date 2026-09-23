@@ -121,6 +121,10 @@ export class RouteWizard {
           <summary data-f="advanced-label"></summary>
           <label><span data-f="section-label"></span><select data-f="section"></select></label>
           <label class="wizard-check"><input type="checkbox" data-f="staff" /> <span data-f="staff-label"></span></label>
+          <label class="wizard-check">
+            <input type="checkbox" data-f="no-wheelchair" />
+            <span data-f="no-wheelchair-label"></span>
+          </label>
           <div class="admin-actions">
             <button type="button" class="btn" data-f="walk-turn"></button>
             <button type="button" class="btn" data-f="walk-arrive"></button>
@@ -132,7 +136,6 @@ export class RouteWizard {
         <label><span data-f="finish-existing-label"></span><select data-f="finish-existing"><option value=""></option></select></label>
         <label><span data-f="finish-name-label"></span><input data-f="finish-name" list="admin-places" autocomplete="off" /></label>
         <label><span data-f="finish-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="finish-ward" /></label>
-        <label class="wizard-check"><input type="checkbox" data-f="no-wheelchair" /> <span data-f="no-wheelchair-label"></span></label>
         <div class="admin-actions">
           <button type="button" class="btn" data-f="finish-scan"></button>
           <button type="button" class="btn btn-primary" data-f="finish-save"></button>
@@ -571,6 +574,9 @@ export class RouteWizard {
   }
 
   destroy() {
+    // Closing admin mid-walk must not leave the camera view's "Recording"
+    // badge stuck on with no wizard left to ever turn it off.
+    this.#host.onRecording?.(false);
     this.#el.remove();
   }
 }

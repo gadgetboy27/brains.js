@@ -24,6 +24,9 @@ const invalidCases = {
   'id with spaces': (v) => (v.id = 'has spaces'),
   'empty name': (v) => (v.name = ''),
   'frame.headingOffsetDeg not a number': (v) => (v.frame = { headingOffsetDeg: 'n' }),
+  'frame.strideM zero': (v) => (v.frame = { strideM: 0 }),
+  'frame.strideM negative': (v) => (v.frame = { strideM: -0.5 }),
+  'frame.strideM just under the 0.01 m floor': (v) => (v.frame = { strideM: 0.0099 }),
   'no floors': (v) => (v.floors = []),
   'floor index not integer': (v) => (v.floors[0].index = 0.5),
   'floor missing name': (v) => delete v.floors[0].name,
@@ -67,6 +70,8 @@ const validCases = {
   'no anchors': (v) => delete v.anchors,
   'no providers': (v) => delete v.providers,
   'no frame': (v) => delete v.frame,
+  'frame.strideM at the 0.01 m floor': (v) => (v.frame = { strideM: 0.01 }),
+  'frame.strideM a calibrated value': (v) => (v.frame = { strideM: 0.71 }),
   'empty edges and pois': (v) => {
     v.edges = [];
     v.pois = [];

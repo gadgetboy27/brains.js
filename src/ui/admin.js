@@ -542,6 +542,11 @@ export class AdminPanel {
     this.#updateExport();
     this.showTab('routes');
     this.#published = !restored;
+    // A restored draft's backup status from an earlier session isn't known
+    // here — treating it as backed up would silently disable both the
+    // warning and the beforeunload guard for changes that, as far as this
+    // session can tell, have never left this device.
+    this.#backedUp = !restored;
     this.#updateSaved();
     if (restored) this.#status(t('admin.draft.restored'));
     options.floorplan.render();
@@ -832,7 +837,12 @@ export class AdminPanel {
 
   #strideStatusText() {
     const set = this.#draft.frame?.strideM;
-    return set ? t('admin.stride.current', { m: set.toFixed(2) }) : t('admin.stride.default');
+    // Truthiness would hide a stored 0 (or any falsy-but-set value) behind
+    // "using the default", which is exactly the wrong message for a value
+    // that's actually there and actually wrong.
+    return set !== undefined
+      ? t('admin.stride.current', { m: set.toFixed(2) })
+      : t('admin.stride.default');
   }
 
   /**
@@ -857,6 +867,13 @@ export class AdminPanel {
       this.#f('stride-status').textContent = t('admin.stride.saved', { m: strideM, steps });
       this.#toast(t('admin.stride.saved', { m: strideM, steps }));
       this.#changed();
+      return;
+    }
+    if (this.#wizard?.route || this.#recording || this.#surveying || this.#registering) {
+      // Two independent step-counters listening to the same motion events
+      // at once is wasted battery for nothing — and confusing besides,
+      // since calibration wants a clean, dedicated walk of its own.
+      this.#f('stride-status').textContent = t('admin.stride.busy');
       return;
     }
     const win = this.#opts.window;
@@ -1727,9 +1744,14 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
    * Never blocked by validation problems — an export is exactly how you'd
    * get an invalid draft out to look at what's wrong with it.
    */
-  download() {
+  async download() {
     const name = this.#exportFilename();
-    this.#opts.download(name, `${this.json()}\n`);
+    // The Web Share sheet can be cancelled; wait for the real outcome
+    // before claiming a backup happened. `false` means cancelled — the
+    // person chose not to export, so nothing is confirmed and the backup
+    // warning stays exactly as it was.
+    const ok = await this.#opts.download(name, `${this.json()}\n`);
+    if (ok === false) return null;
     this.#backedUp = true;
     this.#updateSaved();
     this.#toast(t('admin.export.downloaded', { name }));
@@ -1737,7 +1759,11 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
   }
 
   #exportFilename() {
-    const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+    // Second resolution, not minute: two exports fixing something within
+    // the same minute (a very normal thing to do) previously got the exact
+    // same filename, and a second download can silently overwrite the
+    // first depending on how the OS/browser handles the save.
+    const stamp = new Date().toISOString().slice(0, 19).replace('T', '-').replaceAll(':', '');
     return `brains-${this.#draft.id}-${stamp}.venue.json`;
   }
 
@@ -1801,7 +1827,13 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
  * file the person can find. Desktop browsers, which support `<a download>`
  * properly and mostly don't support sharing files, get that instead.
  */
-export function defaultDownload(name, text) {
+/**
+ * @returns {Promise<boolean>} `false` only when the person actively
+ *   cancelled the share sheet — the one outcome that must not be read as
+ *   "the file is saved". Anything else (shared successfully, or fell back
+ *   to the `<a download>` trick) resolves `true`.
+ */
+export async function defaultDownload(name, text) {
   const blob = new Blob([text], { type: 'application/json' });
   const nav = globalThis.navigator;
   let file = null;
@@ -1815,10 +1847,18 @@ export function defaultDownload(name, text) {
     typeof nav?.share === 'function' &&
     (typeof nav.canShare !== 'function' || safeCanShare(nav, file));
   if (canShareFile) {
-    nav.share({ files: [file], title: name }).catch(() => anchorDownload(name, blob));
-    return;
+    try {
+      await nav.share({ files: [file], title: name });
+      return true;
+    } catch (err) {
+      // Cancelled: respect it — do not silently force a different download
+      // method behind the person's back. Anything else (share genuinely
+      // failed to launch) falls through to the anchor trick below, as before.
+      if (err?.name === 'AbortError') return false;
+    }
   }
   anchorDownload(name, blob);
+  return true;
 }
 
 function safeCanShare(nav, file) {

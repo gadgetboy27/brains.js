@@ -77,6 +77,20 @@ describe('validateVenue — top level', () => {
     expectSingleError(v, 'frame', /must be an object/);
   });
 
+  it('accepts frame.strideM at and above 0.01 m, rejects below — matching schema.json exactly', () => {
+    const v = clone();
+    v.frame = { strideM: 0.01 };
+    expect(validateVenue(v)).toEqual([]);
+    v.frame = { strideM: 0.71 };
+    expect(validateVenue(v)).toEqual([]);
+    v.frame = { strideM: 0.009 };
+    expectSingleError(v, 'frame.strideM', />= 0\.01/);
+    v.frame = { strideM: 0 };
+    expectSingleError(v, 'frame.strideM', />= 0\.01/);
+    v.frame = { strideM: -0.5 };
+    expectSingleError(v, 'frame.strideM', />= 0\.01/);
+  });
+
   it('requires providers to be an object when present', () => {
     const v = clone();
     v.providers = ['immersal'];

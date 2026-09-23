@@ -48,7 +48,7 @@ import { applyContrastPreference, createDestinationPicker } from './ui/destinati
 import { createAdminPanel } from './ui/admin.js';
 import { createCameraBackdrop } from './ui/camera-backdrop.js';
 import { createScanOverlay } from './ui/scan-overlay.js';
-import { createFirstRun, needsFirstRun } from './ui/first-run.js';
+import { MOTION_PERMISSION_KEY, createFirstRun, needsFirstRun } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
 import { createHud } from './ui/hud.js';
@@ -439,9 +439,15 @@ export async function bootApp(options = {}) {
   /** Camera positioning is unavailable: fall back to the floor plan and say why. */
   function cameraUnavailable(noticeKey) {
     cameraUsable = false;
-    cameraUnavailableReason = lastPositioningHint
-      ? `${t(noticeKey ?? 'error.positioningExhausted')} (${lastPositioningHint})`
-      : t(noticeKey ?? 'error.positioningExhausted');
+    // lastPositioningHint is only meaningful for *this* call when noticeKey
+    // is null — the exhausted-chain path, which sets it immediately before
+    // calling here. Any other caller (camera denied, a specific failure
+    // reason) has its own noticeKey and must not inherit a hint left over
+    // from an unrelated, possibly much earlier, exhaustion.
+    cameraUnavailableReason =
+      !noticeKey && lastPositioningHint
+        ? `${t('error.positioningExhausted')} (${lastPositioningHint})`
+        : t(noticeKey ?? 'error.positioningExhausted');
     if (noticeKey) hud.showNotice('camera', t(noticeKey));
     if (view === 'ar') showView('floorplan');
     else syncBackdrop(); // the caller may stay in 'ar' regardless — never show a fake preview
@@ -689,9 +695,9 @@ export async function bootApp(options = {}) {
   // camera provider. "Floor plan only" drops the camera providers.
   const cameraInChain = chain.order.some((n) => CAMERA_PROVIDERS.has(n));
   let firstRun = null;
+  const firstRunEnabled = cameraInChain && options.firstRun !== false;
   const ask =
-    cameraInChain &&
-    options.firstRun !== false &&
+    firstRunEnabled &&
     (await needsFirstRun({
       storage,
       ...(options.permissions ? { permissions: options.permissions } : {}),
@@ -709,14 +715,32 @@ export async function bootApp(options = {}) {
       });
     });
     firstRun.destroy();
-    if (!permissions.camera) cameraUnavailable('notice.cameraDenied');
-    // Camera-only positioning (QR) leans on device motion to keep the
-    // position moving between scans — without it every scan looks exact,
-    // but the walk in between never gets recorded, which reads as "nothing
-    // is being tracked" rather than the permission problem it actually is.
-    if (!permissions.motion && chain.order.includes('qr')) {
-      hud.showNotice('motion', t('notice.motionDenied'));
+  } else if (firstRunEnabled) {
+    // Skipped asking, but not skipped knowing: needsFirstRun() only skips
+    // once motion has a real, stored answer, so read that answer back
+    // rather than trusting the optimistic default declared above — that
+    // default previously stood in for "motion granted" on every boot after
+    // the first, including ones where it had actually been declined.
+    // (options.firstRun === false — the dev/test bypass — never reaches
+    // here, and keeps assuming both granted, exactly as before.)
+    try {
+      permissions = {
+        ...permissions,
+        motion: storage?.getItem(MOTION_PERMISSION_KEY) === 'granted',
+      };
+    } catch {
+      // storage unavailable: keep the default
     }
+  }
+  if (cameraInChain) {
+    if (!permissions.camera) cameraUnavailable('notice.cameraDenied');
+    // Camera positioning (QR and Immersal both run their own dead
+    // reckoning between fixes via device motion) needs this to keep the
+    // position moving between scans — without it every fix looks exact,
+    // but the walk in between never gets recorded, which reads as
+    // "nothing is being tracked" rather than the permission problem it
+    // actually is.
+    if (!permissions.motion) hud.showNotice('motion', t('notice.motionDenied'));
   }
 
   if (config.admin)
@@ -809,10 +833,13 @@ export async function bootApp(options = {}) {
           hud.hideNotice('scan');
           return;
         }
-        nav?.vibrate?.(40);
         if (scan.result === 'unrecognised' && admin) {
           if (admin.expectingCode) {
+            // Admin is actively handling this scan — a new sticker being
+            // registered or surveyed. That's success, not a problem: the
+            // venue not already knowing the code is the whole point.
             const anchor = admin.registerCode(scan.text);
+            nav?.vibrate?.(15);
             if (anchor) {
               returnToPlanAfterScan = false;
               showView('floorplan', { manual: true });
@@ -820,8 +847,12 @@ export async function bootApp(options = {}) {
             return;
           }
           // A code recorded on this device but not yet published.
-          if (admin.fixToCode(scan.text)) return;
+          if (admin.fixToCode(scan.text)) {
+            nav?.vibrate?.(15);
+            return;
+          }
         }
+        nav?.vibrate?.(40);
         const key = scan.result === 'wrong-venue' ? 'scan.wrongVenue' : 'scan.unrecognised';
         hud.showNotice('scan', t(key, { text: shortCode(scan.text) }));
       });

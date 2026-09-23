@@ -220,7 +220,7 @@ describe('AdminPanel — plan editor', () => {
 });
 
 describe('defaultDownload — saving a file on iOS and everywhere else', () => {
-  it('uses the Web Share sheet when the browser can share a file (iOS Safari)', () => {
+  it('uses the Web Share sheet when the browser can share a file (iOS Safari)', async () => {
     const shared = [];
     const nav = {
       share: vi.fn(async (data) => {
@@ -231,7 +231,8 @@ describe('defaultDownload — saving a file on iOS and everywhere else', () => {
     const restore = globalThis.navigator;
     Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
     try {
-      defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      expect(ok).toBe(true);
       expect(nav.canShare).toHaveBeenCalledWith({
         files: [expect.objectContaining({ name: 'brains-demo-2026-01-01-0000.venue.json' })],
       });
@@ -243,7 +244,29 @@ describe('defaultDownload — saving a file on iOS and everywhere else', () => {
     }
   });
 
-  it('falls back to an <a download> link when file sharing is not available (desktop)', () => {
+  it('resolves false when the person cancels the share sheet, without forcing a fallback download', async () => {
+    const abort = Object.assign(new Error('cancelled'), { name: 'AbortError' });
+    const nav = { share: vi.fn(async () => Promise.reject(abort)), canShare: vi.fn(() => true) };
+    const restore = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+    const clicked = vi.fn();
+    const realCreate = document.createElement.bind(document);
+    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+      const el = realCreate(tag);
+      if (tag === 'a') el.click = clicked;
+      return el;
+    });
+    try {
+      const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      expect(ok).toBe(false);
+      expect(clicked).not.toHaveBeenCalled(); // cancelling doesn't silently fall back
+    } finally {
+      spy.mockRestore();
+      Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
+    }
+  });
+
+  it('falls back to an <a download> link when file sharing is not available (desktop)', async () => {
     const nav = { share: undefined, canShare: undefined };
     const restore = globalThis.navigator;
     Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
@@ -255,7 +278,8 @@ describe('defaultDownload — saving a file on iOS and everywhere else', () => {
       return el;
     });
     try {
-      defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      expect(ok).toBe(true);
       expect(clicked).toHaveBeenCalledOnce();
     } finally {
       spy.mockRestore();
@@ -263,7 +287,7 @@ describe('defaultDownload — saving a file on iOS and everywhere else', () => {
     }
   });
 
-  it('falls back to the anchor link if canShare rejects this file (some Android browsers)', () => {
+  it('falls back to the anchor link if canShare rejects this file (some Android browsers)', async () => {
     const nav = { share: vi.fn(), canShare: vi.fn(() => false) };
     const restore = globalThis.navigator;
     Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
@@ -275,7 +299,8 @@ describe('defaultDownload — saving a file on iOS and everywhere else', () => {
       return el;
     });
     try {
-      defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
+      expect(ok).toBe(true);
       expect(nav.share).not.toHaveBeenCalled();
       expect(clicked).toHaveBeenCalledOnce();
     } finally {
@@ -308,8 +333,8 @@ describe('AdminPanel — export and drafts', () => {
     const { admin, download, copy } = make();
     admin.showTab('export');
     expect(admin.el.querySelector('[data-f="valid"]').textContent).toBe(t('admin.export.valid'));
-    const name = admin.download();
-    expect(name).toMatch(/^brains-demo-health-centre-\d{4}-\d\d-\d\d-\d{4}\.venue\.json$/);
+    const name = await admin.download();
+    expect(name).toMatch(/^brains-demo-health-centre-\d{4}-\d\d-\d\d-\d{6}\.venue\.json$/);
     const [, text] = download.mock.calls[0];
     expect(JSON.parse(text)).toEqual(demo);
     expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
@@ -320,14 +345,30 @@ describe('AdminPanel — export and drafts', () => {
     expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(t('admin.export.copied'));
   });
 
-  it('never blocks getting a broken draft out — download still works; only Publish is disabled', () => {
+  it('two exports in the same minute get different filenames, not a silent overwrite', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:01Z'));
+    try {
+      const { admin, download } = make();
+      const first = await admin.download();
+      vi.setSystemTime(new Date('2026-01-01T00:00:45Z')); // same minute, 44 s later
+      const second = await admin.download();
+      expect(first).not.toBe(second);
+      expect(download.mock.calls[0][0]).toBe(first);
+      expect(download.mock.calls[1][0]).toBe(second);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never blocks getting a broken draft out — download still works; only Publish is disabled', async () => {
     const { admin, download } = make();
     admin.draft.pois[0].node = 'n-ghost';
     admin.showTab('export');
     expect(admin.el.querySelector('[data-f="download"]').disabled).toBe(false);
     expect(admin.el.querySelector('[data-f="publish"]').disabled).toBe(true);
     expect(admin.el.querySelector('[data-f="problems"]').textContent).toContain('pois[0].node');
-    const name = admin.download();
+    const name = await admin.download();
     expect(name).toMatch(/^brains-demo-health-centre-/);
     expect(JSON.parse(download.mock.calls[0][1]).pois[0].node).toBe('n-ghost');
   });
@@ -581,7 +622,7 @@ describe('AdminPanel — edit existing and saved state', () => {
     admin.addNodeHere('Pharmacy');
     expect(saved()).toContain(t('admin.saved.noBackup'));
 
-    admin.download();
+    await admin.download();
     expect(download).toHaveBeenCalledOnce();
     expect(saved()).not.toContain(t('admin.saved.noBackup'));
 
@@ -593,7 +634,24 @@ describe('AdminPanel — edit existing and saved state', () => {
     expect(saved()).not.toContain(t('admin.saved.noBackup'));
   });
 
-  it('warns before closing the tab with an unbacked-up change, not otherwise', () => {
+  it('cancelling the share sheet does not count as a backup, and shows nothing misleading', async () => {
+    const download = vi.fn(async () => false); // the injected default treats "false" as cancelled
+    const { admin, provider } = make({ download });
+    const saved = () => admin.el.querySelector('[data-f="saved"]').textContent;
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
+    expect(saved()).toContain(t('admin.saved.noBackup'));
+
+    const name = await admin.download();
+    expect(name).toBeNull(); // nothing to confirm — cancelling isn't a filename to report
+    expect(saved()).toContain(t('admin.saved.noBackup')); // still true: nothing left the device
+    // No false "Downloaded" toast — the last real status (adding the node) stands untouched.
+    expect(admin.el.querySelector('[data-f="toast"]').textContent).toBe(
+      t('admin.record.added.node', { name: 'Pharmacy' })
+    );
+  });
+
+  it('warns before closing the tab with an unbacked-up change, not otherwise', async () => {
     const window = { addEventListener: vi.fn(), removeEventListener: vi.fn() };
     const { admin, provider } = make({ window });
     const [, handler] = window.addEventListener.mock.calls.find(
@@ -612,7 +670,7 @@ describe('AdminPanel — edit existing and saved state', () => {
     expect(warned.preventDefault).toHaveBeenCalledOnce();
     expect(warned.returnValue).toBe('');
 
-    admin.download();
+    await admin.download();
     expect(fire().preventDefault).not.toHaveBeenCalled(); // backed up: safe to close now
 
     admin.destroy();
@@ -1042,6 +1100,18 @@ describe('AdminPanel — QR codes: preview, print sheet, register a printed stic
 
       walkStep(); // no longer listening: does nothing
       expect(status.textContent).toBe(t('admin.stride.tooFewSteps', { steps: 1 }));
+    });
+
+    it('refuses to start while a route is already recording — one step-counter at a time', () => {
+      const { admin } = make();
+      const toggle = admin.el.querySelector('[data-f="stride-toggle"]');
+      const status = admin.el.querySelector('[data-f="stride-status"]');
+      admin.wizard.scanHere();
+      admin.registerCode('A01'); // starts a route: wizard.route is now non-null
+
+      toggle.click();
+      expect(status.textContent).toBe(t('admin.stride.busy'));
+      expect(toggle.textContent).toBe(t('admin.stride.start')); // never actually started
     });
   });
 });

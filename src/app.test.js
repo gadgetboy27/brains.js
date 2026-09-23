@@ -1017,9 +1017,11 @@ describe('bootApp — map matching', () => {
 describe('bootApp — registering a printed sticker from the scanner', () => {
   it('an unrecognised scan while registering becomes a marker at the current position', async () => {
     const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const vibrate = vi.fn();
     const { app } = await boot({
       config: { admin: true, provider: null },
       options: {
+        navigator: { vibrate, onLine: true },
         adminOptions: {
           storage: null,
           download: vi.fn(),
@@ -1050,6 +1052,10 @@ describe('bootApp — registering a printed sticker from the scanner', () => {
       name: 'Ward door sticker',
     });
     expect(app.view).toBe('floorplan'); // back to the plan once registered
+    // Registering a brand-new sticker is success, not a problem — the venue
+    // not already knowing the code is the whole point of scanning it here.
+    expect(vibrate).toHaveBeenCalledWith(15);
+    expect(vibrate).not.toHaveBeenCalledWith(40);
     await app.destroy();
   });
 });

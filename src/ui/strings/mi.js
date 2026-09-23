@@ -295,10 +295,8 @@ export default {
     'admin.stride.current': 'Takahanga o nāianei: {m} m.',
     'admin.stride.default': 'E whakamahia ana te takahanga taunoa (0.73 m).',
     'admin.stride.unavailable': 'Kāore ngā pūoko nekehanga e wātea ana i tēnei pūrere.',
-    'admin.wizard.step.start': 'Tīmata',
-    'admin.wizard.step.walk': 'Hīkoi',
-    'admin.wizard.step.finish': 'Mutunga',
-    'admin.wizard.step.done': 'Kua oti',
+    'admin.stride.busy':
+      'Whakaotia, whakakorea rānei te hīkoi o nāianei i te tuatahi, kātahi ka whakarite motuhake.',
     'admin.wizard.existing': 'He wāhi kua mōhiotia rānei',
     'admin.wizard.existingNone': '— kāore —',
     'admin.wizard.unnamed': 'ingoa-kore',

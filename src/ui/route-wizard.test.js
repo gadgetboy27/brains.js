@@ -187,4 +187,41 @@ describe('RouteWizard', () => {
     expect(h.draft.nodes.length).toBeGreaterThan(1); // recorded points stay (Undo removes them)
     expect(h.recording.at(-1)).toEqual([false, undefined]); // the recording badge goes off with it
   });
+
+  it('"not wheelchair-friendly" is reachable during the walk, before the auto-save on the destination scan', () => {
+    // The auto-flow's destination scan calls arrive() then save() in the
+    // same tick, so the checkbox has to be ticked *during* the walk step —
+    // the finish step it used to live in is never actually shown to the
+    // user in that flow (replaced before the next paint).
+    const h = host();
+    const w = createRouteWizard(h);
+    const f = (n) => w.el.querySelector(`[data-f="${n}"]`);
+    w.scanHere();
+    h.decode('A01');
+    expect(w.step).toBe('walk');
+
+    for (let y = 1; y <= 6; y += 1) {
+      const p = pose(0, y, 0, 0, 0.8);
+      h.pose = p;
+      w.onPose(p);
+    }
+    f('no-wheelchair').checked = true;
+    w.scanHere();
+    h.decode('A02');
+    expect(w.step).toBe('walk'); // chained into the next leg
+
+    const level = h.draft.edges.filter((e) => e.type !== 'stairs');
+    expect(level.length).toBeGreaterThan(0);
+    expect(level.every((e) => e.wheelchair === false)).toBe(true);
+  });
+
+  it('destroy() mid-walk turns the recording indicator off — closing admin must not leave it stuck on', () => {
+    const h = host();
+    const w = createRouteWizard(h);
+    w.scanHere();
+    h.decode('A01');
+    expect(h.recording.at(-1)).toEqual([true, 0]);
+    w.destroy();
+    expect(h.recording.at(-1)).toEqual([false, undefined]);
+  });
 });

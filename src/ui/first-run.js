@@ -37,7 +37,8 @@ const STORAGE_KEY = 'brains:permissions';
 // skipped this screen forever after, and dead reckoning never worked:
 // every scan looked exact, but position between scans never moved, which
 // is indistinguishable from "nothing is being recorded". See docs/handled-states.md.
-const MOTION_KEY = 'brains:motion-permission';
+export const MOTION_PERMISSION_KEY = 'brains:motion-permission';
+const MOTION_KEY = MOTION_PERMISSION_KEY;
 
 export class FirstRun {
   #doc;

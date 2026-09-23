@@ -33,9 +33,9 @@
           "type": "number"
         },
         "strideM": {
-          "description": "Metres advanced per detected footstep in pedestrian dead reckoning (see fusion.js). Default 0.73 (an average adult stride); calibrate per venue by walking a measured distance in the admin panel.",
+          "description": "Metres advanced per detected footstep in pedestrian dead reckoning (see fusion.js). Default 0.73 (an average adult stride); calibrate per venue by walking a measured distance in the admin panel. At least 0.01 m — anything smaller is almost certainly a bad value, not a real stride.",
           "type": "number",
-          "exclusiveMinimum": 0
+          "minimum": 0.01
         }
       }
     },
