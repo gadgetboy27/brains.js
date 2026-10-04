@@ -252,7 +252,7 @@ export default {
     'admin.ward.number': 'Ward number (1–99)',
     'admin.ward.name': 'Ward {n}',
     'admin.collapse': 'Show map',
-    'admin.expand': 'Show tools',
+    'admin.expand': 'Tools',
     'admin.record.scan': 'Scan a marker to fix my position',
     'admin.record.scanning': 'Point the camera at a marker on the wall…',
     'admin.record.noPoseHint':
@@ -288,6 +288,8 @@ export default {
     'admin.stride.saved': 'Stride set to {m} m ({steps} steps over the measured distance).',
     'admin.stride.current': 'Current stride: {m} m.',
     'admin.stride.default': 'Using the default stride (0.73 m).',
+    'admin.stride.noMotion':
+      'No steps yet. If you are walking, motion access may be off: close this page, reopen it, and tap Allow when asked (iPhone: Settings → Safari → Motion & Orientation Access).',
     'admin.stride.unavailable': 'Motion sensors are not available on this device.',
     'admin.stride.busy': 'Finish or cancel the current walk first, then calibrate on its own.',
     'admin.wizard.existing': 'Or an existing place',
@@ -298,7 +300,7 @@ export default {
     'admin.wizard.advanced': 'Advanced (name it, pick a place, stairs/lift, no code here…)',
     'admin.wizard.start.hint':
       'Or pick the place if it already exists, or name it yourself. Tap the plan to set a position without a code.',
-    'admin.wizard.start.name': 'Start place',
+    'admin.wizard.start.name': 'Start place (optional name)',
     'admin.wizard.start.next': 'Start here (no code)',
     'admin.wizard.start.noPose': 'Stand where this route starts and scan the code there.',
     'admin.wizard.start.scan': 'Scan start code',

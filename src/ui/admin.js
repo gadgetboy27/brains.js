@@ -33,9 +33,13 @@ import { createRouteWizard } from './route-wizard.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
 const CSS = `
-.admin { position: fixed; top: calc(64px + env(safe-area-inset-top)); left: 8px; right: 8px; z-index: 23; max-height: 55vh; overflow: auto;
-  padding: 10px 12px; border-radius: var(--radius); background: var(--color-surface); color: var(--color-text);
-  font-family: var(--font); font-size: 15px; border: 2px solid var(--color-accent); }
+.admin { position: fixed; top: calc(56px + env(safe-area-inset-top)); bottom: 0; left: 0; width: min(88vw, 400px); z-index: 23; overflow: auto;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-radius: 0 var(--radius) var(--radius) 0; background: var(--color-surface); color: var(--color-text);
+  font-family: var(--font); font-size: 15px; border: 2px solid var(--color-accent); border-left: 0; box-shadow: 4px 0 16px rgba(0,0,0,0.45);
+  transition: transform 0.18s ease; }
+.admin.admin-collapsed { transform: translateX(-105%); visibility: hidden; transition: transform 0.18s ease, visibility 0s linear 0.18s; }
+.admin-fab { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 8px; z-index: 24; min-height: 44px; padding: 6px 14px; }
+.admin-fab[hidden] { display: none; }
 .admin[hidden] { display: none; }
 .admin h2 { margin: 0 0 4px; font-size: 1em; }
 .admin p { margin: 4px 0; }
@@ -52,10 +56,8 @@ const CSS = `
   gap: 6px; padding: 8px; min-width: 10em; border: 2px solid var(--color-accent); border-radius: var(--radius);
   background: var(--color-surface-solid); }
 .admin-more-tools-list .btn { width: 100%; text-align: left; }
-.admin.admin-collapsed > :not(.admin-tabs):not([data-f="status"]):not([data-f="saved"]) { display: none; }
-.admin.admin-collapsed { max-height: none; }
 @media (max-width: 600px) {
-  .admin { top: calc(56px + env(safe-area-inset-top)); left: 4px; right: 4px; max-height: 42vh; padding: 8px 10px; font-size: 14px; }
+  .admin { padding: 8px 10px; font-size: 14px; }
   .admin h2, .admin > p[data-f="hint"] { display: none; }
   .admin-tabs .btn { min-height: 36px; padding: 4px 10px; font-size: 14px; }
 }
@@ -131,6 +133,7 @@ export class AdminPanel {
   #editing = null;
   /** @type {{ fusion: import('../core/fusion.js').PoseFusion, detach: () => void } | null} */
   #strideCal = null;
+  #fab = null;
 
   /**
    * @param {Object} options
@@ -343,6 +346,14 @@ export class AdminPanel {
     this.#el = el;
     this.#f = (n) => el.querySelector(`[data-f="${n}"]`);
     (options.mount ?? this.#doc.body).appendChild(el);
+    // A small button that stays on the map while the drawer is shut.
+    this.#fab = this.#doc.createElement('button');
+    this.#fab.type = 'button';
+    this.#fab.className = 'btn btn-primary admin-fab';
+    this.#fab.hidden = true;
+    this.#fab.textContent = t('admin.expand');
+    this.#fab.addEventListener('click', () => this.setCollapsed(false));
+    (options.mount ?? this.#doc.body).appendChild(this.#fab);
 
     this.#f('title').textContent = t('admin.title');
     this.#f('hint').textContent = t('admin.hint');
@@ -908,6 +919,11 @@ export class AdminPanel {
     this.#strideCal = { fusion, detach };
     this.#f('stride-toggle').textContent = t('admin.stride.stop');
     this.#f('stride-status').textContent = t('admin.stride.walking');
+    win.setTimeout?.(() => {
+      if (this.#strideCal && fusion.stepCount === 0) {
+        this.#f('stride-status').textContent = t('admin.stride.noMotion');
+      }
+    }, 4000);
     fusion.on('pose', () => {
       if (!this.#strideCal) return;
       this.#f('stride-status').textContent = t('admin.stride.counting', {
@@ -1492,6 +1508,7 @@ export class AdminPanel {
     this.#el.classList.toggle('admin-collapsed', Boolean(on));
     this.#f('collapse').textContent = t(on ? 'admin.expand' : 'admin.collapse');
     this.#f('collapse').setAttribute('aria-expanded', String(!on));
+    if (this.#fab) this.#fab.hidden = !on;
   }
 
   get collapsed() {
@@ -1873,6 +1890,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     if (this.#onBeforeUnload) {
       this.#opts.window?.removeEventListener?.('beforeunload', this.#onBeforeUnload);
     }
+    this.#fab?.remove();
     this.#el.remove();
   }
 }

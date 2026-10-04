@@ -885,6 +885,12 @@ describe('AdminPanel — wards, phone layout, scan', () => {
     expect(admin.collapsed).toBe(true);
     expect(btn.textContent).toBe(t('admin.expand'));
     expect(btn.getAttribute('aria-expanded')).toBe('false');
+    const fab = document.querySelector('.admin-fab');
+    expect(fab.hidden).toBe(false); // a way back stays on the map
+    fab.click();
+    expect(admin.collapsed).toBe(false);
+    expect(fab.hidden).toBe(true);
+    btn.click();
     btn.click();
     expect(admin.collapsed).toBe(false);
   });

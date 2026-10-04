@@ -205,6 +205,23 @@ export async function needsFirstRun({
   return true;
 }
 
+/**
+ * On iOS the motion/orientation permission lasts only for the Safari session,
+ * so a stored "granted" from an earlier visit does not mean motion events are
+ * flowing now — the page must ask again from a tap. Arm a one-time listener
+ * that does exactly that on the first tap (a no-op elsewhere). Without it the
+ * walk between scans is never tracked and step counting reads zero.
+ * @param {{ document: Document, requestMotion?: () => Promise<string> }} options
+ * @returns {() => void} disarm
+ */
+export function armMotionReconfirm({ document: doc, requestMotion = defaultRequestMotion }) {
+  const handler = () => {
+    requestMotion().catch(() => {});
+  };
+  doc.addEventListener('click', handler, { once: true, capture: true });
+  return () => doc.removeEventListener('click', handler, { capture: true });
+}
+
 async function defaultRequestMotion() {
   const M = globalThis.DeviceMotionEvent;
   const O = globalThis.DeviceOrientationEvent;

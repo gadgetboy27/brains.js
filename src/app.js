@@ -48,7 +48,12 @@ import { applyContrastPreference, createDestinationPicker } from './ui/destinati
 import { createAdminPanel } from './ui/admin.js';
 import { createCameraBackdrop } from './ui/camera-backdrop.js';
 import { createScanOverlay } from './ui/scan-overlay.js';
-import { MOTION_PERMISSION_KEY, createFirstRun, needsFirstRun } from './ui/first-run.js';
+import {
+  MOTION_PERMISSION_KEY,
+  armMotionReconfirm,
+  createFirstRun,
+  needsFirstRun,
+} from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
 import { recordFeedback } from './core/feedback.js';
@@ -401,6 +406,7 @@ export async function bootApp(options = {}) {
   let cameraUsable = true; // false once camera positioning is known to be unavailable
   let cameraUnavailableReason = ''; // why, for the message shown in the camera view itself
   let lastPositioningHint = ''; // the real provider error(s), e.g. 'qr: no-camera — OverconstrainedError'
+  let disarmMotion = null;
   let permissions = { camera: true, motion: true }; // set by the first-run screen
   let lowPower = false; // true while the battery is low and not charging
   function showView(next, { manual = false } = {}) {
@@ -791,6 +797,10 @@ export async function bootApp(options = {}) {
       // storage unavailable: keep the default
     }
   }
+  // A stored "granted" may be from an earlier Safari session; re-ask on the first tap.
+  if (permissions.motion && firstRunEnabled) {
+    disarmMotion = armMotionReconfirm({ document: doc });
+  }
   if (cameraInChain) {
     if (!permissions.camera) cameraUnavailable('notice.cameraDenied');
     // Camera positioning (QR and Immersal both run their own dead
@@ -1041,6 +1051,7 @@ export async function bootApp(options = {}) {
       admin?.destroy();
       offChange();
       offSpeech();
+      disarmMotion?.();
       speech.destroy();
       rescanOff?.();
       await chain.stop();

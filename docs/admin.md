@@ -5,7 +5,7 @@
 copy of the current venue and exports valid venue JSON; nothing changes for
 visitors until that JSON is published.
 
-The top row has just two buttons: **Record routes** (opens by default) and
+The tools sit in a **side drawer** over the left of the map. **Show map** slides it away (a small **Tools** button stays on the map to bring it back), so the flashing Recording badge and the whole plan are visible while you walk. The top row has just two buttons: **Record routes** (opens by default) and
 **Publish**. Everything else — **Undo**, **Sticker survey**, **Record a
 route**, **Plan editor**, **Edit existing**, **Hide tools**, **Close admin**
 — is one tap under **More ▾**, and picking one closes the menu again. In

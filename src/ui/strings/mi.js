@@ -304,6 +304,8 @@ export default {
       'Kua whakaritea te takahanga ki {m} m ({steps} takahanga i runga i te tawhiti kua ine).',
     'admin.stride.current': 'Takahanga o nāianei: {m} m.',
     'admin.stride.default': 'E whakamahia ana te takahanga taunoa (0.73 m).',
+    'admin.stride.noMotion':
+      'Kāore anō he takahanga. Mēnā kei te hīkoi koe, tērā pea kua kati te urunga ki te nekeneke: katia tēnei whārangi, whakatuwheratia anō, ā, pāwhiritia Whakaae ina pātaihia (iPhone: Settings → Safari → Motion & Orientation Access).',
     'admin.stride.unavailable': 'Kāore ngā pūoko nekehanga e wātea ana i tēnei pūrere.',
     'admin.stride.busy':
       'Whakaotia, whakakorea rānei te hīkoi o nāianei i te tuatahi, kātahi ka whakarite motuhake.',

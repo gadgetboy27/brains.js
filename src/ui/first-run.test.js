@@ -183,3 +183,19 @@ describe('needsFirstRun', () => {
     ).toBe(true);
   });
 });
+
+describe('armMotionReconfirm', () => {
+  it('asks for motion on the first tap only, and can be disarmed', async () => {
+    const { armMotionReconfirm } = await import('./first-run.js');
+    const requestMotion = vi.fn(async () => 'granted');
+    armMotionReconfirm({ document, requestMotion });
+    document.body.click();
+    document.body.click();
+    expect(requestMotion).toHaveBeenCalledTimes(1);
+    const again = vi.fn(async () => 'granted');
+    const disarm = armMotionReconfirm({ document, requestMotion: again });
+    disarm();
+    document.body.click();
+    expect(again).not.toHaveBeenCalled();
+  });
+});

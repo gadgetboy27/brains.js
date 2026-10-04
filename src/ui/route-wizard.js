@@ -100,11 +100,11 @@ export class RouteWizard {
           <button type="button" class="btn btn-primary btn-big" data-f="start-scan"></button>
           <button type="button" class="btn btn-big" data-f="start-next"></button>
         </div>
+        <label><span data-f="start-name-label"></span><input data-f="start-name" list="admin-places" autocomplete="off" /></label>
         <details class="admin-plan">
           <summary data-f="advanced-label"></summary>
           <p data-f="start-hint"></p>
           <label><span data-f="start-existing-label"></span><select data-f="start-existing"><option value=""></option></select></label>
-          <label><span data-f="start-name-label"></span><input data-f="start-name" list="admin-places" autocomplete="off" /></label>
           <label><span data-f="start-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="start-ward" /></label>
         </details>
       </section>
