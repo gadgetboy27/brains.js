@@ -1666,6 +1666,13 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
    */
   async publish() {
     if (this.#draft.validate().length) return null;
+    // Say so outright when there is nothing recorded on this device to send,
+    // so an empty publish can't be mistaken for a working one.
+    const sent = this.#draft.summary;
+    if (this.#published || sent.nodes === 0) {
+      this.#status(t('admin.export.nothingToSend'));
+      return null;
+    }
     let token;
     try {
       token = this.#opts.sessionStorage?.getItem(TOKEN_KEY) ?? null;
@@ -1730,7 +1737,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     this.#published = true;
     this.#backedUp = true;
     this.#updateSaved();
-    this.#status(t('admin.export.published'));
+    this.#status(t('admin.export.published') + ' ' + t('admin.export.sent', sent));
     return body;
   }
 

@@ -219,6 +219,10 @@ export default {
     'admin.export.publishing': 'E whakaputa ana…',
     'admin.export.published':
       'Kua whakaputaina. Ka riro i ngā manuhiri tēnei putanga mai i nāianei.',
+    'admin.export.nothingToSend':
+      'Hapa: kāore he mea hei tuku. Kāore ētahi node, ara rānei i tuhia ki tēnei waea mai i te whakaputa whakamutunga, no reira kāore i tukuna tētahi mea.',
+    'admin.export.sent':
+      'Kua tukuna: {nodes} node · {edges} hononga · {pois} wāhi · {anchors} tohu.',
     'admin.export.publishFailed': 'I rahua te whakaputa: {message}',
     'admin.export.tokenPrompt': 'Kī whakaputa a te kaiwhakahaere',
     'admin.export.unconfigured':

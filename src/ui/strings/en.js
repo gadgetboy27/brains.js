@@ -212,6 +212,9 @@ export default {
     'admin.export.publish': 'Publish for everyone',
     'admin.export.publishing': 'Publishing…',
     'admin.export.published': 'Published. Visitors get this version from now on.',
+    'admin.export.nothingToSend':
+      'Error: nothing to send. No nodes or routes have been recorded on this phone since the last publish, so nothing was sent.',
+    'admin.export.sent': 'Sent: {nodes} nodes · {edges} links · {pois} places · {anchors} markers.',
     'admin.export.publishFailed': 'Publishing failed: {message}',
     'admin.export.tokenPrompt': 'Admin publishing key',
     'admin.export.unconfigured': 'Publishing is not set up on this server yet (ADMIN_TOKEN).',

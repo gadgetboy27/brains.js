@@ -482,9 +482,10 @@ describe('AdminPanel — publishing', () => {
     );
     expect(sessionStorage.data['brains:admin-token']).toBe('s3cret');
     expect(storage.data['brains:admin-draft']).toBeUndefined();
-    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toContain(
       t('admin.export.published')
     );
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toContain('Sent:');
 
     await admin.publish(); // key remembered: no prompt
     expect(prompt).toHaveBeenCalledTimes(1);
@@ -494,7 +495,9 @@ describe('AdminPanel — publishing', () => {
     const sessionStorage = session();
     sessionStorage.setItem('brains:admin-token', 'old');
     const fetch = vi.fn(async () => response(401, { error: 'unauthorised' }));
-    const { admin } = make({ fetch, sessionStorage });
+    const { admin, provider } = make({ fetch, sessionStorage });
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
     expect(await admin.publish()).toBeNull();
     expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
       t('admin.export.unauthorised')
@@ -524,7 +527,9 @@ describe('AdminPanel — publishing', () => {
     const sessionStorage = session();
     sessionStorage.setItem('brains:admin-token', 'k');
     const fetch = vi.fn(async () => response(200, null, 'text/html'));
-    const { admin } = make({ fetch, sessionStorage });
+    const { admin, provider } = make({ fetch, sessionStorage });
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
     await admin.publish();
     expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
       t('admin.export.devServer')
@@ -536,9 +541,27 @@ describe('AdminPanel — publishing', () => {
     );
   });
 
+  it('says so, and sends nothing, when nothing has been recorded on this phone', async () => {
+    const fetch = vi.fn();
+    const { admin, prompt, provider } = make({ fetch, sessionStorage: session() });
+    expect(await admin.publish()).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+    expect(admin.el.querySelector('[data-f="status"]').textContent).toBe(
+      t('admin.export.nothingToSend')
+    );
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy'); // now there is something to send
+    prompt.mockReturnValueOnce(null);
+    await admin.publish();
+    expect(prompt).toHaveBeenCalledTimes(1);
+  });
+
   it('does not publish an invalid draft or without a key', async () => {
     const fetch = vi.fn();
-    const { admin, prompt } = make({ fetch, sessionStorage: session() });
+    const { admin, prompt, provider } = make({ fetch, sessionStorage: session() });
+    provider.emit(pose(40, 6));
+    admin.addNodeHere('Pharmacy');
     prompt.mockReturnValueOnce(null); // cancelled
     expect(await admin.publish()).toBeNull();
     admin.draft.pois[0].node = 'n-ghost';
