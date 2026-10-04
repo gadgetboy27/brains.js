@@ -793,6 +793,15 @@ describe('AdminPanel — edit existing and saved state', () => {
   });
 });
 
+describe('AdminPanel — honest published status', () => {
+  it('does not claim "published" for a venue that did not come from the server', () => {
+    const { admin } = make({ onServer: false });
+    const text = admin.el.querySelector('[data-f="saved"]').textContent;
+    expect(text).toContain('not yet published');
+    expect(text).not.toContain('everyone has this version');
+  });
+});
+
 describe('AdminPanel — tab row: only what a walk needs, the rest one tap away', () => {
   it('opens on Routes; Export, Undo, Hide tools and Close are always visible; Save is gone', () => {
     const { admin } = make();
@@ -800,7 +809,7 @@ describe('AdminPanel — tab row: only what a walk needs, the rest one tap away'
     const tabs = [
       ...admin.el.querySelectorAll('.admin-tabs > [data-tab], .admin-tabs > [data-f]'),
     ].map((el) => el.dataset.tab ?? el.dataset.f);
-    expect(tabs).toEqual(['routes', 'export', 'more-tools']);
+    expect(tabs).toEqual(['routes', 'export', 'collapse', 'more-tools']);
     expect(admin.el.querySelector('[data-f="save"]')).toBeNull();
     // Redundant with autosave, but the method itself still works for anything that wants it.
     expect(() => admin.save()).not.toThrow();

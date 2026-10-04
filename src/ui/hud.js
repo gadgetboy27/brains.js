@@ -37,6 +37,9 @@ const CSS = `
 .hud-notices:empty { display: none; }
 .hud-notices li { border: 2px solid var(--color-warn); border-radius: var(--radius); padding: 8px 12px; }
 .hud.hud-compact .hud-speech, .hud.hud-compact [data-f="nav-actions"] { display: none; }
+.hud.hud-compact.hud-nodest .hud-status { display: none; }
+.hud.hud-compact [data-notice="landmark"] { display: none; }
+.hud.hud-compact .hud-notices { max-height: 7.5em; overflow: auto; }
 .hud.hud-compact { padding-top: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
 .hud-feedback { border: 2px solid var(--color-ok); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; }
 .hud-feedback[hidden], .hud-feedback p[hidden] { display: none; }
@@ -308,6 +311,7 @@ export class Hud {
    */
   setDestination(poi) {
     this.#destination = poi;
+    this.#el.classList.toggle('hud-nodest', !poi);
     this.#feedbackDone = false;
     this.#f('feedback').hidden = true;
     this.#f('feedback-buttons').hidden = false;

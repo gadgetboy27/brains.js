@@ -251,7 +251,7 @@ export default {
     'admin.saved.now': 'Saved',
     'admin.ward.number': 'Ward number (1–99)',
     'admin.ward.name': 'Ward {n}',
-    'admin.collapse': 'Hide tools',
+    'admin.collapse': 'Show map',
     'admin.expand': 'Show tools',
     'admin.record.scan': 'Scan a marker to fix my position',
     'admin.record.scanning': 'Point the camera at a marker on the wall…',

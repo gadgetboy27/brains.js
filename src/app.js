@@ -211,6 +211,7 @@ export async function bootApp(options = {}) {
   let venue = options.venue ?? null;
   let venueFromCache = false;
   let venueIsNew = false;
+  let venueOnServer = true;
   if (!venue) {
     if (!config.venueUrl) {
       venue = createVenue(structuredClone(demoVenue));
@@ -219,6 +220,7 @@ export async function bootApp(options = {}) {
         venue = await (options.loadVenue ?? loadVenue)(config.venueUrl);
         saveVenueCache(config.venueUrl, venue.toJSON(), storage);
       } catch (err) {
+        venueOnServer = false; // bundled demo, blank sheet or cached copy: nothing published to show
         if (config.venueId === demoVenue.id && /HTTP 404/.test(err.message)) {
           // Nothing published yet for the demo: use the bundled copy.
           venue = createVenue(structuredClone(demoVenue));
@@ -861,6 +863,7 @@ export async function bootApp(options = {}) {
       onManualPose: (pose) => onFix(pose),
       onRecording: (active, distanceM) => scanOverlay.setRecording(active, distanceM),
       publicBaseUrl: options.publicBaseUrl ?? globalThis.location?.origin,
+      onServer: venueOnServer,
       onClose: () => {
         admin?.destroy();
         admin = null;

@@ -145,6 +145,7 @@ export class AdminPanel {
    * @param {(message: string, defaultValue?: string) => string | null} [options.prompt]  Injectable; default window.prompt.
    * @param {() => void} [options.onClose]
    * @param {(active: boolean, distanceM?: number) => void} [options.onRecording]  The route wizard's leg started/stopped or moved.
+   * @param {boolean} [options.onServer]            False when the venue shown is not a published copy (bundled demo, new blank sheet).
    * @param {typeof fetch} [options.fetch]            For publishing (default global fetch).
    * @param {string} [options.publishUrl]             API base; default `/api/venues/<id>` on this origin.
    * @param {Storage | null} [options.sessionStorage] Keeps the publishing key for the session.
@@ -194,6 +195,7 @@ export class AdminPanel {
       <div class="admin-tabs" role="tablist">
         <button type="button" class="btn" role="tab" data-tab="routes"></button>
         <button type="button" class="btn" role="tab" data-tab="export"></button>
+        <button type="button" class="btn" data-f="collapse" aria-expanded="true"></button>
         <details class="admin-more-tools" data-f="more-tools">
           <summary data-f="more-tools-summary"></summary>
           <div class="admin-more-tools-list" role="tablist">
@@ -202,7 +204,6 @@ export class AdminPanel {
             <button type="button" class="btn" role="tab" data-tab="record"></button>
             <button type="button" class="btn" role="tab" data-tab="plan"></button>
             <button type="button" class="btn" role="tab" data-tab="edit"></button>
-            <button type="button" class="btn" data-f="collapse" aria-expanded="true"></button>
             <button type="button" class="btn" data-f="close"></button>
           </div>
         </details>
@@ -499,7 +500,7 @@ export class AdminPanel {
     this.#f('edit-remove').addEventListener('click', () => this.removeEdited());
     this.#f('edit-cancel').addEventListener('click', () => this.#closeEdit());
     this.#f('undo').addEventListener('click', () => this.undo());
-    for (const id of ['undo', 'collapse', 'close']) {
+    for (const id of ['undo', 'close']) {
       this.#f(id).addEventListener('click', () => {
         this.#f('more-tools').open = false;
       });
@@ -552,7 +553,8 @@ export class AdminPanel {
     this.#updateRecording();
     this.#updateExport();
     this.showTab('routes');
-    this.#published = !restored;
+    // Only claim "published" when this venue really came from the server.
+    this.#published = !restored && options.onServer !== false;
     // A restored draft's backup status from an earlier session isn't known
     // here — treating it as backed up would silently disable both the
     // warning and the beforeunload guard for changes that, as far as this
