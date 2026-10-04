@@ -284,6 +284,7 @@ export class VenueDraft {
       heading: Math.round(((anchor.heading ?? 0) % 360) + 360) % 360,
     };
     if (anchor.name) a.name = anchor.name;
+    if (anchor.note) a.note = anchor.note;
     this.anchors.push(a);
     this.#record({ type: 'addAnchor', anchor: id });
     return a;
@@ -293,7 +294,7 @@ export class VenueDraft {
    * Change a marker's name, position or heading. Its id — what is printed in
    * the QR code — never changes, so existing prints keep working.
    * @param {string} id
-   * @param {{ name?: string | null, x?: number, y?: number, z?: number, floor?: number, heading?: number }} patch
+   * @param {{ name?: string | null, note?: string | null, x?: number, y?: number, z?: number, floor?: number, heading?: number }} patch
    */
   updateAnchor(id, patch) {
     const a = this.anchors.find((x) => x.id === id);
@@ -302,6 +303,10 @@ export class VenueDraft {
     if (patch.name !== undefined) {
       if (patch.name) a.name = patch.name;
       else delete a.name;
+    }
+    if (patch.note !== undefined) {
+      if (patch.note) a.note = patch.note;
+      else delete a.note;
     }
     if (patch.floor !== undefined) {
       if (!this.floorByIndex(patch.floor))

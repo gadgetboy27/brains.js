@@ -192,19 +192,19 @@ export class AdminPanel {
       <p data-f="hint"></p>
       <div class="admin-tabs" role="tablist">
         <button type="button" class="btn" role="tab" data-tab="routes"></button>
+        <button type="button" class="btn" role="tab" data-tab="export"></button>
         <details class="admin-more-tools" data-f="more-tools">
           <summary data-f="more-tools-summary"></summary>
           <div class="admin-more-tools-list" role="tablist">
+            <button type="button" class="btn" data-f="undo"></button>
             <button type="button" class="btn" role="tab" data-tab="survey"></button>
             <button type="button" class="btn" role="tab" data-tab="record"></button>
             <button type="button" class="btn" role="tab" data-tab="plan"></button>
             <button type="button" class="btn" role="tab" data-tab="edit"></button>
+            <button type="button" class="btn" data-f="collapse" aria-expanded="true"></button>
+            <button type="button" class="btn" data-f="close"></button>
           </div>
         </details>
-        <button type="button" class="btn" role="tab" data-tab="export"></button>
-        <button type="button" class="btn" data-f="undo"></button>
-        <button type="button" class="btn" data-f="collapse" aria-expanded="true"></button>
-        <button type="button" class="btn" data-f="close"></button>
       </div>
       <p class="admin-status" data-f="status" role="status" aria-live="polite"></p>
       <p class="admin-status" data-f="saved"></p>
@@ -285,6 +285,7 @@ export class AdminPanel {
           <label data-f="edit-ward-row" hidden><span data-f="edit-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="edit-ward" /></label>
           <label data-f="edit-access-row"><span data-f="edit-access-label"></span>
             <select data-f="edit-access"><option value="public"></option><option value="staff"></option></select></label>
+          <label data-f="edit-comment-row"><span data-f="edit-comment-label"></span><textarea data-f="edit-comment" rows="3" maxlength="280"></textarea></label>
           <label data-f="edit-heading-row"><span data-f="edit-heading-label"></span><input type="number" min="0" max="359" data-f="edit-heading" /></label>
           <p class="admin-status" data-f="edit-note"></p>
           <div class="admin-actions">
@@ -373,6 +374,7 @@ export class AdminPanel {
     this.#f('edit-access').options[0].textContent = t('admin.edit.access.public');
     this.#f('edit-access').options[1].textContent = t('admin.edit.access.staff');
     this.#f('edit-heading-label').textContent = t('admin.anchor.heading');
+    this.#f('edit-comment-label').textContent = t('admin.anchor.comment');
     this.#f('edit-ok').textContent = t('admin.save');
     this.#f('edit-move').textContent = t('admin.edit.moveHere');
     this.#f('edit-remove').textContent = t('admin.edit.remove');
@@ -494,6 +496,11 @@ export class AdminPanel {
     this.#f('edit-remove').addEventListener('click', () => this.removeEdited());
     this.#f('edit-cancel').addEventListener('click', () => this.#closeEdit());
     this.#f('undo').addEventListener('click', () => this.undo());
+    for (const id of ['undo', 'collapse', 'close']) {
+      this.#f(id).addEventListener('click', () => {
+        this.#f('more-tools').open = false;
+      });
+    }
     this.#f('close').addEventListener('click', () => this.#opts.onClose?.());
     this.#f('rec-toggle').addEventListener('click', () =>
       this.#recording ? this.stopRecording() : this.startRecording()
@@ -1431,6 +1438,7 @@ export class AdminPanel {
     this.#f('edit-cat-row').hidden = !isPoi;
     this.#f('edit-access-row').hidden = !isPoi;
     this.#f('edit-heading-row').hidden = isPoi;
+    this.#f('edit-comment-row').hidden = isPoi;
     if (isPoi) {
       this.#f('edit-alias').value = (item.aliases ?? []).join(', ');
       this.#f('edit-cat').value = item.category ?? '';
@@ -1441,6 +1449,7 @@ export class AdminPanel {
       this.#syncWardRow('edit');
     } else {
       this.#f('edit-heading').value = String(item.heading ?? 0);
+      this.#f('edit-comment').value = item.note ?? '';
       this.#f('edit-note').textContent = t('admin.edit.markerId', { id });
     }
     this.#f('edit-move').disabled = !this.#pose;
@@ -1499,6 +1508,7 @@ export class AdminPanel {
     } else {
       item = this.#draft.updateAnchor(id, {
         name: this.#f('edit-name').value.trim() || null,
+        note: this.#f('edit-comment').value.trim() || null,
         heading: Number(this.#f('edit-heading').value) || 0,
       });
     }

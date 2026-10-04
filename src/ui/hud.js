@@ -38,6 +38,10 @@ const CSS = `
 .hud-notices li { border: 2px solid var(--color-warn); border-radius: var(--radius); padding: 8px 12px; }
 .hud.hud-compact .hud-speech, .hud.hud-compact [data-f="nav-actions"] { display: none; }
 .hud.hud-compact { padding-top: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+.hud-floors { display: grid; gap: 6px; }
+.hud-floors[hidden], .hud-floor-list[hidden] { display: none; }
+.hud-floor-list p { margin: 0; }
+.hud.hud-compact [data-f="floors"] { display: none; }
 .hud-speech { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .hud-speech[hidden] { display: none; }
 .hud-speech label { display: inline-flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
@@ -54,6 +58,7 @@ export class Hud {
   #onCancel;
   #onToggleMute;
   #onRateChange;
+  #onFloorChange;
   #errorRetry = null;
 
   /**
@@ -65,6 +70,7 @@ export class Hud {
    * @param {() => void} [options.onRescanAcknowledged]
    * @param {() => void} [options.onToggleMute]
    * @param {(rate: number) => void} [options.onRateChange]
+   * @param {(floor: number) => void} [options.onFloorChange]  The user says they took stairs / a lift.
    */
   constructor(options = {}) {
     this.#doc = options.document ?? globalThis.document;
@@ -74,6 +80,7 @@ export class Hud {
     this.#onCancel = options.onCancel;
     this.#onToggleMute = options.onToggleMute;
     this.#onRateChange = options.onRateChange;
+    this.#onFloorChange = options.onFloorChange;
 
     ensureStyle('brains-hud-style', CSS, this.#doc);
     const el = this.#doc.createElement('section');
@@ -103,6 +110,13 @@ export class Hud {
         <button type="button" class="btn btn-primary" data-f="change"></button>
         <button type="button" class="btn" data-f="cancel" hidden></button>
       </div>
+      <div class="hud-floors" data-f="floors" hidden>
+        <button type="button" class="btn" data-f="floor-toggle" aria-expanded="false"></button>
+        <div class="hud-floor-list" data-f="floor-list" hidden>
+          <p data-f="floor-which"></p>
+          <div class="hud-actions" data-f="floor-buttons"></div>
+        </div>
+      </div>
       <div class="hud-speech" data-f="speech">
         <button type="button" class="btn" data-f="mute" aria-pressed="false"></button>
         <label>
@@ -124,6 +138,8 @@ export class Hud {
     this.#f('error-retry').textContent = t('hud.error.retry');
     this.#f('change').textContent = t('hud.changeDestination');
     this.#f('cancel').textContent = t('hud.cancel');
+    this.#f('floor-toggle').textContent = t('hud.floor.change');
+    this.#f('floor-which').textContent = t('hud.floor.which');
     this.#f('mute').textContent = t('speech.toggle');
     this.#f('rate-label').textContent = t('speech.rate');
     this.#f('speech-unsupported').textContent = t('speech.unsupported');
@@ -149,6 +165,11 @@ export class Hud {
     });
     this.#f('change').addEventListener('click', () => this.#onChangeDestination?.());
     this.#f('cancel').addEventListener('click', () => this.#onCancel?.());
+    this.#f('floor-toggle').addEventListener('click', () => {
+      const list = this.#f('floor-list');
+      list.hidden = !list.hidden;
+      this.#f('floor-toggle').setAttribute('aria-expanded', String(!list.hidden));
+    });
 
     this.setDestination(null);
   }
@@ -186,6 +207,33 @@ export class Hud {
       list.appendChild(li);
     }
     li.textContent = text;
+  }
+
+  /**
+   * Offer the "I changed floor" control (hidden for a one-floor venue). The
+   * user's current floor is listed but disabled; picking another reports it.
+   * @param {{ index: number, name: string }[]} floors
+   * @param {number | null} current
+   */
+  setFloors(floors, current) {
+    const wrap = this.#f('floors');
+    wrap.hidden = floors.length < 2;
+    const box = this.#f('floor-buttons');
+    box.textContent = '';
+    for (const fl of floors) {
+      const b = this.#doc.createElement('button');
+      b.type = 'button';
+      b.className = 'btn';
+      b.textContent = fl.name;
+      b.disabled = fl.index === current;
+      b.dataset.floor = String(fl.index);
+      b.addEventListener('click', () => {
+        this.#f('floor-list').hidden = true;
+        this.#f('floor-toggle').setAttribute('aria-expanded', 'false');
+        this.#onFloorChange?.(fl.index);
+      });
+      box.appendChild(b);
+    }
   }
 
   /** @param {string} id */

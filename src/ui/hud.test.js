@@ -213,3 +213,35 @@ function matchesTemplate(template, text) {
   );
   return re.test(text);
 }
+
+describe('Hud — "I changed floor"', () => {
+  const floors = [
+    { index: 0, name: 'Ground' },
+    { index: 1, name: 'Level 1' },
+  ];
+
+  it('is hidden for a one-floor venue', () => {
+    const hud = createHud();
+    hud.setFloors([floors[0]], 0);
+    expect(hud.el.querySelector('[data-f="floors"]').hidden).toBe(true);
+  });
+
+  it('lists the floors, disables the current one and reports the one picked', () => {
+    const onFloorChange = vi.fn();
+    const hud = createHud({ onFloorChange });
+    hud.setFloors(floors, 0);
+    const list = hud.el.querySelector('[data-f="floor-list"]');
+    expect(hud.el.querySelector('[data-f="floors"]').hidden).toBe(false);
+    expect(list.hidden).toBe(true);
+    hud.el.querySelector('[data-f="floor-toggle"]').click();
+    expect(list.hidden).toBe(false);
+    const buttons = [...list.querySelectorAll('button')];
+    expect(buttons.map((b) => [b.textContent, b.disabled])).toEqual([
+      ['Ground', true],
+      ['Level 1', false],
+    ]);
+    buttons[1].click();
+    expect(onFloorChange).toHaveBeenCalledWith(1);
+    expect(list.hidden).toBe(true);
+  });
+});

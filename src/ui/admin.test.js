@@ -789,7 +789,7 @@ describe('AdminPanel — tab row: only what a walk needs, the rest one tap away'
     const tabs = [
       ...admin.el.querySelectorAll('.admin-tabs > [data-tab], .admin-tabs > [data-f]'),
     ].map((el) => el.dataset.tab ?? el.dataset.f);
-    expect(tabs).toEqual(['routes', 'more-tools', 'export', 'undo', 'collapse', 'close']);
+    expect(tabs).toEqual(['routes', 'export', 'more-tools']);
     expect(admin.el.querySelector('[data-f="save"]')).toBeNull();
     // Redundant with autosave, but the method itself still works for anything that wants it.
     expect(() => admin.save()).not.toThrow();

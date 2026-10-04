@@ -383,6 +383,11 @@
           "description": "Label for staff and print sheets (e.g. \"Reception desk\"). Optional.",
           "type": "string"
         },
+        "note": {
+          "description": "A note written by staff, shown on screen to a visitor the moment they scan this marker (e.g. \"Lift 2 is out of service, use the stairs\"). Optional; at most 280 characters.",
+          "type": "string",
+          "maxLength": 280
+        },
         "code": {
           "description": "For a pre-printed QR sticker registered by scanning it: the exact text that code contains. The app then recognises that sticker as this marker. Optional; markers printed by the app do not need it.",
           "type": "string",

@@ -188,6 +188,7 @@ export async function bootApp(options = {}) {
     onCancel: () => clearDestination(),
     onToggleMute: () => speech.toggleMuted(),
     onRateChange: (rate) => speech.setRate(rate),
+    onFloorChange: (floor) => changeFloor(floor),
   });
   const speech = createSpeechGuide({
     liveRegion: hud.liveRegion,
@@ -500,6 +501,7 @@ export async function bootApp(options = {}) {
   let destination = null;
   let navigator = null;
   let lastPose = null;
+  let shownFloor = null;
 
   function setDestination(poi) {
     hud.clearError();
@@ -551,6 +553,44 @@ export async function bootApp(options = {}) {
   // matching) rather than the provider's raw one: the admin panel, so the
   // coordinates it records are the ones the visitor's map will show.
   const poseListeners = new Set();
+  /**
+   * The user says they took stairs or a lift to another floor. Nothing
+   * senses that, so this is the manual cue: put them at the nearest stairs /
+   * lift landing that connects to that floor (else straight above/below),
+   * and let dead reckoning carry on from there. A scan corrects it exactly.
+   */
+  function changeFloor(target) {
+    const from = lastPose;
+    const fl = venue.floorByIndex(target);
+    if (!from || !fl || from.floor === target) return;
+    let best = null;
+    for (const e of venue.graph.edges) {
+      const a = venue.nodeById(e.from);
+      const b = venue.nodeById(e.to);
+      if (!a || !b) continue;
+      for (const [near, far] of [
+        [a, b],
+        [b, a],
+      ]) {
+        if (near.floor !== from.floor || far.floor !== target) continue;
+        const d = Math.hypot(near.x - from.x, near.y - from.y);
+        if (!best || d < best.d) best = { d, far };
+      }
+    }
+    const spot = best?.far ?? { x: from.x, y: from.y, z: fl.elevation ?? from.z };
+    onFix({
+      x: spot.x,
+      y: spot.y,
+      z: spot.z ?? fl.elevation ?? 0,
+      floor: target,
+      heading: from.heading ?? 0,
+      confidence: 1,
+      timestamp: Date.now(),
+    });
+    floorplan.showFloor(target);
+    hud.showNotice('floor-change', t('hud.floor.now', { floor: fl.name }));
+  }
+
   function onPose(raw) {
     let pose = raw;
     hud.hideNotice('position'); // we have one now, however it was obtained
@@ -569,6 +609,13 @@ export async function bootApp(options = {}) {
       }
     }
     lastPose = pose;
+    if (pose.floor !== shownFloor) {
+      shownFloor = pose.floor;
+      hud.setFloors(
+        venue.floors.map((f) => ({ index: f.index, name: f.name })),
+        pose.floor
+      );
+    }
     if (returnToPlanAfterScan && pose.confidence >= 1) {
       returnToPlanAfterScan = false;
       showView('floorplan', { manual: true });
@@ -820,6 +867,13 @@ export async function bootApp(options = {}) {
   // is never in doubt: a recognised marker produces a pose (and the HUD's
   // position notice goes); anything else is named in the HUD. In admin
   // mode an unknown code may be a sticker being registered or surveyed.
+  // A staff-written note on a marker is shown the moment it is scanned.
+  const showMarkerNote = (anchorId) => {
+    const note = anchorId ? venue.anchorById(anchorId)?.note : null;
+    if (note) hud.showNotice('marker-note', t('scan.markerNote', { text: note }));
+    else hud.hideNotice('marker-note');
+  };
+
   const watchScans = (provider) => {
     scanOff?.();
     scanOff = null;
@@ -831,6 +885,8 @@ export async function bootApp(options = {}) {
         if (scan.result === 'accepted' || scan.result === 'repeat') {
           nav?.vibrate?.(15); // short, distinct from the longer "problem" buzz below
           hud.hideNotice('scan');
+          hud.hideNotice('floor-change');
+          showMarkerNote(scan.anchorId);
           return;
         }
         if (scan.result === 'unrecognised' && admin) {
@@ -877,6 +933,7 @@ export async function bootApp(options = {}) {
       onPose(pose);
       chain.active?.handleScan?.(`brains://${venue.id}/${anchor.id}`); // tell a QR provider too
       hud.showNotice('anchor', t('entry.anchorSeeded', { name: anchor.name ?? anchor.id }));
+      showMarkerNote(anchor.id);
     }
   }
 

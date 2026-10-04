@@ -199,6 +199,12 @@ export default {
     'admin.poi.name': 'Ingoa wāhi',
     'admin.poi.category': 'Kāwai',
     'admin.poi.aliases': 'Ētahi atu ingoa (wehea ki te piko)',
+    'admin.anchor.comment':
+      'Tuhipoka ka whakaatuhia ki ngā manuhiri ina matawai rātou i tēnei tohu (kāore e hiahiatia)',
+    'hud.floor.change': 'I hurihuri au i te papa',
+    'hud.floor.which': 'Kei tēhea papa koe inaianei?',
+    'hud.floor.now': 'Kei {floor} koe inaianei. Matawaihia he tohu hei whakapūmau i tō tūnga tika.',
+    'scan.markerNote': 'Tuhipoka mō tēnei tohu: {text}',
     'admin.anchor.heading': 'Anga i te matawai (tākiri)',
     'admin.undo': 'Wetekia',
     'admin.moreTools': 'Ētahi atu taputapu ▾',

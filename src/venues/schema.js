@@ -446,6 +446,9 @@ export function validateVenue(venue) {
       }
       c.isString(anchor.name, `${p}.name`, { required: false });
       c.isString(anchor.code, `${p}.code`, { required: false });
+      if (c.isString(anchor.note, `${p}.note`, { required: false }) && anchor.note.length > 280) {
+        c.add(`${p}.note`, `must be at most 280 characters, got ${anchor.note.length}`);
+      }
       if (
         c.isNumber(anchor.heading, `${p}.heading`, { required: false, min: 0 }) &&
         anchor.heading >= 360

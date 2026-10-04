@@ -197,3 +197,19 @@ describe('VenueDraft — editing existing places and markers', () => {
     expect(d.anchors.find((x) => x.id === 'a-entrance').heading).toBe(0);
   });
 });
+
+describe('VenueDraft — marker note', () => {
+  it('stores, clears and validates a visitor note on a marker', () => {
+    const d = new VenueDraft();
+    d.addNode({ x: 0, y: 0, name: 'Entrance' });
+    const a = d.addAnchor({ x: 1, y: 1, name: 'Lift lobby', note: 'Press 2 for the clinic' });
+    expect(a.note).toBe('Press 2 for the clinic');
+    expect(d.toJSON().anchors[0].note).toBe('Press 2 for the clinic');
+    expect(d.validate()).toEqual([]);
+    d.updateAnchor(a.id, { note: 'x'.repeat(281) });
+    expect(d.validate().map((p) => p.path)).toContain('anchors[0].note');
+    d.updateAnchor(a.id, { note: null });
+    expect(d.anchors[0].note).toBeUndefined();
+    expect(d.validate()).toEqual([]);
+  });
+});

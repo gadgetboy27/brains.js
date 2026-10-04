@@ -98,6 +98,7 @@ export class RouteWizard {
         <p class="wizard-live" data-f="start-status" role="status" aria-live="polite"></p>
         <div class="admin-actions">
           <button type="button" class="btn btn-primary btn-big" data-f="start-scan"></button>
+          <button type="button" class="btn btn-big" data-f="start-next"></button>
         </div>
         <details class="admin-plan">
           <summary data-f="advanced-label"></summary>
@@ -105,9 +106,6 @@ export class RouteWizard {
           <label><span data-f="start-existing-label"></span><select data-f="start-existing"><option value=""></option></select></label>
           <label><span data-f="start-name-label"></span><input data-f="start-name" list="admin-places" autocomplete="off" /></label>
           <label><span data-f="start-ward-label"></span><input type="number" min="1" max="99" inputmode="numeric" data-f="start-ward" /></label>
-          <div class="admin-actions">
-            <button type="button" class="btn" data-f="start-next"></button>
-          </div>
         </details>
       </section>
       <section data-step="walk" hidden>
@@ -115,6 +113,10 @@ export class RouteWizard {
         <p class="admin-status" data-f="walk-hint"></p>
         <div class="admin-actions">
           <button type="button" class="btn btn-primary btn-big" data-f="walk-scan"></button>
+        </div>
+        <div class="admin-actions">
+          <button type="button" class="btn" data-f="walk-turn"></button>
+          <button type="button" class="btn" data-f="walk-arrive"></button>
           <button type="button" class="btn" data-f="walk-cancel"></button>
         </div>
         <details class="admin-plan">
@@ -125,10 +127,6 @@ export class RouteWizard {
             <input type="checkbox" data-f="no-wheelchair" />
             <span data-f="no-wheelchair-label"></span>
           </label>
-          <div class="admin-actions">
-            <button type="button" class="btn" data-f="walk-turn"></button>
-            <button type="button" class="btn" data-f="walk-arrive"></button>
-          </div>
         </details>
       </section>
       <section data-step="finish" hidden>
