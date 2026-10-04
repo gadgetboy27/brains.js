@@ -45,16 +45,15 @@ const CSS = `
 .admin p { margin: 4px 0; }
 .admin-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: flex-start; }
 .admin-tabs .btn { min-height: 40px; padding: 6px 12px; }
-.admin-more-tools { position: relative; }
+.admin-more-tools { flex-basis: 100%; }
 .admin-more-tools summary { list-style: none; }
 .admin-more-tools summary::-webkit-details-marker { display: none; }
 .admin-more-tools summary { display: inline-flex; align-items: center; min-height: 40px; padding: 6px 12px;
   border: 2px solid var(--color-accent); border-radius: var(--radius); background: var(--color-surface-solid);
   color: var(--color-text); font: inherit; cursor: pointer; }
 .admin-more-tools[open] summary { background: var(--color-accent); color: var(--color-accent-contrast); }
-.admin-more-tools-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 1; display: flex; flex-direction: column;
-  gap: 6px; padding: 8px; min-width: 10em; border: 2px solid var(--color-accent); border-radius: var(--radius);
-  background: var(--color-surface-solid); }
+.admin-more-tools-list { position: static; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px;
+  border: 2px solid var(--color-accent); border-radius: var(--radius); background: var(--color-surface-solid); }
 .admin-more-tools-list .btn { width: 100%; text-align: left; }
 @media (max-width: 600px) {
   .admin { padding: 8px 10px; font-size: 14px; }
