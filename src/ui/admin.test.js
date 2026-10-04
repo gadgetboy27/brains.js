@@ -541,6 +541,17 @@ describe('AdminPanel — publishing', () => {
     );
   });
 
+  it('warns in the Publish tab when markers are stacked on one spot', () => {
+    const { admin, provider } = make({ fetch: vi.fn(), sessionStorage: session() });
+    const box = admin.el.querySelector('[data-f="stacked"]');
+    expect(box.hidden).toBe(true);
+    provider.emit(pose(40, 6));
+    admin.addAnchorHere();
+    admin.addAnchorHere();
+    expect(box.hidden).toBe(false);
+    expect(box.textContent).toContain('2 markers share the same spot');
+  });
+
   it('says so, and sends nothing, when nothing has been recorded on this phone', async () => {
     const fetch = vi.fn();
     const { admin, prompt, provider } = make({ fetch, sessionStorage: session() });

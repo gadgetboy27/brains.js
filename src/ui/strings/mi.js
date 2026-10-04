@@ -364,6 +364,21 @@ export default {
     'admin.survey.recorded': 'Kua hopukina a {name} — waehere {code}',
     'admin.survey.recordedNoName': 'Kua hopukina te waehere {code} ki tēnei wāhi',
     'admin.survey.known': 'Kua noho kē taua waehere hei {name}; kei reira koe ināianei.',
+    'admin.survey.noMovement':
+      'Kua tuhia — engari kāore koe i neke mai i te waehere whakamutunga, no reira kāore i whaia te hīkoi. Tirohia kua whakaaetia te urunga ki te nekeneke, ka hīkoi ki te whakapiri e whai ake.',
+    'admin.export.stacked':
+      'Whakatūpato: {count} ngā tohu kei te wāhi kotahi ({names}). Tērā pea kāore i whaia te hīkoi i waenga i a rātou (kua kati te urunga ki te nekeneke?). He hē ō rātou tūnga kia matawaihia anō, kia nekehia rānei.',
+    'hud.feedback.question': 'I tika te ara?',
+    'hud.feedback.yes': 'Āe',
+    'hud.feedback.mostly': 'Te nuinga',
+    'hud.feedback.no': 'Kāo',
+    'hud.feedback.blocked': 'I puritia, i katia rānei tētahi mea',
+    'hud.feedback.wrongFloor': 'I tukuna ahau ki te papa hē',
+    'hud.feedback.skip': 'Peke',
+    'hud.feedback.thanks': 'Ngā mihi — kua tiakina ki tēnei waea anake.',
+    'admin.export.answers': 'Tikiake ngā whakautu ({count})',
+    'admin.export.noAnswers': 'Kāore anō ngā whakautu taenga',
+    'admin.export.answersSaved': 'Kua tiakina a {name}.',
     'admin.survey.firstAtOrigin':
       'Kua hopukina te waehere tuatahi hei pūtake mahere (0, 0). Hīkoi ki te waehere e whai ake nei, ka matawai.',
     'admin.survey.count': '{count} waehere kua hopukina i tēnei rūri',

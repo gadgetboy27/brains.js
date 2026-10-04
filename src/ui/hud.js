@@ -38,6 +38,10 @@ const CSS = `
 .hud-notices li { border: 2px solid var(--color-warn); border-radius: var(--radius); padding: 8px 12px; }
 .hud.hud-compact .hud-speech, .hud.hud-compact [data-f="nav-actions"] { display: none; }
 .hud.hud-compact { padding-top: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+.hud-feedback { border: 2px solid var(--color-ok); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; }
+.hud-feedback[hidden], .hud-feedback p[hidden] { display: none; }
+.hud-feedback h3, .hud-feedback p { margin: 0; font-size: 1em; }
+.hud-check { display: flex; align-items: center; gap: 8px; min-height: var(--touch-target); }
 .hud-floors { display: grid; gap: 6px; }
 .hud-floors[hidden], .hud-floor-list[hidden] { display: none; }
 .hud-floor-list p { margin: 0; }
@@ -59,6 +63,8 @@ export class Hud {
   #onToggleMute;
   #onRateChange;
   #onFloorChange;
+  #onFeedback;
+  #feedbackDone = false;
   #errorRetry = null;
 
   /**
@@ -70,6 +76,7 @@ export class Hud {
    * @param {() => void} [options.onRescanAcknowledged]
    * @param {() => void} [options.onToggleMute]
    * @param {(rate: number) => void} [options.onRateChange]
+   * @param {(answers: { accuracy: 'yes' | 'mostly' | 'no', blocked: boolean, wrongFloor: boolean }) => void} [options.onFeedback]  Arrival answers; asked once per destination.
    * @param {(floor: number) => void} [options.onFloorChange]  The user says they took stairs / a lift.
    */
   constructor(options = {}) {
@@ -81,6 +88,7 @@ export class Hud {
     this.#onToggleMute = options.onToggleMute;
     this.#onRateChange = options.onRateChange;
     this.#onFloorChange = options.onFloorChange;
+    this.#onFeedback = options.onFeedback;
 
     ensureStyle('brains-hud-style', CSS, this.#doc);
     const el = this.#doc.createElement('section');
@@ -110,6 +118,18 @@ export class Hud {
         <button type="button" class="btn btn-primary" data-f="change"></button>
         <button type="button" class="btn" data-f="cancel" hidden></button>
       </div>
+      <div class="hud-feedback" data-f="feedback" hidden>
+        <h3 data-f="feedback-question"></h3>
+        <label class="hud-check"><input type="checkbox" data-f="feedback-blocked" /> <span data-f="feedback-blocked-label"></span></label>
+        <label class="hud-check"><input type="checkbox" data-f="feedback-floor" /> <span data-f="feedback-floor-label"></span></label>
+        <div class="hud-actions" data-f="feedback-buttons">
+          <button type="button" class="btn btn-primary" data-answer="yes"></button>
+          <button type="button" class="btn" data-answer="mostly"></button>
+          <button type="button" class="btn" data-answer="no"></button>
+          <button type="button" class="btn" data-f="feedback-skip"></button>
+        </div>
+        <p data-f="feedback-thanks" hidden></p>
+      </div>
       <div class="hud-floors" data-f="floors" hidden>
         <button type="button" class="btn" data-f="floor-toggle" aria-expanded="false"></button>
         <div class="hud-floor-list" data-f="floor-list" hidden>
@@ -138,6 +158,19 @@ export class Hud {
     this.#f('error-retry').textContent = t('hud.error.retry');
     this.#f('change').textContent = t('hud.changeDestination');
     this.#f('cancel').textContent = t('hud.cancel');
+    this.#f('feedback-question').textContent = t('hud.feedback.question');
+    this.#f('feedback-blocked-label').textContent = t('hud.feedback.blocked');
+    this.#f('feedback-floor-label').textContent = t('hud.feedback.wrongFloor');
+    this.#f('feedback-skip').textContent = t('hud.feedback.skip');
+    this.#f('feedback-thanks').textContent = t('hud.feedback.thanks');
+    for (const b of this.#el.querySelectorAll('[data-answer]')) {
+      b.textContent = t(`hud.feedback.${b.dataset.answer}`);
+      b.addEventListener('click', () => this.#answerFeedback(b.dataset.answer));
+    }
+    this.#f('feedback-skip').addEventListener('click', () => {
+      this.#feedbackDone = true;
+      this.#f('feedback').hidden = true;
+    });
     this.#f('floor-toggle').textContent = t('hud.floor.change');
     this.#f('floor-which').textContent = t('hud.floor.which');
     this.#f('mute').textContent = t('speech.toggle');
@@ -275,6 +308,10 @@ export class Hud {
    */
   setDestination(poi) {
     this.#destination = poi;
+    this.#feedbackDone = false;
+    this.#f('feedback').hidden = true;
+    this.#f('feedback-buttons').hidden = false;
+    this.#f('feedback-thanks').hidden = true;
     this.#el.classList.remove('hud-arrived');
     if (!poi) {
       this.#f('destination').textContent = t('hud.noDestination');
@@ -335,7 +372,21 @@ export class Hud {
       this.#f('destination').textContent = t('hud.arrived', { name: this.#destination.name });
       this.#f('distance').textContent = t('hud.arrivedShort');
       this.#f('step').hidden = true;
+      if (this.#onFeedback && !this.#feedbackDone) {
+        this.#feedbackDone = true; // ask once per destination
+        this.#f('feedback').hidden = false;
+      }
     }
+  }
+
+  #answerFeedback(accuracy) {
+    this.#onFeedback?.({
+      accuracy,
+      blocked: this.#f('feedback-blocked').checked,
+      wrongFloor: this.#f('feedback-floor').checked,
+    });
+    this.#f('feedback-buttons').hidden = true;
+    this.#f('feedback-thanks').hidden = false;
   }
 
   // ------------------------------------------------------------------ rescan

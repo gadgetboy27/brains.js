@@ -245,3 +245,42 @@ describe('Hud — "I changed floor"', () => {
     expect(list.hidden).toBe(true);
   });
 });
+
+describe('Hud — arrival feedback', () => {
+  const dest = { id: 'p-x', name: 'Pharmacy' };
+
+  it('asks once on arrival, reports the answer and thanks', () => {
+    const onFeedback = vi.fn();
+    const hud = createHud({ onFeedback });
+    const box = hud.el.querySelector('[data-f="feedback"]');
+    hud.setDestination(dest);
+    expect(box.hidden).toBe(true);
+    hud.setArrived(true);
+    expect(box.hidden).toBe(false);
+    hud.el.querySelector('[data-f="feedback-blocked"]').checked = true;
+    hud.el.querySelector('[data-answer="mostly"]').click();
+    expect(onFeedback).toHaveBeenCalledWith({
+      accuracy: 'mostly',
+      blocked: true,
+      wrongFloor: false,
+    });
+    expect(hud.el.querySelector('[data-f="feedback-thanks"]').hidden).toBe(false);
+    hud.setArrived(true); // repeated pose updates do not re-ask
+    hud.el.querySelector('[data-f="feedback-skip"]').click();
+    expect(onFeedback).toHaveBeenCalledTimes(1);
+  });
+
+  it('skip records nothing and a new destination asks again', () => {
+    const onFeedback = vi.fn();
+    const hud = createHud({ onFeedback });
+    const box = hud.el.querySelector('[data-f="feedback"]');
+    hud.setDestination(dest);
+    hud.setArrived(true);
+    hud.el.querySelector('[data-f="feedback-skip"]').click();
+    expect(box.hidden).toBe(true);
+    expect(onFeedback).not.toHaveBeenCalled();
+    hud.setDestination(dest);
+    hud.setArrived(true);
+    expect(box.hidden).toBe(false);
+  });
+});

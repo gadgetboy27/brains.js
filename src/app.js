@@ -51,6 +51,7 @@ import { createScanOverlay } from './ui/scan-overlay.js';
 import { MOTION_PERMISSION_KEY, createFirstRun, needsFirstRun } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
+import { recordFeedback } from './core/feedback.js';
 import { createHud } from './ui/hud.js';
 import { createSpeechGuide } from './ui/speech.js';
 import {
@@ -189,6 +190,13 @@ export async function bootApp(options = {}) {
     onToggleMute: () => speech.toggleMuted(),
     onRateChange: (rate) => speech.setRate(rate),
     onFloorChange: (floor) => changeFloor(floor),
+    onFeedback: (answers) =>
+      recordFeedback(storage, {
+        venueId: venue.id,
+        from: routeFromId ?? undefined,
+        to: destination?.id,
+        answers: { ...answers, arrived: true },
+      }),
   });
   const speech = createSpeechGuide({
     liveRegion: hud.liveRegion,
@@ -502,6 +510,7 @@ export async function bootApp(options = {}) {
   let navigator = null;
   let lastPose = null;
   let shownFloor = null;
+  let routeFromId = null; // where the current route started, for arrival feedback
 
   function setDestination(poi) {
     hud.clearError();
@@ -520,6 +529,7 @@ export async function bootApp(options = {}) {
       return false;
     }
     destination = poi;
+    routeFromId = from.id;
     navigator = createNavigator(route);
     hud.setDestination(poi);
     // Seed progress from the current pose, or from the entrance when unknown, so

@@ -343,6 +343,21 @@ export default {
     'admin.survey.recorded': 'Recorded {name} — code {code}',
     'admin.survey.recordedNoName': 'Recorded code {code} at this spot',
     'admin.survey.known': 'That code is already {name}; your position is now there.',
+    'admin.survey.noMovement':
+      'Recorded — but you have not moved since the last code, so the walk was not tracked. Check that motion access is allowed, then walk to the next sticker.',
+    'admin.export.stacked':
+      'Warning: {count} markers share the same spot ({names}). The walk between them was probably not tracked (motion access off?). Their positions are wrong until each is re-scanned or moved.',
+    'hud.feedback.question': 'Was the route accurate?',
+    'hud.feedback.yes': 'Yes',
+    'hud.feedback.mostly': 'Mostly',
+    'hud.feedback.no': 'No',
+    'hud.feedback.blocked': 'Something was blocked or closed',
+    'hud.feedback.wrongFloor': 'It put me on the wrong floor',
+    'hud.feedback.skip': 'Skip',
+    'hud.feedback.thanks': 'Thanks — saved on this phone only.',
+    'admin.export.answers': 'Download answers ({count})',
+    'admin.export.noAnswers': 'No arrival answers yet',
+    'admin.export.answersSaved': 'Saved {name}.',
     'admin.survey.firstAtOrigin':
       'First code recorded as the map origin (0, 0). Walk to the next one and scan it.',
     'admin.survey.count': '{count} codes recorded on this survey',

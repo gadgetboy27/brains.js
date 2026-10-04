@@ -14,6 +14,14 @@ visible; while walking, **Scan code to finish here**, **Mark a turn here**,
 **I have arrived** and **Cancel this route** are too. There is no separate Save button — every change autosaves the
 instant it happens (see "Is it actually recording anything?" below).
 
+## Arrival answers (on-device only)
+
+When a visitor arrives, the HUD asks "Was the route accurate?" (Yes / Mostly /
+No, plus "something was blocked or closed" and "wrong floor"). The answer is a
+small bit code (`src/core/feedback.js`) saved in that phone's local storage and
+**not sent anywhere**. From a test phone, open **Publish → Download answers**
+to save them as a file with the readable fields.
+
 ## Is it actually recording anything?
 
 Every scan, tap and auto-dropped point writes straight into the browser's

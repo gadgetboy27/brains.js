@@ -31,6 +31,7 @@ advertising.
 | Settings: language, high-contrast mode, voice on/off and speed | Remembering preferences                                  | Yes, in the browser's local storage on the phone                                              | Until the visitor clears browser data                     |
 | "Camera permission granted" flag                               | Not asking again on later visits                         | Yes, local storage                                                                            | Until browser data is cleared                             |
 | A copy of the venue map and the venue's runtime notices        | So the floor plan still works if the network drops       | Yes, local storage                                                                            | Until browser data is cleared or replaced by a newer copy |
+| Arrival answers ("Was the route accurate?", blocked, wrong floor) | Letting venue staff see how well routes work, from a test phone | Yes, local storage on the phone only — a small code, the start and destination ids and the date; no name, device id or position. Never sent anywhere | Until browser data is cleared |
 | Accuracy-test logs (staff testing mode only, `?harness=1`)     | Measuring positioning quality during commissioning walks | Only in memory unless a tester presses "Download log", which saves a file to their own device | At the tester's discretion                                |
 
 None of this is sent to the venue, the hospital, or the developers.

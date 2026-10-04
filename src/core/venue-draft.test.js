@@ -213,3 +213,16 @@ describe('VenueDraft — marker note', () => {
     expect(d.validate()).toEqual([]);
   });
 });
+
+describe('VenueDraft — stackedMarkers', () => {
+  it('groups markers on the same spot and ignores other floors and distant ones', () => {
+    const d = new VenueDraft();
+    d.addNode({ x: 0, y: 0, name: 'Entrance' });
+    d.addAnchor({ x: 0, y: 0, name: 'A' });
+    d.addAnchor({ x: 0.2, y: 0.1, name: 'B' });
+    d.addAnchor({ x: 12, y: 3, name: 'C' });
+    expect(d.stackedMarkers().map((g) => g.map((a) => a.name))).toEqual([['A', 'B']]);
+    d.addAnchor({ x: 12, y: 3, name: 'D' });
+    expect(d.stackedMarkers()).toHaveLength(2);
+  });
+});

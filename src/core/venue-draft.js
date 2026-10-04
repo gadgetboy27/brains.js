@@ -427,6 +427,25 @@ export class VenueDraft {
     return validateVenue(this.toJSON());
   }
 
+  /**
+   * Groups of markers sitting on (almost) the same spot — the signature of a
+   * walk that was never tracked (motion access off), where every new code
+   * lands where the last one was. Markers on different floors don't count.
+   * @param {number} [withinM]
+   * @returns {object[][]}
+   */
+  stackedMarkers(withinM = 0.5) {
+    const groups = [];
+    for (const a of this.anchors) {
+      const g = groups.find(
+        (grp) => grp[0].floor === a.floor && Math.hypot(grp[0].x - a.x, grp[0].y - a.y) <= withinM
+      );
+      if (g) g.push(a);
+      else groups.push([a]);
+    }
+    return groups.filter((g) => g.length > 1);
+  }
+
   get summary() {
     return {
       floors: this.floors.length,

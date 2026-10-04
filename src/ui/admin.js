@@ -23,6 +23,7 @@
 
 import QRCode from 'qrcode';
 
+import { feedbackRows } from '../core/feedback.js';
 import { VenueDraft } from '../core/venue-draft.js';
 import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
 import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/survey-plan.js';
@@ -301,10 +302,12 @@ export class AdminPanel {
         <p data-f="summary"></p>
         <p data-f="valid"></p>
         <ul class="problems" data-f="problems"></ul>
+        <p class="admin-status" data-f="stacked" role="alert" hidden></p>
         <div class="admin-actions">
           <button type="button" class="btn btn-primary" data-f="publish"></button>
           <button type="button" class="btn" data-f="download"></button>
           <button type="button" class="btn" data-f="copy"></button>
+          <button type="button" class="btn" data-f="answers"></button>
         </div>
         <details class="admin-plan" data-f="raw-json-box">
           <summary data-f="raw-json-summary"></summary>
@@ -516,6 +519,7 @@ export class AdminPanel {
     this.#f('plan-poi').addEventListener('click', () => this.#openPoiForm(this.#selected));
     this.#f('plan-remove').addEventListener('click', () => this.removeSelected());
     this.#f('publish').addEventListener('click', () => this.publish());
+    this.#f('answers').addEventListener('click', () => this.downloadAnswers());
     this.#f('download').addEventListener('click', () => this.download());
     this.#f('copy').addEventListener('click', () => this.copy());
     this.#f('discard').addEventListener('click', () => this.discard());
@@ -952,6 +956,14 @@ export class AdminPanel {
       this.#surveyLastNode = null; // do not link across floors by walking
     }
     const pose = this.#pose;
+    const prevNode = this.#surveyLastNode
+      ? this.#draft.nodes.find((n) => n.id === this.#surveyLastNode)
+      : null;
+    const noMovement =
+      !firstAtOrigin &&
+      prevNode &&
+      prevNode.floor === pose.floor &&
+      Math.hypot(prevNode.x - pose.x, prevNode.y - pose.y) < 0.5;
     const nameField = this.#f('survey-name');
     // A name filled in from the list only counts if the scanned code is that
     // listed code; a typed name always wins.
@@ -995,11 +1007,13 @@ export class AdminPanel {
     li.textContent = `${name || anchor.id} · ${text}`;
     this.#f('survey-list').prepend(li);
     this.#surveyToast(
-      firstAtOrigin
-        ? t('admin.survey.firstAtOrigin')
-        : name
-          ? t('admin.survey.recorded', { name, code: text })
-          : t('admin.survey.recordedNoName', { code: text })
+      noMovement
+        ? t('admin.survey.noMovement')
+        : firstAtOrigin
+          ? t('admin.survey.firstAtOrigin')
+          : name
+            ? t('admin.survey.recorded', { name, code: text })
+            : t('admin.survey.recordedNoName', { code: text })
     );
     this.#f('survey-name').value = '';
     this.#f('survey-ward').value = '';
@@ -1580,6 +1594,22 @@ export class AdminPanel {
     // Download is never blocked: getting a broken draft out to look at what's
     // wrong with it is exactly what it's for. Publishing broken JSON to
     // every visitor's copy is the thing actually worth stopping.
+    const stacked = this.#draft.stackedMarkers();
+    this.#f('stacked').hidden = stacked.length === 0;
+    this.#f('stacked').textContent = stacked.length
+      ? t('admin.export.stacked', {
+          count: stacked.reduce((n, g) => n + g.length, 0),
+          names: stacked
+            .flat()
+            .map((a) => a.name ?? a.id)
+            .join(', '),
+        })
+      : '';
+    const answers = feedbackRows(this.#opts.storage, this.#draft.id);
+    this.#f('answers').textContent = answers.length
+      ? t('admin.export.answers', { count: answers.length })
+      : t('admin.export.noAnswers');
+    this.#f('answers').disabled = answers.length === 0;
     this.#f('publish').disabled = problems.length > 0;
     // A plain, always-visible copy of the same JSON: no download, share
     // sheet or clipboard permission involved, so it works even when those
@@ -1773,6 +1803,17 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     this.#updateSaved();
     this.#toast(t('admin.export.downloaded', { name }));
     return name;
+  }
+
+  /** Save the arrival answers kept on this phone as a file (staff, from a test phone). */
+  async downloadAnswers() {
+    const rows = feedbackRows(this.#opts.storage, this.#draft.id);
+    if (rows.length === 0) return null;
+    const stamp = this.#exportFilename().replace(/\.venue\.json$/, '.answers.json');
+    const ok = await this.#opts.download(stamp, `${JSON.stringify(rows, null, 2)}\n`);
+    if (ok === false) return null;
+    this.#toast(t('admin.export.answersSaved', { name: stamp }));
+    return stamp;
   }
 
   #exportFilename() {
