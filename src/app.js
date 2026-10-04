@@ -96,8 +96,8 @@ export function readConfig({
   const view = q.get('view') ?? 'auto';
   // Default venue id: the bundled demo, so the deployed site still loads a
   // *published* version of it (admin "Publish") when one exists.
-  const venueId = q.get('v') ?? env.DEFAULT_VENUE_ID ?? null;
-  const base = env.VENUE_BASE_URL ?? '/venues/';
+  const venueId = q.get('v') || env.DEFAULT_VENUE_ID || null; // '' (an empty .env line) counts as unset
+  const base = env.VENUE_BASE_URL || '/venues/'; // an empty VENUE_BASE_URL= line must not become '/'
   const venueUrl =
     q.get('venue') ??
     (venueId && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(venueId)

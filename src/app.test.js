@@ -67,6 +67,13 @@ afterEach(() => {
 });
 
 describe('readConfig', () => {
+  it('treats empty .env values as unset (VENUE_BASE_URL= must not become "/")', () => {
+    expect(
+      readConfig({ search: '?v=demo', env: { VENUE_BASE_URL: '', DEFAULT_VENUE_ID: '' } }).venueUrl
+    ).toBe('/venues/demo/venue.json');
+    expect(readConfig({ search: '', env: { DEFAULT_VENUE_ID: '' } }).venueUrl).toBeNull();
+  });
+
   it('reads query, then env, then defaults', () => {
     expect(readConfig({ search: '', env: {} })).toEqual({
       venueUrl: null,
