@@ -67,6 +67,7 @@ export class Hud {
   #onRateChange;
   #onFloorChange;
   #onFeedback;
+  #resize = null;
   #feedbackDone = false;
   #errorRetry = null;
 
@@ -153,6 +154,14 @@ export class Hud {
     this.#el = el;
     this.#f = (name) => el.querySelector(`[data-f="${name}"]`);
     mount.appendChild(el);
+    // Let other fixed panels (the admin drawer) stop above this strip.
+    const root = this.#doc.documentElement;
+    const publishHeight = () => root?.style.setProperty('--hud-h', `${el.offsetHeight}px`);
+    const RO = this.#doc.defaultView?.ResizeObserver;
+    if (RO) {
+      this.#resize = new RO(publishHeight);
+      this.#resize.observe(el);
+    }
 
     this.#f('rescan-title').textContent = t('hud.rescan.title');
     this.#f('rescan-body').textContent = t('hud.rescan.body');
@@ -450,6 +459,8 @@ export class Hud {
   }
 
   destroy() {
+    this.#resize?.disconnect();
+    this.#doc.documentElement?.style.removeProperty('--hud-h');
     this.#el.remove();
   }
 }

@@ -33,7 +33,7 @@ import { createRouteWizard } from './route-wizard.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
 const CSS = `
-.admin { position: fixed; top: calc(56px + env(safe-area-inset-top)); bottom: 0; left: 0; width: min(88vw, 400px); z-index: 23; overflow: auto;
+.admin { position: fixed; top: calc(56px + env(safe-area-inset-top)); bottom: var(--hud-h, 0px); left: 0; width: min(88vw, 400px); z-index: 23; overflow: auto;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-radius: 0 var(--radius) var(--radius) 0; background: var(--color-surface); color: var(--color-text);
   font-family: var(--font); font-size: 15px; border: 2px solid var(--color-accent); border-left: 0; box-shadow: 4px 0 16px rgba(0,0,0,0.45);
   transition: transform 0.18s ease; }
