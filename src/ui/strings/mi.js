@@ -369,6 +369,13 @@ export default {
       'Kua tuhia — engari kāore koe i neke mai i te waehere whakamutunga, no reira kāore i whaia te hīkoi. Tirohia kua whakaaetia te urunga ki te nekeneke, ka hīkoi ki te whakapiri e whai ake.',
     'admin.export.stacked':
       'Whakatūpato: {count} ngā tohu kei te wāhi kotahi ({names}). Tērā pea kāore i whaia te hīkoi i waenga i a rātou (kua kati te urunga ki te nekeneke?). He hē ō rātou tūnga kia matawaihia anō, kia nekehia rānei.',
+    'ready.here': 'te wāhi e tū ana koe',
+    'ready.title': 'Kua rite?',
+    'ready.route': '{from} → {to}',
+    'ready.detail': 'Tata {distance} · {minutes} meneti hīkoi',
+    'ready.via': 'mā {via}',
+    'ready.start': 'Tīmata',
+    'ready.change': 'Kōwhiria tētahi atu wāhi',
     'hud.feedback.question': 'I tika te ara?',
     'hud.feedback.yes': 'Āe',
     'hud.feedback.mostly': 'Te nuinga',

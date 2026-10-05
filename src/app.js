@@ -53,11 +53,13 @@ import {
   armMotionReconfirm,
   createFirstRun,
   needsFirstRun,
+  requestMotionPermission,
 } from './ui/first-run.js';
 import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
 import { recordFeedback } from './core/feedback.js';
 import { createHud } from './ui/hud.js';
+import { createReadyCard } from './ui/ready-card.js';
 import { createSpeechGuide } from './ui/speech.js';
 import {
   detectLanguage,
@@ -376,9 +378,27 @@ export async function bootApp(options = {}) {
     },
     onSelect: (poi) => {
       picker.close();
-      setDestination(poi);
+      if (config.admin)
+        setDestination(poi); // staff are building, not navigating
+      else previewDestination(poi);
     },
     onClose: () => picker.close(),
+  });
+
+  // Choosing a place shows a "Ready?" card; its Start button begins the route.
+  const ready = createReadyCard({
+    document: doc,
+    mount: root,
+    onStart: (poi) => {
+      // The tap that starts the route is the gesture iOS needs for motion data.
+      requestMotionPermission()
+        .then((r) => {
+          if (r === 'denied') hud.showNotice('motion', t('notice.motionDenied'));
+        })
+        .catch(() => {});
+      if (setDestination(poi) && cameraInChain && permissions.camera !== false) showView('ar');
+    },
+    onChange: () => picker.open(),
   });
 
   // View switcher
@@ -551,6 +571,25 @@ export async function bootApp(options = {}) {
     if (!lastPose) floorplan.showFloor(from.floor); // no position: show where the route starts
     if (lastPose) onPose(lastPose);
     return true;
+  }
+
+  function previewDestination(poi) {
+    const target = venue.nodeById(poi.node);
+    const from = lastPose ? nearestNode(venue, lastPose) : entranceNode(venue);
+    const route = target
+      ? findRoute(venue.graph, from.id, target.id, { ...config.filter, timeOfDay: new Date() })
+      : { found: false };
+    if (!route.found) {
+      setDestination(poi); // shows the usual "no route" explanation
+      return;
+    }
+    const fromPoi = venue.pois.find((p) => p.node === from.id);
+    ready.show({
+      poi,
+      fromName: fromPoi?.name ?? from.name ?? t('ready.here'),
+      distanceM: route.distance,
+      viaTypes: route.edges.map((e) => e.type ?? 'walk'),
+    });
   }
 
   function clearDestination() {
@@ -1061,6 +1100,7 @@ export async function bootApp(options = {}) {
       arScene.dispose();
       floorplan.destroy();
       picker.destroy();
+      ready.destroy();
       hud.destroy();
       root.textContent = '';
     },

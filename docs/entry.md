@@ -32,6 +32,14 @@ Writes one SVG per anchor (error-correction level H, so a partly damaged
 print still scans) and `index.html`, a print sheet with one code per page.
 Use the final domain: codes cannot be changed once printed.
 
+## Choosing a place and starting
+
+After the destination list, a **Ready?** card shows the route ("Main entrance
+→ Radiology", distance, walking time, and "via lift" when the route uses one).
+Its **Start** button begins the route, asks iOS for motion access (it needs a
+tap) and opens the camera view with the arrow. **Choose another place** goes
+back to the list. Staff in admin mode skip the card.
+
 ## First run
 
 The first time the app starts on a phone it shows a short screen before

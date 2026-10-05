@@ -348,6 +348,13 @@ export default {
       'Recorded — but you have not moved since the last code, so the walk was not tracked. Check that motion access is allowed, then walk to the next sticker.',
     'admin.export.stacked':
       'Warning: {count} markers share the same spot ({names}). The walk between them was probably not tracked (motion access off?). Their positions are wrong until each is re-scanned or moved.',
+    'ready.here': 'where you are',
+    'ready.title': 'Ready?',
+    'ready.route': '{from} → {to}',
+    'ready.detail': 'About {distance} · {minutes} min walk',
+    'ready.via': 'via {via}',
+    'ready.start': 'Start',
+    'ready.change': 'Choose another place',
     'hud.feedback.question': 'Was the route accurate?',
     'hud.feedback.yes': 'Yes',
     'hud.feedback.mostly': 'Mostly',

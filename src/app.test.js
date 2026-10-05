@@ -182,6 +182,13 @@ describe('bootApp', () => {
     app.picker.setQuery('clinic b');
     app.picker.el.querySelector('[role="option"]').click();
     expect(app.picker.isOpen).toBe(false);
+    // The pick shows the Ready card; the route starts on its Start button.
+    expect(app.hud.text.destination).toBe('To Clinic A');
+    const card = document.querySelector('.ready');
+    expect(card.hidden).toBe(false);
+    expect(card.textContent).toContain('Clinic B');
+    card.querySelector('[data-f="start"]').click();
+    expect(card.hidden).toBe(true);
     expect(app.hud.text.destination).toBe('To Clinic B');
 
     app.clearDestination();

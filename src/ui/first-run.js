@@ -222,6 +222,9 @@ export function armMotionReconfirm({ document: doc, requestMotion = defaultReque
   return () => doc.removeEventListener('click', handler, { capture: true });
 }
 
+/** Ask for motion/orientation access now (call from a tap). Resolves 'granted' or 'denied'. */
+export const requestMotionPermission = () => defaultRequestMotion();
+
 async function defaultRequestMotion() {
   const M = globalThis.DeviceMotionEvent;
   const O = globalThis.DeviceOrientationEvent;
