@@ -33,6 +33,9 @@ import { createRouteWizard } from './route-wizard.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
 const CSS = `
+.admin, .admin * { box-sizing: border-box; }
+.admin input, .admin select, .admin textarea { max-width: 100%; }
+.admin { overflow-x: hidden; }
 .admin { position: fixed; top: calc(68px + env(safe-area-inset-top)); bottom: var(--hud-h, 0px); left: 0; width: min(88vw, 400px); z-index: 23; overflow: auto;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-radius: 0 var(--radius) var(--radius) 0; background: var(--color-surface); color: var(--color-text);
   font-family: var(--font); font-size: 15px; border: 2px solid var(--color-accent); border-left: 0; box-shadow: 4px 0 16px rgba(0,0,0,0.45);
@@ -56,8 +59,9 @@ const CSS = `
   border: 2px solid var(--color-accent); border-radius: var(--radius); background: var(--color-surface-solid); }
 .admin-more-tools-list .btn { width: 100%; text-align: left; }
 @media (max-width: 600px) {
-  .admin { width: 100%; padding: 8px 12px; font-size: 14px; border-radius: var(--radius) var(--radius) 0 0; border-left: 2px solid var(--color-accent);
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.45); }
+  .admin { top: auto; bottom: var(--hud-h, 0px); left: 0; right: 0; width: auto; max-height: 56vh; padding: 8px 12px; font-size: 14px;
+    border-radius: var(--radius) var(--radius) 0 0; border-left: 2px solid var(--color-accent); box-shadow: 0 -4px 16px rgba(0,0,0,0.45); }
+  .admin.admin-collapsed { transform: translateY(105%); }
   .admin h2, .admin > p[data-f="hint"] { display: none; }
   .admin-tabs .btn { min-height: 36px; padding: 4px 10px; font-size: 14px; }
 }
