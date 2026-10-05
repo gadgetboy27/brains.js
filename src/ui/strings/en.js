@@ -305,8 +305,7 @@ export default {
     'admin.wizard.start.noPose': 'Stand where this route starts and scan the code there.',
     'admin.wizard.start.scan': 'Scan start code',
     'admin.wizard.start.ready': 'Scanning will name and start the route automatically.',
-    'admin.wizard.start.readyApprox':
-      'Position set from the plan (approximate) — scan a code for an exact start, or open Advanced to start walking anyway.',
+    'admin.wizard.start.readyApprox': 'Start set from the plan (approximate).',
     'admin.wizard.walk.status': '{distance} m · {points} points · {scans} codes',
     'admin.wizard.walk.hint':
       'Walk to the next place, then scan the code there — that finishes this route and starts the next one.',

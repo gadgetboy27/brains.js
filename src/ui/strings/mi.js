@@ -324,8 +324,7 @@ export default {
       'E tū ana koe ki te tīmatanga o tēnei ara, matawaia te waehere i reira.',
     'admin.wizard.start.scan': 'Matawaia te waehere tīmata',
     'admin.wizard.start.ready': 'Mā te matawai e whakaingoa, e tīmata hoki te ara.',
-    'admin.wizard.start.readyApprox':
-      'Kua tautuhia te tūnga mai i te mahere (tata) — matawaia he waehere kia tika ai te tīmatanga, whakatuwheratia rānei Kōwhiringa anō hei tīmata noa te hīkoi.',
+    'admin.wizard.start.readyApprox': 'Kua whakaritea te tīmatanga mai i te mahere (āhua tata).',
     'admin.wizard.walk.status': '{distance} m · {points} tohu · {scans} waehere',
     'admin.wizard.walk.hint':
       'Hīkoi ki te wāhi e whai ake nei, kātahi ka matawai i te waehere i reira — ka mutu tēnei ara, ka tīmata te ara e whai ake nei.',
