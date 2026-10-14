@@ -413,3 +413,111 @@ describe('PoseFusion — attach()', () => {
     expect(handlers.size).toBe(0);
   });
 });
+
+describe('PoseFusion — gyroscope blended with the compass', () => {
+  // Phone flat, face up: gravity along +z, and an anticlockwise turn (seen
+  // from above) is a positive rotation about z.
+  const FLAT = { x: 0, y: 0, z: 9.81 };
+  const motion = (alpha, g = FLAT, extra = {}) => ({
+    rotationRate: { alpha, beta: 0, gamma: 0, ...extra },
+    accelerationIncludingGravity: g,
+  });
+  const compass = (deg) => ({ webkitCompassHeading: deg });
+
+  /** A fusion with the compass seeded at `deg` and the gyro primed. */
+  function ready(deg = 0, options = {}) {
+    const clock = fakeClock();
+    const f = new PoseFusion({ now: clock.now, ...options });
+    f.applyFix(fix(clock));
+    f.handleMotion(motion(0));
+    clock.advance(100);
+    f.handleMotion(motion(0));
+    f.handleOrientation(compass(deg));
+    return { f, clock };
+  }
+
+  /** Run `ms` of motion events at 10 Hz with the given turn rate, optionally with compass readings. */
+  function run(f, clock, ms, alpha, { compassDeg = null, g = FLAT } = {}) {
+    for (let t = 0; t < ms; t += 100) {
+      clock.advance(100);
+      f.handleMotion(motion(alpha, g));
+      if (compassDeg !== null) f.handleOrientation(compass(compassDeg(t)));
+    }
+  }
+
+  it('carries the heading through a turn when the compass says nothing', () => {
+    const { f, clock } = ready(0);
+    run(f, clock, 1000, -90); // clockwise at 90°/s for 1 s
+    expect(f.getPose().heading).toBeCloseTo(90, 0);
+  });
+
+  it('works with the phone held upright (turn rate about the vertical, not about z)', () => {
+    const { f, clock } = ready(0);
+    const upright = { x: 0, y: 9.81, z: 0 };
+    run(f, clock, 1000, 0, { g: upright }); // lift the phone up first
+    // Upright, screen facing the user: gravity along +y, and the vertical
+    // turn is now a rotation about the device's y axis (gamma).
+    for (let i = 0; i < 10; i += 1) {
+      clock.advance(100);
+      f.handleMotion(motion(0, upright, { gamma: -90 }));
+    }
+    expect(f.getPose().heading).toBeCloseTo(90, 0);
+  });
+
+  it('shrugs off a single wild compass reading', () => {
+    const { f, clock } = ready(0);
+    run(f, clock, 500, 0);
+    f.handleOrientation(compass(120)); // a lift motor goes past
+    expect(f.getPose().heading).toBeCloseTo(0, 0);
+  });
+
+  it('but believes a compass that keeps disagreeing', () => {
+    const { f, clock } = ready(0);
+    run(f, clock, 3500, 0, { compassDeg: () => 120 });
+    expect(f.getPose().heading).toBeCloseTo(120, 0);
+  });
+
+  it('does not let gyro drift accumulate: the compass holds it near the truth', () => {
+    const { f, clock } = ready(0);
+    // A gyro that reports a steady 1°/s turn while the phone is really still.
+    run(f, clock, 60_000, -1, { compassDeg: () => 0 });
+    const h = f.getPose().heading;
+    const off = Math.min(h, 360 - h);
+    expect(off).toBeGreaterThan(0.5); // bias × time constant, not zero…
+    expect(off).toBeLessThan(6); // …and nowhere near the 60° unchecked
+  });
+
+  it('is smoother than the compass: noise in the readings barely moves it', () => {
+    const { f, clock } = ready(90);
+    run(f, clock, 20_000, 0, {
+      compassDeg: (t) => 90 + (Math.floor(t / 100) % 2 === 0 ? 12 : -12),
+    });
+    expect(Math.abs(f.getPose().heading - 90)).toBeLessThan(2);
+  });
+
+  it('learns when a platform reports the opposite sign, from the compass', () => {
+    const { f, clock } = ready(0);
+    const flipped = { x: 0, y: 0, z: -9.81 }; // gravity reported the other way up
+    // A real clockwise turn to 90° over 1 s, compass and gyro both honest —
+    // but the gyro projects the wrong way until the sign is learnt.
+    run(f, clock, 1000, -90, { g: flipped, compassDeg: (t) => ((t + 100) / 1000) * 90 });
+    expect(Math.abs(f.getPose().heading - 90)).toBeLessThan(15);
+    // Compass silent: the next quarter-turn is now followed correctly.
+    run(f, clock, 1000, -90, { g: flipped });
+    expect(f.getPose().heading).toBeCloseTo(180, -1);
+  });
+
+  it('takes the compass as is for the first reading after a fix', () => {
+    const { f, clock } = ready(0);
+    f.applyFix(fix(clock, { heading: 0 }));
+    f.handleOrientation(compass(200));
+    expect(f.getPose().heading).toBe(200);
+  });
+
+  it('ignores bogus gravity readings (free fall) rather than dividing by them', () => {
+    const { f, clock } = ready(0);
+    clock.advance(100);
+    f.handleMotion(motion(-90, { x: 0, y: 0, z: 0.1 }));
+    expect(f.getPose().heading).toBeCloseTo(0, 0);
+  });
+});

@@ -81,3 +81,25 @@ corrects the estimate underneath, which every later step builds on. It helps
 most in corridors with several turns, where drift would otherwise accumulate
 past the snap radius, and not at all on a long straight run with no corners.
 Check it on a real walk with the accuracy harness before relying on it.
+
+## Heading: gyroscope blended with the compass
+
+The compass alone is noisy indoors and is thrown by steel, lifts and
+equipment; a gyroscope alone is smooth but drifts. Where the phone reports a
+rotation rate the two are blended: the gyro carries the heading between
+compass readings (so turns are smooth and a brief magnetic disturbance is
+ignored), and the compass pulls it back slowly (time constant 4 s) so gyro
+drift never builds up. A compass reading more than 45 degrees from the
+blended heading is treated as interference, unless it persists for 3 s, when
+the compass is believed. The first reading after a QR scan sets the heading
+outright, and a phone with no gyroscope uses the compass directly, as before.
+
+The turn rate is taken about the vertical (found from gravity), so it works
+however the phone is held. Platforms differ in the sign of what they report,
+so the app learns the sign from the first real turn where the compass and
+gyro disagree on direction, and snaps to the compass when it flips.
+
+Tuning: `compassTimeConstantS` (longer trusts the gyro more; steady drift
+error is about gyro bias times this), `compassRejectDeg`,
+`compassTrustAfterMs`. The unit tests simulate the sensors; confirm on real
+phones (iPhone and Android) with the accuracy harness before relying on it.
