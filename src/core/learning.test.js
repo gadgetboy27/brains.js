@@ -81,3 +81,37 @@ describe('suggestions', () => {
     ]);
   });
 });
+
+describe('heading suggestions', () => {
+  const walk = (dh) => ({ ...gap(30, 22), dh });
+
+  it('proposes the correction when straight walks agree the compass is off', () => {
+    const { heading } = suggestions([walk(10), walk(12), walk(8), walk(11)], {
+      headingOffsetDeg: 5,
+    });
+    expect(heading).toMatchObject({ currentDeg: 5, samples: 4 });
+    expect(heading.suggestedDeg).toBeCloseTo(15.25, 0);
+    expect(heading.errorDeg).toBeCloseTo(10.2, 0);
+  });
+
+  it('wraps through north and averages across the ±180 seam', () => {
+    expect(
+      suggestions([walk(-8), walk(-10), walk(-9)], { headingOffsetDeg: 4 }).heading.suggestedDeg
+    ).toBe(355);
+    const seam = suggestions([walk(178), walk(-179), walk(180)]).heading;
+    expect(Math.abs(seam.errorDeg)).toBeGreaterThan(177);
+  });
+
+  it('says nothing when walks disagree, are too few, or the error is tiny', () => {
+    expect(suggestions([walk(30), walk(-40), walk(5)]).heading).toBeNull();
+    expect(suggestions([walk(10), walk(12)]).heading).toBeNull();
+    expect(suggestions([walk(1), walk(2), walk(1)]).heading).toBeNull();
+    expect(suggestions([gap(30, 22), gap(30, 22), gap(30, 22)]).heading).toBeNull();
+  });
+
+  it('rejects an impossible dh when recording', () => {
+    const s = store();
+    expect(recordObservation(s, 'v', { ...gap(30, 22), dh: 270 })).toBeNull();
+    expect(recordObservation(s, 'v', { ...gap(30, 22), dh: -12 })).not.toBeNull();
+  });
+});

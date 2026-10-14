@@ -1856,7 +1856,10 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     if (observations.length === 0) return null;
     const report = {
       venue: this.#draft.id,
-      suggestions: suggestions(observations, { strideM: this.#draft.frame?.strideM }),
+      suggestions: suggestions(observations, {
+        strideM: this.#draft.frame?.strideM,
+        headingOffsetDeg: this.#draft.frame?.headingOffsetDeg,
+      }),
       observations,
     };
     const stamp = this.#exportFilename().replace(/\.venue\.json$/, '.learning.json');

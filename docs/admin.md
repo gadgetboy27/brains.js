@@ -278,6 +278,12 @@ and a short list of proposals:
 - **stride** — appears after 3 or more walks of 15+ steps whose typical stride
   differs from the venue's by 4% or more. Enter it with the stride calibration
   box if you agree.
+- **heading** — from straight marker-to-marker walks (8 m or more, no corners):
+  the average angle between where dead reckoning ended up and where the second
+  marker really is. Proposed as a new `frame.headingOffsetDeg` only when at
+  least 3 walks agree closely; walks that disagree usually mean interference
+  (metal doorframes, lifts) or a phone carried at different angles, and
+  produce no proposal.
 - **trouble spots** — route legs left 3 or more times. Usually a missing
   marker, a wrong edge or a confusing junction there.
 

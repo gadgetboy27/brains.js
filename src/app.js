@@ -789,13 +789,28 @@ export async function bootApp(options = {}) {
     if (!onGraph(prev ?? {}, a) || !onGraph(anchor, b) || a.id === b.id) return;
     const r = findRoute(venue.graph, a.id, b.id, { ...config.filter });
     if (!r.found) return;
-    recordObservation(storage, venue.id, {
+    const obs = {
       k: 'gap',
       a: previous,
       b: anchor.id,
       steps: appFusion.stepCount,
       routeM: Math.round(r.distance * 100) / 100,
-    });
+    };
+    // Heading error, only from a walk that was about straight: the bearing
+    // of where dead reckoning ended up vs the bearing between the markers.
+    // A walk round corners has no single "right" direction to compare.
+    const est = appFusion.getPose();
+    const trueDx = anchor.x - prev.x;
+    const trueDy = anchor.y - prev.y;
+    const straight = Math.hypot(trueDx, trueDy);
+    if (est && straight >= 8 && r.distance / straight <= 1.15 && appFusion.stepCount >= 10) {
+      const bearing = (dx, dy) => (Math.atan2(dx, dy) * 180) / Math.PI;
+      const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180 || 180;
+      obs.dh =
+        Math.round(wrap(bearing(trueDx, trueDy) - bearing(est.x - prev.x, est.y - prev.y)) * 10) /
+        10;
+    }
+    recordObservation(storage, venue.id, obs);
   }
   const onFix = (pose) => {
     if (usesAppFusion() && pose.confidence >= 1) {

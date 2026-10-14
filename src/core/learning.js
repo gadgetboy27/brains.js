@@ -39,8 +39,10 @@ export function loadObservations(storage, venueId) {
  *
  * @param {Storage | null | undefined} storage
  * @param {string} venueId
- * @param {{ k: 'gap', a: string, b: string, steps: number, routeM: number }
+ * @param {{ k: 'gap', a: string, b: string, steps: number, routeM: number, dh?: number }
  *        | { k: 'off', from: string, to: string }} obs
+ *   `dh` on a gap is the heading error in degrees, (-180, 180]: how far the
+ *   true bearing between the two markers is clockwise of the dead-reckoned one.
  * @param {Date} [now]
  */
 export function recordObservation(storage, venueId, obs, now = new Date()) {
@@ -64,7 +66,8 @@ function valid(o) {
       Number.isInteger(o.steps) &&
       o.steps > 0 &&
       Number.isFinite(o.routeM) &&
-      o.routeM > 0
+      o.routeM > 0 &&
+      (o.dh === undefined || (Number.isFinite(o.dh) && o.dh > -180 && o.dh <= 180))
     );
   }
   if (o?.k === 'off') return typeof o.from === 'string' && typeof o.to === 'string';
@@ -82,13 +85,24 @@ const median = (xs) => {
  * or a change too small to matter, produces nothing.
  *
  * @param {object[]} observations
- * @param {{ strideM?: number, minGaps?: number, minSteps?: number, minChange?: number, minOff?: number }} [options]
- *   `strideM` is the stride the venue currently uses.
+ * @param {{ strideM?: number, headingOffsetDeg?: number, minGaps?: number, minSteps?: number,
+ *   minChange?: number, minOff?: number, minHeadingDeg?: number, minAgreement?: number }} [options]
+ *   `strideM` and `headingOffsetDeg` are what the venue currently uses.
  * @returns {{ stride: null | { current: number, suggested: number, samples: number },
+ *             heading: null | { currentDeg: number, suggestedDeg: number, errorDeg: number, samples: number },
  *             troubleSpots: Array<{ from: string, to: string, count: number }> }}
  */
 export function suggestions(observations, options = {}) {
-  const { strideM = 0.73, minGaps = 3, minSteps = 15, minChange = 0.04, minOff = 3 } = options;
+  const {
+    strideM = 0.73,
+    headingOffsetDeg = 0,
+    minGaps = 3,
+    minSteps = 15,
+    minChange = 0.04,
+    minOff = 3,
+    minHeadingDeg = 3,
+    minAgreement = 0.9,
+  } = options;
 
   // Stride: route distance ÷ steps for each marker-to-marker walk. A walk
   // that cut a corner or wandered gives a stride far from any human one, so
@@ -105,6 +119,30 @@ export function suggestions(observations, options = {}) {
     }
   }
 
+  // Heading: each straight marker-to-marker walk says how far the compass is
+  // off. Averaged as angles (so -179° and +179° agree) and trusted only when
+  // the walks agree with each other (resultant length R near 1); a mix of
+  // directions means the cause is not a constant offset (e.g. a metal
+  // doorframe, or a phone carried at different angles).
+  const errs = observations.filter((o) => o.k === 'gap' && Number.isFinite(o.dh)).map((o) => o.dh);
+  let heading = null;
+  if (errs.length >= minGaps) {
+    const rad = Math.PI / 180;
+    const c = errs.reduce((t, d) => t + Math.cos(d * rad), 0) / errs.length;
+    const sn = errs.reduce((t, d) => t + Math.sin(d * rad), 0) / errs.length;
+    const agreement = Math.hypot(c, sn);
+    const errorDeg = Math.atan2(sn, c) / rad;
+    if (agreement >= minAgreement && Math.abs(errorDeg) >= minHeadingDeg) {
+      const wrapped = (((headingOffsetDeg + errorDeg) % 360) + 360) % 360;
+      heading = {
+        currentDeg: headingOffsetDeg,
+        suggestedDeg: Math.round(wrapped * 10) / 10,
+        errorDeg: Math.round(errorDeg * 10) / 10,
+        samples: errs.length,
+      };
+    }
+  }
+
   const legs = new Map();
   for (const o of observations) {
     if (o.k !== 'off') continue;
@@ -115,5 +153,5 @@ export function suggestions(observations, options = {}) {
     .filter((l) => l.count >= minOff)
     .sort((a, b) => b.count - a.count);
 
-  return { stride, troubleSpots };
+  return { stride, heading, troubleSpots };
 }
