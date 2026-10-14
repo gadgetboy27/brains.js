@@ -32,6 +32,7 @@
 import { PoseFusion } from './core/fusion.js';
 import { MapMatcher } from './core/map-matching.js';
 import { createNavigator } from './core/navigation.js';
+import { createTurnDetector, matchTurn } from './core/turn-correction.js';
 import { createOffRouteDetector } from './core/off-route.js';
 import { findRoute } from './core/router.js';
 import { createVenue, loadVenue } from './core/venue.js';
@@ -746,13 +747,40 @@ export async function bootApp(options = {}) {
     const active = chain.active ?? chainNoCamera?.active ?? null;
     return Boolean(active) && !active.fusion && active.constructor?.name === 'QrProvider';
   };
+  // Corners as free position fixes (./core/turn-correction.js). Off on staff
+  // phones: a survey or recording defines the map from dead reckoning, so it
+  // must not be pulled towards the map it is still drawing.
+  const turns = createTurnDetector();
+  const cornerCorrection = options.turnCorrection !== false && !config.admin;
+  /** @returns {Pose | null} the corrected pose, if this sample completed a recognised corner. */
+  function correctAtCorner(fused) {
+    if (!cornerCorrection) return null;
+    const turn = turns.update(fused);
+    if (!turn) return null;
+    const match = matchTurn(turn, venue, {
+      radiusM: Math.min(10, 3 + 0.2 * appFusion.distanceSinceFix),
+    });
+    if (!match) return null;
+    // Same walked distance since the corner, but from where the corner really is.
+    // A soft fix: it is not a scan, so confidence stays below exact.
+    appFusion.applyFix({
+      ...fused,
+      x: fused.x + match.dx,
+      y: fused.y + match.dy,
+      confidence: Math.max(fused.confidence, 0.75),
+    });
+    return appFusion.getPose();
+  }
   const startAppFusion = () => {
     if (fusionTimer !== null) return;
     if (win?.addEventListener) fusionDetach = appFusion.attach(win);
     fusionTimer = (options.setInterval ?? ((f, ms) => win.setInterval(f, ms)))(() => {
       if (!usesAppFusion()) return;
-      const fused = appFusion.getPose();
-      if (fused && fused.confidence < 1) onPose(fused);
+      let fused = appFusion.getPose();
+      if (fused && fused.confidence < 1) {
+        fused = correctAtCorner(fused) ?? fused;
+        onPose(fused);
+      }
       appFusion.tick();
     }, options.fusionIntervalMs ?? 250);
   };
@@ -815,6 +843,7 @@ export async function bootApp(options = {}) {
   const onFix = (pose) => {
     if (usesAppFusion() && pose.confidence >= 1) {
       if (config.admin) noteMarkerWalk(pose);
+      turns.reset();
       appFusion.applyFix(pose);
       startAppFusion();
     }
@@ -1135,6 +1164,7 @@ export async function bootApp(options = {}) {
     backdrop,
     scanOverlay,
     matcher,
+    fusion: appFusion,
     get state() {
       return {
         cameraUsable,

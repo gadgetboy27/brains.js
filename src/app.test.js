@@ -1118,6 +1118,67 @@ describe('bootApp — registering a printed sticker from the scanner', () => {
   });
 });
 
+describe('bootApp — corners as position fixes', () => {
+  async function walkToCorner(options = {}) {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const { app } = await boot({
+      options,
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+      config: { provider: null },
+    });
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance'); // (0, 1), facing +y
+    const heading = (deg) =>
+      window.dispatchEvent(
+        Object.assign(new Event('deviceorientation'), { webkitCompassHeading: deg })
+      );
+    const step = () => {
+      for (const y of [2.5, 0.2]) {
+        window.dispatchEvent(
+          Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+        );
+      }
+    };
+    const walk = async (steps, deg) => {
+      for (let i = 0; i < steps; i += 1) {
+        heading(deg);
+        step();
+        await vi.advanceTimersByTimeAsync(400);
+      }
+    };
+    // Six strides north (the lobby corner is 5 m up, but strides here are short
+    // of it), then turn east and keep walking.
+    await walk(6, 0);
+    await walk(8, 90);
+    await vi.advanceTimersByTimeAsync(300);
+    return app;
+  }
+
+  // The display is also snapped onto the corridor by map matching, which hides
+  // sideways drift on its own; the dead-reckoned estimate underneath is what
+  // a corner corrects, and what every later step builds on.
+  it('pulls the dead-reckoned position onto the junction the user turned at', async () => {
+    const app = await walkToCorner();
+    // Uncorrected, six strides north stop at y = 1 + 6 × 0.73 = 5.4; the corner is y = 6.
+    expect(app.fusion.getPose().y).toBeGreaterThan(5.8);
+    expect(app.fusion.getPose().y).toBeLessThan(6.2);
+    await app.destroy();
+  });
+
+  it('can be switched off', async () => {
+    const app = await walkToCorner({ turnCorrection: false });
+    expect(app.fusion.getPose().y).toBeCloseTo(1 + 6 * 0.73, 1);
+    await app.destroy();
+  });
+});
+
 describe('bootApp — sticker survey of a new venue', () => {
   it('?survey=1 on an unpublished venue: blank sheet, scan-name-record, dead reckoning between codes', async () => {
     const stream = { getTracks: () => [{ stop: vi.fn() }] };

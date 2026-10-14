@@ -64,3 +64,20 @@ records the _matched_ position: it is what the visitor sees.
 
 Options: `mapMatching: { maxSnapM, stickyM, landmarkRadiusM, exitRadiusM, includeNodes }`
 in `bootApp()`, or `mapMatching: false` to compare raw positioning.
+
+## Corner correction
+
+Between QR scans the app watches for a sustained change of walking direction
+(steady heading, then a different steady heading, while walking) and checks
+whether exactly one mapped junction nearby fits that turn's direction in,
+direction out and angle. If so, the dead-reckoned position is moved onto that
+junction, keeping the distance walked since the corner, and confidence is set
+to a soft 0.75 (never exact). Ambiguous turns, turns into rooms and turns on
+the spot change nothing. It is off in admin mode so surveys are not pulled
+towards the map still being drawn, and `turnCorrection: false` disables it.
+
+Map matching already snaps the *displayed* position onto the corridor; this
+corrects the estimate underneath, which every later step builds on. It helps
+most in corridors with several turns, where drift would otherwise accumulate
+past the snap radius, and not at all on a long straight run with no corners.
+Check it on a real walk with the accuracy harness before relying on it.
