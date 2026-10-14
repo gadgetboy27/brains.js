@@ -76,7 +76,7 @@ to a soft 0.75 (never exact). Ambiguous turns, turns into rooms and turns on
 the spot change nothing. It is off in admin mode so surveys are not pulled
 towards the map still being drawn, and `turnCorrection: false` disables it.
 
-Map matching already snaps the *displayed* position onto the corridor; this
+Map matching already snaps the _displayed_ position onto the corridor; this
 corrects the estimate underneath, which every later step builds on. It helps
 most in corridors with several turns, where drift would otherwise accumulate
 past the snap radius, and not at all on a long straight run with no corners.
