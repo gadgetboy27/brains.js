@@ -263,3 +263,23 @@ Positioning quality comes from three things you can improve in this mode:
 Camera-map training (Immersal) is done with the Immersal Mapper app, not
 here; this mode records the _graph_ that any provider navigates over.
 Measure the result with the accuracy harness (`docs/accuracy.md`).
+
+## Walk data (what the app learns on staff phones)
+
+In admin mode the phone quietly notes two things as you walk: how many steps
+it counted between two QR markers against the graph's distance between them,
+and which route leg you left when the app had to reroute you. Nothing is
+applied automatically and nothing is sent anywhere; visitor phones record none
+of it.
+
+Publish → **Download walk data** saves a `.learning.json` with the raw notes
+and a short list of proposals:
+
+- **stride** — appears after 3 or more walks of 15+ steps whose typical stride
+  differs from the venue's by 4% or more. Enter it with the stride calibration
+  box if you agree.
+- **trouble spots** — route legs left 3 or more times. Usually a missing
+  marker, a wrong edge or a confusing junction there.
+
+Walk marker to marker along the real corridor (not cutting corners) for the
+stride figure to mean anything.

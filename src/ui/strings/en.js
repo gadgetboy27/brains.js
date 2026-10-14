@@ -108,6 +108,11 @@ export default {
     'speech.arrived': 'You have arrived at {name}.',
     'speech.rescan': 'Position uncertain. Point the camera at a sign or a QR marker.',
     'speech.cancelled': 'Navigation stopped.',
+    'speech.reroute.done': 'Recalculating. New route, {metres} metres to go.',
+    'speech.reroute.failed':
+      'You are off the route and we cannot find a way from here. Head back the way you came.',
+    'hud.reroute.done': 'Route updated from where you are',
+    'hud.reroute.failed': 'Off route — no way found from here. Head back to the last marker.',
 
     // Handled states (persistent notices; the floor plan stays usable)
     'notice.offline':
@@ -366,6 +371,9 @@ export default {
     'admin.export.answers': 'Download answers ({count})',
     'admin.export.noAnswers': 'No arrival answers yet',
     'admin.export.answersSaved': 'Saved {name}.',
+    'admin.export.learning': 'Download walk data ({count})',
+    'admin.export.noLearning': 'No walk data yet',
+    'admin.export.learningSaved': 'Saved {name}.',
     'admin.survey.firstAtOrigin':
       'First code recorded as the map origin (0, 0). Walk to the next one and scan it.',
     'admin.survey.count': '{count} codes recorded on this survey',

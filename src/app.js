@@ -32,6 +32,7 @@
 import { PoseFusion } from './core/fusion.js';
 import { MapMatcher } from './core/map-matching.js';
 import { createNavigator } from './core/navigation.js';
+import { createOffRouteDetector } from './core/off-route.js';
 import { findRoute } from './core/router.js';
 import { createVenue, loadVenue } from './core/venue.js';
 import { loadVenueCache, saveVenueCache } from './core/venue-cache.js';
@@ -58,11 +59,13 @@ import {
 import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
 import { recordFeedback } from './core/feedback.js';
+import { recordObservation } from './core/learning.js';
 import { createHud } from './ui/hud.js';
 import { createReadyCard } from './ui/ready-card.js';
 import { createSpeechGuide } from './ui/speech.js';
 import {
   detectLanguage,
+  formatMetres,
   registerLanguage,
   resetLanguages,
   setLanguage,
@@ -536,6 +539,7 @@ export async function bootApp(options = {}) {
   const floorName = (i) => venue.floorByIndex(i)?.name ?? t('floor.unknown');
   let destination = null;
   let navigator = null;
+  let offRoute = null;
   let lastPose = null;
   let shownFloor = null;
   let routeFromId = null; // where the current route started, for arrival feedback
@@ -559,6 +563,7 @@ export async function bootApp(options = {}) {
     destination = poi;
     routeFromId = from.id;
     navigator = createNavigator(route);
+    offRoute = createOffRouteDetector(route);
     hud.setDestination(poi);
     // Seed progress from the current pose, or from the entrance when unknown, so
     // the HUD shows a distance and speech has something to say even without a fix.
@@ -571,6 +576,43 @@ export async function bootApp(options = {}) {
     if (!lastPose) floorplan.showFloor(from.floor); // no position: show where the route starts
     if (lastPose) onPose(lastPose);
     return true;
+  }
+
+  /**
+   * The user has left the route: plan a new one from where they are to the
+   * same destination and carry on. If no route exists from here, keep the old
+   * one and say so rather than leaving them with nothing.
+   */
+  function reroute(pose) {
+    const target = venue.nodeById(destination.node);
+    const from = nearestNode(venue, pose);
+    const route = target
+      ? findRoute(venue.graph, from.id, target.id, { ...config.filter, timeOfDay: new Date() })
+      : { found: false };
+    offRoute.acknowledge();
+    if (config.admin && navigator.state) {
+      const { nodes } = navigator.route;
+      const i = navigator.state.nextIndex;
+      if (nodes[i - 1] && nodes[i]) {
+        recordObservation(storage, venue.id, { k: 'off', from: nodes[i - 1].id, to: nodes[i].id });
+      }
+    }
+    if (!route.found) {
+      hud.showNotice('reroute', t('hud.reroute.failed'));
+      speech.announce(t('speech.reroute.failed'), { interrupt: false });
+      return;
+    }
+    navigator = createNavigator(route);
+    offRoute = createOffRouteDetector(route);
+    routeFromId = from.id;
+    arScene.setRoute(route);
+    floorplan.setRoute(route);
+    const state = navigator.update(pose);
+    hud.setProgress(state, { floorName });
+    arrow.setTarget(state.arrived ? null : state.nextNode, state.distanceToNext);
+    hud.showNotice('reroute', t('hud.reroute.done'));
+    speech.resetNarration();
+    speech.announce(t('speech.reroute.done', { metres: formatMetres(state.distanceRemaining) }));
   }
 
   function previewDestination(poi) {
@@ -595,6 +637,7 @@ export async function bootApp(options = {}) {
   function clearDestination() {
     destination = null;
     navigator = null;
+    offRoute = null;
     hud.setDestination(null);
     arScene.setRoute(null);
     floorplan.setRoute(null);
@@ -687,6 +730,7 @@ export async function bootApp(options = {}) {
       speech.narrate(state, { floorName, destinationName: destination?.name });
       if (state.arrived) arrow.setTarget(null);
       else arrow.setTarget(state.nextNode, state.distanceToNext);
+      if (offRoute && destination && offRoute.update(pose, state).offRoute) reroute(pose);
     }
   }
   // Providers that only produce occasional exact fixes (QR) get dead reckoning
@@ -726,8 +770,36 @@ export async function bootApp(options = {}) {
   });
   // An exact fix (a scan, or staff fixing their position in admin mode)
   // re-seeds the dead reckoning.
+  // Staff phones only: what a walk between two markers looked like (steps
+  // counted vs the graph's distance), for ./core/learning.js. Must run before
+  // applyFix resets the step count.
+  let lastExactAnchor = null;
+  function noteMarkerWalk(pose) {
+    const anchor = venue.anchors.find(
+      (a) => a.floor === pose.floor && a.x === pose.x && a.y === pose.y
+    );
+    const previous = lastExactAnchor;
+    lastExactAnchor = anchor?.id ?? null;
+    if (!anchor || !previous || previous === anchor.id || appFusion.stepCount === 0) return;
+    const prev = venue.anchorById(previous);
+    const a = prev && nearestNode(venue, prev);
+    const b = nearestNode(venue, anchor);
+    // The graph only stands in for the walked path where each marker sits on it.
+    const onGraph = (m, n) => n && n.floor === m.floor && Math.hypot(n.x - m.x, n.y - m.y) <= 2.5;
+    if (!onGraph(prev ?? {}, a) || !onGraph(anchor, b) || a.id === b.id) return;
+    const r = findRoute(venue.graph, a.id, b.id, { ...config.filter });
+    if (!r.found) return;
+    recordObservation(storage, venue.id, {
+      k: 'gap',
+      a: previous,
+      b: anchor.id,
+      steps: appFusion.stepCount,
+      routeM: Math.round(r.distance * 100) / 100,
+    });
+  }
   const onFix = (pose) => {
     if (usesAppFusion() && pose.confidence >= 1) {
+      if (config.admin) noteMarkerWalk(pose);
       appFusion.applyFix(pose);
       startAppFusion();
     }

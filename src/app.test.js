@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Object3D } from 'three';
 
+import { loadObservations } from './core/learning.js';
 import { bootApp, nearestNode, readConfig, viewForTilt } from './app.js';
 import { createVenue } from './core/venue.js';
 import demo from './venues/demo-venue.json';
@@ -382,6 +383,49 @@ describe('bootApp — spoken guidance', () => {
     rate.dispatchEvent(new Event('change'));
     expect(app.speech.rate).toBe(1.3);
     await app.destroy();
+  });
+
+  it('reroutes when an exact fix lands off the route, and says so', async () => {
+    const { synth, Utterance, utterances } = fakeSynth();
+    const { app } = await boot({
+      options: { speechOptions: { synth, Utterance, storage: null } },
+      providerOptions: {
+        mock: { path: [{ x: 0, y: 0, floor: 0 }], fixIntervalMs: 1000, speedMps: 0 },
+      },
+    });
+    app.setDestination(app.venue.poiById('poi-clinic-a'));
+    // Wanders off to the toilets, 10 m from the planned corridor.
+    const recalculated = () => utterances.some((u) => u.text.startsWith('Recalculating.'));
+    for (let i = 0; i < 3; i += 1) app.chain.active.teleport({ x: 20, y: 10, floor: 0 });
+    expect(recalculated()).toBe(false); // one noisy fix is not enough
+    app.chain.active.teleport({ x: 20, y: 10, floor: 0 });
+    expect(recalculated()).toBe(true);
+    expect(app.destination.id).toBe('poi-clinic-a');
+    // Distance now measured from the toilets, not the entrance.
+    expect(app.hud.text.distance).not.toBe('22 m');
+    await app.destroy();
+  });
+
+  it('learns from a reroute only on a staff phone', async () => {
+    const wander = async (admin) => {
+      const store = new Map();
+      const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+      const { app } = await boot({
+        config: { admin },
+        options: { storage, adminOptions: { storage, download: vi.fn(), copy: vi.fn() } },
+        providerOptions: {
+          mock: { path: [{ x: 0, y: 0, floor: 0 }], fixIntervalMs: 1000, speedMps: 0 },
+        },
+      });
+      app.setDestination(app.venue.poiById('poi-clinic-a'));
+      for (let i = 0; i < 4; i += 1) app.chain.active.teleport({ x: 20, y: 10, floor: 0 });
+      await app.destroy();
+      return loadObservations(storage, 'demo-health-centre');
+    };
+    expect(await wander(false)).toEqual([]);
+    const seen = await wander(true);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ k: 'off', from: 'n-entrance', to: 'n-lobby' });
   });
 
   it('works without speech synthesis: controls disabled, live region still narrates', async () => {

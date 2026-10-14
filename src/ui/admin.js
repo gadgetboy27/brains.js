@@ -24,6 +24,7 @@
 import QRCode from 'qrcode';
 
 import { feedbackRows } from '../core/feedback.js';
+import { loadObservations, suggestions } from '../core/learning.js';
 import { VenueDraft } from '../core/venue-draft.js';
 import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
 import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/survey-plan.js';
@@ -316,6 +317,7 @@ export class AdminPanel {
           <button type="button" class="btn" data-f="download"></button>
           <button type="button" class="btn" data-f="copy"></button>
           <button type="button" class="btn" data-f="answers"></button>
+          <button type="button" class="btn" data-f="learning"></button>
         </div>
         <details class="admin-plan" data-f="raw-json-box">
           <summary data-f="raw-json-summary"></summary>
@@ -536,6 +538,7 @@ export class AdminPanel {
     this.#f('plan-remove').addEventListener('click', () => this.removeSelected());
     this.#f('publish').addEventListener('click', () => this.publish());
     this.#f('answers').addEventListener('click', () => this.downloadAnswers());
+    this.#f('learning').addEventListener('click', () => this.downloadLearning());
     this.#f('download').addEventListener('click', () => this.download());
     this.#f('copy').addEventListener('click', () => this.copy());
     this.#f('discard').addEventListener('click', () => this.discard());
@@ -1633,6 +1636,11 @@ export class AdminPanel {
       ? t('admin.export.answers', { count: answers.length })
       : t('admin.export.noAnswers');
     this.#f('answers').disabled = answers.length === 0;
+    const learned = loadObservations(this.#opts.storage, this.#draft.id);
+    this.#f('learning').textContent = learned.length
+      ? t('admin.export.learning', { count: learned.length })
+      : t('admin.export.noLearning');
+    this.#f('learning').disabled = learned.length === 0;
     this.#f('publish').disabled = problems.length > 0;
     // A plain, always-visible copy of the same JSON: no download, share
     // sheet or clipboard permission involved, so it works even when those
@@ -1836,6 +1844,25 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     const ok = await this.#opts.download(stamp, `${JSON.stringify(rows, null, 2)}\n`);
     if (ok === false) return null;
     this.#toast(t('admin.export.answersSaved', { name: stamp }));
+    return stamp;
+  }
+
+  /**
+   * Save what this staff phone has learned from walks (observations plus the
+   * proposals they add up to) as a file. Nothing is applied automatically.
+   */
+  async downloadLearning() {
+    const observations = loadObservations(this.#opts.storage, this.#draft.id);
+    if (observations.length === 0) return null;
+    const report = {
+      venue: this.#draft.id,
+      suggestions: suggestions(observations, { strideM: this.#draft.frame?.strideM }),
+      observations,
+    };
+    const stamp = this.#exportFilename().replace(/\.venue\.json$/, '.learning.json');
+    const ok = await this.#opts.download(stamp, `${JSON.stringify(report, null, 2)}\n`);
+    if (ok === false) return null;
+    this.#toast(t('admin.export.learningSaved', { name: stamp }));
     return stamp;
   }
 

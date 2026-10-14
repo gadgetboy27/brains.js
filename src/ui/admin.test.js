@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PositionProvider } from '../core/positioning.js';
 import { createVenue } from '../core/venue.js';
 import demo from '../venues/demo-venue.json';
+import { recordObservation } from '../core/learning.js';
 import { createAdminPanel, defaultDownload } from './admin.js';
 import { createFloorplan } from './floorplan.js';
 import { t } from './strings/index.js';
@@ -65,6 +66,32 @@ function make(options = {}) {
 
 beforeEach(() => {
   document.body.innerHTML = '';
+});
+
+describe('AdminPanel — walk data export', () => {
+  it('is empty until walks are recorded, then downloads observations with suggestions', async () => {
+    const { admin, storage, download } = make();
+    expect(await admin.downloadLearning()).toBeNull();
+    for (const [steps, routeM] of [
+      [30, 24],
+      [40, 31],
+      [25, 20],
+    ]) {
+      recordObservation(storage, admin.draft.id, {
+        k: 'gap',
+        a: 'a-entrance',
+        b: 'a-lift-g',
+        steps,
+        routeM,
+      });
+    }
+    const name = await admin.downloadLearning();
+    expect(name).toMatch(/\.learning\.json$/);
+    const report = JSON.parse(download.mock.calls[0][1]);
+    expect(report.observations).toHaveLength(3);
+    expect(report.suggestions.stride).toMatchObject({ current: 0.73, suggested: 0.8, samples: 3 });
+    expect(JSON.stringify(report)).not.toMatch(/"x"|"y"|timestamp/); // no positions or fine times
+  });
 });
 
 describe('AdminPanel — recording a route', () => {

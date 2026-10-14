@@ -109,6 +109,12 @@ export default {
     'speech.arrived': 'Kua tae koe ki {name}.',
     'speech.rescan': 'Kāore i te mārama tō wāhi. Tohua te kāmera ki tētahi tohu, waehere QR rānei.',
     'speech.cancelled': 'Kua whakamutua te ārahi.',
+    'speech.reroute.done': 'Kei te tātai anō. He ara hou, {metres} mita te toe.',
+    'speech.reroute.failed':
+      'Kua rere koe i te ara, kāore e kitea he ara i konei. Hoki atu ki te wāhi i haere mai koe.',
+    'hud.reroute.done': 'Kua whakahouhia te ara mai i tō wāhi',
+    'hud.reroute.failed':
+      'Kua rere i te ara — kāore e kitea he ara i konei. Hoki ki te tohu whakamutunga.',
 
     // Handled states
     'notice.offline':
@@ -387,6 +393,9 @@ export default {
     'admin.export.answers': 'Tikiake ngā whakautu ({count})',
     'admin.export.noAnswers': 'Kāore anō ngā whakautu taenga',
     'admin.export.answersSaved': 'Kua tiakina a {name}.',
+    'admin.export.learning': 'Tikiake ngā raraunga hīkoi ({count})',
+    'admin.export.noLearning': 'Kāore anō he raraunga hīkoi',
+    'admin.export.learningSaved': 'Kua tiakina a {name}.',
     'admin.survey.firstAtOrigin':
       'Kua hopukina te waehere tuatahi hei pūtake mahere (0, 0). Hīkoi ki te waehere e whai ake nei, ka matawai.',
     'admin.survey.count': '{count} waehere kua hopukina i tēnei rūri',
