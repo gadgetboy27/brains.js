@@ -246,93 +246,61 @@ describe('AdminPanel — plan editor', () => {
   });
 });
 
-describe('defaultDownload — saving a file on iOS and everywhere else', () => {
-  it('uses the Web Share sheet when the browser can share a file (iOS Safari)', async () => {
-    const shared = [];
-    const nav = {
-      share: vi.fn(async (data) => {
-        shared.push(data);
-      }),
-      canShare: vi.fn(() => true),
-    };
+describe('defaultDownload — saving a file straight to the device', () => {
+  /** Run a download with the browser's link-click and blob URL recorded. */
+  async function download(nav) {
     const restore = globalThis.navigator;
     Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
-    try {
-      const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
-      expect(ok).toBe(true);
-      expect(nav.canShare).toHaveBeenCalledWith({
-        files: [expect.objectContaining({ name: 'brains-demo-2026-01-01-0000.venue.json' })],
-      });
-      expect(shared).toHaveLength(1);
-      expect(shared[0].files[0].name).toBe('brains-demo-2026-01-01-0000.venue.json');
-      expect(shared[0].title).toBe('brains-demo-2026-01-01-0000.venue.json');
-    } finally {
-      Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
-    }
-  });
-
-  it('resolves false when the person cancels the share sheet, without forcing a fallback download', async () => {
-    const abort = Object.assign(new Error('cancelled'), { name: 'AbortError' });
-    const nav = { share: vi.fn(async () => Promise.reject(abort)), canShare: vi.fn(() => true) };
-    const restore = globalThis.navigator;
-    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
-    const clicked = vi.fn();
+    const clicked = [];
     const realCreate = document.createElement.bind(document);
     const spy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
       const el = realCreate(tag);
-      if (tag === 'a') el.click = clicked;
+      if (tag === 'a') el.click = () => clicked.push({ href: el.href, name: el.download });
       return el;
     });
+    const blobs = [];
+    const create = vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => {
+      blobs.push(b);
+      return 'blob:test';
+    });
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     try {
       const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
-      expect(ok).toBe(false);
-      expect(clicked).not.toHaveBeenCalled(); // cancelling doesn't silently fall back
+      return { ok, clicked, blobs, revoke };
     } finally {
       spy.mockRestore();
+      create.mockRestore();
       Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
     }
+  }
+
+  it("saves with the browser's own download: one link, the right name, the right contents", async () => {
+    const { ok, clicked, blobs } = await download({});
+    expect(ok).toBe(true);
+    expect(clicked).toEqual([
+      { href: 'blob:test', name: 'brains-demo-2026-01-01-0000.venue.json' },
+    ]);
+    expect(await blobs[0].text()).toBe('{"id":"demo"}');
+    expect(document.querySelector('a[download]')).toBeNull(); // the link does not linger
   });
 
-  it('falls back to an <a download> link when file sharing is not available (desktop)', async () => {
-    const nav = { share: undefined, canShare: undefined };
-    const restore = globalThis.navigator;
-    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
-    const clicked = vi.fn();
-    const realCreate = document.createElement.bind(document);
-    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
-      const el = realCreate(tag);
-      if (tag === 'a') el.click = clicked;
-      return el;
-    });
-    try {
-      const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
-      expect(ok).toBe(true);
-      expect(clicked).toHaveBeenCalledOnce();
-    } finally {
-      spy.mockRestore();
-      Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
-    }
+  it('does not open the share sheet, even on a phone that offers one', async () => {
+    const nav = { share: vi.fn(), canShare: vi.fn(() => true) };
+    const { ok, clicked } = await download(nav);
+    expect(ok).toBe(true);
+    expect(nav.share).not.toHaveBeenCalled();
+    expect(clicked).toHaveLength(1);
   });
 
-  it('falls back to the anchor link if canShare rejects this file (some Android browsers)', async () => {
-    const nav = { share: vi.fn(), canShare: vi.fn(() => false) };
-    const restore = globalThis.navigator;
-    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
-    const clicked = vi.fn();
-    const realCreate = document.createElement.bind(document);
-    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
-      const el = realCreate(tag);
-      if (tag === 'a') el.click = clicked;
-      return el;
-    });
+  it('releases the blob after a moment, once the browser has started reading it', async () => {
+    vi.useFakeTimers();
     try {
-      const ok = await defaultDownload('brains-demo-2026-01-01-0000.venue.json', '{"id":"demo"}');
-      expect(ok).toBe(true);
-      expect(nav.share).not.toHaveBeenCalled();
-      expect(clicked).toHaveBeenCalledOnce();
+      const { revoke } = await download({});
+      expect(revoke).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1000);
+      expect(revoke).toHaveBeenCalledWith('blob:test');
     } finally {
-      spy.mockRestore();
-      Object.defineProperty(globalThis, 'navigator', { value: restore, configurable: true });
+      vi.useRealTimers();
     }
   });
 });

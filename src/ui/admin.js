@@ -31,6 +31,7 @@ import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/surv
 import { categoryName, t } from './strings/index.js';
 import { PoseFusion } from '../core/fusion.js';
 import { createRouteWizard } from './route-wizard.js';
+import { saveFile } from './save-file.js';
 import { createTrainingScreen } from './training-screen.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
@@ -1890,10 +1891,8 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
    */
   async download() {
     const name = this.#exportFilename();
-    // The Web Share sheet can be cancelled; wait for the real outcome
-    // before claiming a backup happened. `false` means cancelled — the
-    // person chose not to export, so nothing is confirmed and the backup
-    // warning stays exactly as it was.
+    // An injected download may report `false` (a cancelled save): then nothing
+    // is confirmed and the backup warning stays exactly as it was.
     const ok = await this.#opts.download(name, `${this.json()}\n`);
     if (ok === false) return null;
     this.#backedUp = true;
@@ -1997,66 +1996,15 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
 }
 
 /**
- * Save a file for the person using the browser. iOS Safari's classic
- * `<a download>` trick is unreliable for a JSON blob — it often does
- * nothing visible at all, which is exactly what looks like "nothing was
- * saved". Where the Web Share API can share a *file* (iOS Safari, most
- * mobile browsers), that is used instead: it opens the native share sheet
- * ("Save to Files", AirDrop, Messages…), which unambiguously produces a
- * file the person can find. Desktop browsers, which support `<a download>`
- * properly and mostly don't support sharing files, get that instead.
- */
-/**
- * @returns {Promise<boolean>} `false` only when the person actively
- *   cancelled the share sheet — the one outcome that must not be read as
- *   "the file is saved". Anything else (shared successfully, or fell back
- *   to the `<a download>` trick) resolves `true`.
+ * Save a file for the person using the browser, directly (see ./save-file.js).
+ * Kept as an async function returning a boolean because panels are built with
+ * an injectable `download` of that shape (a test can return `false`, as a
+ * cancelled save would).
+ *
+ * @returns {Promise<boolean>}
  */
 export async function defaultDownload(name, text) {
-  const blob = new Blob([text], { type: 'application/json' });
-  const nav = globalThis.navigator;
-  let file = null;
-  try {
-    file = new File([blob], name, { type: 'application/json' });
-  } catch {
-    // File unavailable (very old browser): fall through to the anchor trick.
-  }
-  const canShareFile =
-    file &&
-    typeof nav?.share === 'function' &&
-    (typeof nav.canShare !== 'function' || safeCanShare(nav, file));
-  if (canShareFile) {
-    try {
-      await nav.share({ files: [file], title: name });
-      return true;
-    } catch (err) {
-      // Cancelled: respect it — do not silently force a different download
-      // method behind the person's back. Anything else (share genuinely
-      // failed to launch) falls through to the anchor trick below, as before.
-      if (err?.name === 'AbortError') return false;
-    }
-  }
-  anchorDownload(name, blob);
-  return true;
-}
-
-function safeCanShare(nav, file) {
-  try {
-    return nav.canShare({ files: [file] });
-  } catch {
-    return false;
-  }
-}
-
-function anchorDownload(name, blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return saveFile(name, text);
 }
 
 function safeStorage() {

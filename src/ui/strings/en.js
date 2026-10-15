@@ -218,7 +218,7 @@ export default {
     'admin.export.download': 'Download venue.json',
     'admin.export.copy': 'Copy JSON',
     'admin.export.copied': 'Copied.',
-    'admin.export.downloaded': 'Saved {name} — check Files (or the share sheet) on this device.',
+    'admin.export.downloaded': 'Saved {name}. Find it in Files, Downloads on this device.',
     'admin.export.discard': 'Discard draft',
     'admin.export.rawJson': "Show the raw JSON (if Download and Copy don't work)",
     'admin.export.rawJsonHint':

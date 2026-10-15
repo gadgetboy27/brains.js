@@ -9,6 +9,7 @@
  */
 
 import { analyseLog, createRecorder, formatReport } from '../core/accuracy.js';
+import { saveFile } from './save-file.js';
 import { t } from './strings/index.js';
 import { ensureStyle } from './tokens.js';
 
@@ -47,7 +48,7 @@ export class Harness {
     if (!options?.venue || !options?.provider)
       throw new TypeError('Harness requires a venue and a provider');
     this.#doc = options.document ?? globalThis.document;
-    this.#opts = { now: () => Date.now(), download: defaultDownload, ...options };
+    this.#opts = { now: () => Date.now(), download: saveFile, ...options };
     this.#rec = createRecorder({
       now: this.#opts.now,
       venueId: options.venue.id,
@@ -229,18 +230,6 @@ export class Harness {
     this.#rescanOff?.();
     this.#el.remove();
   }
-}
-
-function defaultDownload(name, text) {
-  const blob = new Blob([text], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** @param {ConstructorParameters<typeof Harness>[0]} options */

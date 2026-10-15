@@ -234,10 +234,10 @@ in the way: **QR markers (N)** opens the sticker sheet — a code image per
 marker, only useful when you're actually printing — and **Discard draft**
 sits at the very bottom, away from the buttons you'd actually reach for.
 
-On a phone, **Download** uses the native share sheet (Save to Files,
-AirDrop, Messages…) where the browser supports sharing a file — iOS
-Safari's older download trick often produced nothing you could find. A
-toast confirms the filename either way. **Copy JSON** puts the same
+**Download** (and Download walk data, and the test-walk log) saves the file
+straight to the device with the browser's own download: on an iPhone it goes to
+Files, Downloads, on Android to Downloads, as soon as you press it, with no
+sheet to get through. A toast confirms the filename. **Copy JSON** puts the same
 content on the clipboard, to paste anywhere.
 
 Publish the file at the venue's URL (`docs/entry.md`) — visitors get it on
