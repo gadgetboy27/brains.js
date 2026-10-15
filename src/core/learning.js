@@ -7,6 +7,10 @@
  *  - **gap**: between two exact QR scans, how many steps were counted and how
  *    far apart the graph says those two markers are. Over several walks this
  *    gives the stride that really fits the building.
+ *  - **scan**: a marker that did not fit (see ./scan-check.js): it was far from
+ *    where the steps said, or too far from the previous marker for the steps
+ *    taken. A pair that keeps being flagged points at a marker that is in the
+ *    wrong place on the map, or a sticker that has moved.
  *  - **off**: the route leg a walker left. Legs that keep appearing point at
  *    a missing marker, a bad edge or a confusing junction.
  *
@@ -40,7 +44,8 @@ export function loadObservations(storage, venueId) {
  * @param {Storage | null | undefined} storage
  * @param {string} venueId
  * @param {{ k: 'gap', a: string, b: string, steps: number, routeM: number, dh?: number }
- *        | { k: 'off', from: string, to: string }} obs
+ *        | { k: 'off', from: string, to: string }
+ *        | { k: 'scan', a: string, b: string, v: 'check' | 'impossible' }} obs
  *   `dh` on a gap is the heading error in degrees, (-180, 180]: how far the
  *   true bearing between the two markers is clockwise of the dead-reckoned one.
  * @param {Date} [now]
@@ -71,6 +76,13 @@ function valid(o) {
     );
   }
   if (o?.k === 'off') return typeof o.from === 'string' && typeof o.to === 'string';
+  if (o?.k === 'scan') {
+    return (
+      typeof o.a === 'string' &&
+      typeof o.b === 'string' &&
+      (o.v === 'check' || o.v === 'impossible')
+    );
+  }
   return false;
 }
 
@@ -90,7 +102,8 @@ const median = (xs) => {
  *   `strideM` and `headingOffsetDeg` are what the venue currently uses.
  * @returns {{ stride: null | { current: number, suggested: number, samples: number },
  *             heading: null | { currentDeg: number, suggestedDeg: number, errorDeg: number, samples: number },
- *             troubleSpots: Array<{ from: string, to: string, count: number }> }}
+ *             troubleSpots: Array<{ from: string, to: string, count: number }>,
+ *             suspectMarkers: Array<{ a: string, b: string, count: number, impossible: number }> }}
  */
 export function suggestions(observations, options = {}) {
   const {
@@ -153,5 +166,19 @@ export function suggestions(observations, options = {}) {
     .filter((l) => l.count >= minOff)
     .sort((a, b) => b.count - a.count);
 
-  return { stride, heading, troubleSpots };
+  // Marker pairs whose scans keep not fitting: one of the two is likely misplaced.
+  const pairs = new Map();
+  for (const o of observations) {
+    if (o.k !== 'scan') continue;
+    const key = `${o.a}\u0000${o.b}`;
+    const p = pairs.get(key) ?? { a: o.a, b: o.b, count: 0, impossible: 0 };
+    p.count += 1;
+    if (o.v === 'impossible') p.impossible += 1;
+    pairs.set(key, p);
+  }
+  const suspectMarkers = [...pairs.values()]
+    .filter((p) => p.count >= minOff || p.impossible >= 2)
+    .sort((a, b) => b.impossible - a.impossible || b.count - a.count);
+
+  return { stride, heading, troubleSpots, suspectMarkers };
 }

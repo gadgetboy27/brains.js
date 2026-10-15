@@ -40,7 +40,12 @@ const CSS = `
 .train-tools { display: inline-flex; gap: 8px; }
 .train-exit, .train-torch { min-height: 40px; padding: 4px 14px; }
 .train-torch[hidden] { display: none; }
-.train-torch[aria-pressed='true'] { background: var(--color-accent); color: var(--color-accent-contrast); }
+.train-scan { margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; font-weight: 700; border: 2px solid var(--color-text-muted); }
+.train-scan[hidden] { display: none; }
+.train-scan[data-verdict='match'] { border-color: var(--color-ok); }
+.train-scan[data-verdict='check'] { border-color: var(--color-poi); }
+.train-scan[data-verdict='impossible'] { border-color: var(--color-error); color: var(--color-error); }
+.train-torch[aria-pressed='true'], .train-sound[aria-pressed='true'] { background: var(--color-accent); color: var(--color-accent-contrast); }
 .train-count { font-size: clamp(80px, 26vw, 170px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums;
   margin: 2px 0 0; transform-origin: center; }
 .train[data-mode='idle'] .train-count { opacity: 0.45; }
@@ -81,6 +86,8 @@ const CSS = `
  * @property {{ readonly supported: boolean, readonly on: boolean, set: (on: boolean) => Promise<boolean> } | null} [torch]
  *   The camera light, for reading a code in a dim corridor. The button only
  *   appears when the camera has one (Android Chrome; not iOS Safari).
+ * @property {{ enabled: boolean, supported: boolean, setEnabled: (on: boolean) => boolean, unlock: () => void, play: (name: string) => boolean } | null} [cues]
+ *   Sounds for what just happened; the screen has the on/off switch and plays "saved".
  * @property {() => void} [onExit]
  * @property {(ms: number) => void} [vibrate]
  * @property {{ request: (type: 'screen') => Promise<{ release: () => Promise<void>, addEventListener?: Function }> } | null} [wakeLock]
@@ -104,6 +111,8 @@ export class TrainingScreen {
   #points = 0;
   #savedSteps = 0;
   #unsubs = [];
+  /** The latest marker check shown, and when (it fades after a few seconds). */
+  #scanNote = null;
   #timer = null;
   #sentinel = null;
   #open = false;
@@ -120,6 +129,7 @@ export class TrainingScreen {
       getStrideM: () => 0.73,
       getPose: () => null,
       torch: null,
+      cues: null,
       onExit: () => {},
       vibrate: (ms) => globalThis.navigator?.vibrate?.(ms),
       wakeLock: globalThis.navigator?.wakeLock ?? null,
@@ -160,6 +170,7 @@ export class TrainingScreen {
       <div class="train-top">
         <span class="train-live"><i class="train-dot"></i><span data-f="live"></span></span>
         <span class="train-tools">
+          <button type="button" class="btn train-torch" data-f="sound" aria-pressed="false" hidden></button>
           <button type="button" class="btn train-torch" data-f="torch" aria-pressed="false" hidden></button>
           <button type="button" class="btn train-exit" data-f="exit"></button>
         </span>
@@ -168,6 +179,7 @@ export class TrainingScreen {
       <div class="train-unit" data-f="unit"></div>
       <p class="train-sub" data-f="sub" role="status"></p>
       <p class="train-banner" data-f="banner" role="status" aria-live="polite"></p>
+      <p class="train-scan" data-f="scan-note" role="status" aria-live="polite" hidden></p>
       <button type="button" class="btn btn-primary train-main" data-f="main"></button>
       <button type="button" class="train-link" data-f="alt"></button>
       <button type="button" class="train-link" data-f="undo-last" hidden></button>
@@ -185,6 +197,7 @@ export class TrainingScreen {
     this.#f = (n) => el.querySelector(`[data-f="${n}"]`);
     this.#f('unit').textContent = t('train.unit');
     this.#f('exit').textContent = t('train.exit');
+    this.#f('sound').classList.add('train-sound');
     this.#f('next').textContent = t('train.next');
     this.#f('rewalk').textContent = t('train.rewalk');
     this.#f('rewalk').addEventListener('click', () => this.#o.wizard.rewalk());
@@ -192,6 +205,14 @@ export class TrainingScreen {
     this.#f('undo-last').textContent = t('train.undoLast');
     this.#f('undo').addEventListener('click', () => this.#o.wizard.undoLastRoute());
     this.#f('undo-last').addEventListener('click', () => this.#o.wizard.undoLastRoute());
+    this.#f('sound').addEventListener('click', () => {
+      const cues = this.#o.cues;
+      if (!cues) return;
+      cues.unlock(); // a tap is the gesture the browser needs before it allows sound
+      cues.setEnabled(!cues.enabled);
+      if (cues.enabled) cues.play('scan'); // so the choice is audible straight away
+      this.#refresh();
+    });
     this.#f('torch').addEventListener('click', async () => {
       await this.#o.torch?.set(!this.#o.torch.on);
       this.#refresh();
@@ -278,6 +299,17 @@ export class TrainingScreen {
     if (this.#open) this.#refresh();
   }
 
+  /**
+   * Show how the marker just scanned fitted the walk (see core/scan-check.js).
+   * Quietly ignores verdicts there is nothing to say about.
+   * @param {{ verdict: string, jumpM?: number | null, apartM?: number | null }} result
+   */
+  showScanCheck(result) {
+    if (!['match', 'check', 'impossible'].includes(result?.verdict)) return;
+    this.#scanNote = { ...result, at: this.#o.now() };
+    this.#refresh();
+  }
+
   #onWizardStep(step) {
     const now = this.#o.now();
     // A scan (or stopping) is over: the light would only drain the battery.
@@ -293,6 +325,8 @@ export class TrainingScreen {
     } else if (step === 'done') {
       this.#savedSteps = this.#total;
       this.#mode = 'result';
+      // A route the quality check flagged is not a cheerful moment.
+      this.#o.cues?.play(this.#o.wizard.route?.quality?.verdict === 'check' ? 'warn' : 'saved');
     } else if (step === 'finish') {
       this.#mode = 'recording'; // saving: nothing for the user to do
     } else {
@@ -395,6 +429,24 @@ export class TrainingScreen {
     });
     if (route) this.#points = route.nodes;
     this.#f('banner').textContent = t(banner.key);
+
+    const note = this.#scanNote;
+    if (note && this.#o.now() - note.at > 8000) this.#scanNote = null;
+    const noteEl = this.#f('scan-note');
+    noteEl.hidden = !this.#scanNote;
+    if (this.#scanNote) {
+      noteEl.dataset.verdict = this.#scanNote.verdict;
+      noteEl.textContent = t(`train.scan.${this.#scanNote.verdict}`, {
+        jump: this.#scanNote.jumpM ?? 0,
+        apart: Math.round(this.#scanNote.apartM ?? 0),
+      });
+    }
+
+    const cues = this.#o.cues;
+    const soundEl = this.#f('sound');
+    soundEl.hidden = !cues?.supported;
+    soundEl.textContent = t(cues?.enabled ? 'train.sound.on' : 'train.sound.off');
+    soundEl.setAttribute('aria-pressed', String(Boolean(cues?.enabled)));
 
     const torch = this.#o.torch;
     const torchEl = this.#f('torch');

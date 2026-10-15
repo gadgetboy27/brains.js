@@ -278,6 +278,9 @@ export default {
     'notice.venueNew': 'New venue “{id}” — nothing is published yet. Survey it, then Publish.',
     'scan.unrecognised': 'Code “{text}” is not a marker for this venue.',
     'scan.wrongVenue': 'Code “{text}” belongs to a different venue.',
+    'scan.check.check': 'That marker is {jump} m from where we thought you were. Position updated.',
+    'scan.check.impossible':
+      'That marker is too far from your last one for the steps you took. If the arrow looks wrong, scan another marker.',
     'scan.recording': 'Recording — {distance} m',
     'admin.tab.survey': 'Sticker survey',
     'admin.tab.routes': 'Record routes',
@@ -331,6 +334,13 @@ export default {
     'train.undoLast': 'Undo last route',
     'train.torch.off': 'Torch',
     'train.torch.on': 'Torch on',
+    'train.sound.off': 'Sound',
+    'train.sound.on': 'Sound on',
+    'train.scan.match': 'Marker fits: {jump} m from where your steps put you.',
+    'train.scan.check':
+      'Marker is {jump} m from where your steps put you. Check it is the right sticker.',
+    'train.scan.impossible':
+      'These two markers are {apart} m apart, too far for the steps you took. One may be in the wrong place on the map.',
     'train.quality.good': 'Good. Off by only {drift} m over {len} m.',
     'train.quality.ok': 'Fixed up. Corrected {drift} m of drift over {len} m.',
     'train.quality.check': 'Check this one. It ended {drift} m off over {len} m, too far to trust.',

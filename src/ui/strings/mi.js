@@ -292,6 +292,10 @@ export default {
       'Wāhi hou “{id}” — kāore anō he mea kua whakaputaina. Rūritia, kātahi ka Whakaputa.',
     'scan.unrecognised': 'Ehara te waehere “{text}” i te tohu mō tēnei wāhi.',
     'scan.wrongVenue': 'Nō tētahi atu wāhi te waehere “{text}”.',
+    'scan.check.check':
+      'He {jump} m te tawhiti o taua tohu i tō wāhi i whakaaro ai mātou. Kua whakahouhia tō wāhi.',
+    'scan.check.impossible':
+      'He tino tawhiti taua tohu i tō tohu o mua mō ngā hikoi i hikoi koe. Mēnā he he te pere, matawai i tētahi atu tohu.',
     'scan.recording': 'E hopu ana — {distance} m',
     'admin.tab.survey': 'Rūri pihi',
     'admin.tab.routes': 'Ngā ara',
@@ -350,6 +354,13 @@ export default {
     'train.undoLast': 'Whakakore i te ara whakamutunga',
     'train.torch.off': 'Rama',
     'train.torch.on': 'Kua pāho te rama',
+    'train.sound.off': 'Oro',
+    'train.sound.on': 'Kua pāho te oro',
+    'train.scan.match': 'Kei te tika te tohu: {jump} m mai i tō wāhi i whakaaro ai ō hikoi.',
+    'train.scan.check':
+      'He {jump} m te tawhiti o te tohu i tō wāhi i whakaaro ai ō hikoi. Tirohia mēnā ko te whakapiri tika.',
+    'train.scan.impossible':
+      'He {apart} m te tawhiti o ēnei tohu e rua, he tino tawhiti mō ngā hikoi i hikoi koe. Tērā pea kei te wāhi he tētahi i te mahere.',
     'train.quality.good': 'Pai. {drift} m anake te wehenga i roto i te {len} m.',
     'train.quality.ok': 'Kua whakatikaina. {drift} m te rere kua whakatikaina i roto i te {len} m.',
     'train.quality.check':

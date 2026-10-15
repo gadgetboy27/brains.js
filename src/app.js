@@ -19,6 +19,7 @@
  *  - harness:   `?harness=1` shows the accuracy test panel (docs/accuracy.md)
  *  - admin:     `?admin=1` shows the venue admin panel (docs/admin.md)
  *  - train:     `?train=1` opens the admin panel straight into the training screen
+ *  - sound:     `?sound=1` turns on scan sounds for a visitor (staff have them on by default)
  *
  * ## Views
  *
@@ -64,8 +65,10 @@ import { createFloorplan } from './ui/floorplan.js';
 import { createHarness } from './ui/harness.js';
 import { recordFeedback } from './core/feedback.js';
 import { recordObservation } from './core/learning.js';
+import { checkScan } from './core/scan-check.js';
 import { createHud } from './ui/hud.js';
 import { createReadyCard } from './ui/ready-card.js';
+import { createAudioCues } from './ui/audio-cues.js';
 import { createSpeechGuide } from './ui/speech.js';
 import {
   detectLanguage,
@@ -130,6 +133,7 @@ export function readConfig({
     harness: q.get('harness') === '1',
     admin: q.get('admin') === '1' || q.get('survey') === '1' || q.get('train') === '1',
     train: q.get('train') === '1',
+    sound: q.get('sound') === '1',
     survey: q.get('survey') === '1',
     filter: {
       wheelchair: q.get('wheelchair') === '1',
@@ -792,6 +796,74 @@ export async function bootApp(options = {}) {
   // run before applyFix resets the step count.
   let lastExactAnchor = null;
   let offRouteSinceFix = false; // a wandered or rerouted stretch is no measure of stride
+  // A sound for each scan: a chime when it fits, flat tones when it does not.
+  // On for staff by default (they scan with the screen out of sight), off for
+  // visitors unless asked for; the choice is remembered on the phone.
+  const cues =
+    options.audioCues ??
+    createAudioCues({
+      ...(options.AudioContext !== undefined ? { AudioContextClass: options.AudioContext } : {}),
+      storage,
+      defaultOn: config.admin || config.sound,
+    });
+  win?.addEventListener?.('pointerdown', () => cues.unlock(), { once: true, passive: true });
+
+  // Does the marker just read fit the walk? (see ./core/scan-check.js)
+  let lastExactPlace = null;
+  let lastCheckedAnchor = null;
+  let sessionSteps = 0;
+  let pendingScanCheck = null;
+  function checkMarker(pose) {
+    const anchor = venue.anchors.find(
+      (a) => a.floor === pose.floor && a.x === pose.x && a.y === pose.y
+    );
+    if (!anchor) return;
+    const same =
+      lastExactPlace &&
+      lastExactPlace.floor === pose.floor &&
+      lastExactPlace.x === pose.x &&
+      lastExactPlace.y === pose.y;
+    if (same) return; // the same fix delivered again (a panel re-asserting it)
+    pendingScanCheck = {
+      ...checkScan({
+        estimate: appFusion.getPose(),
+        previous: lastExactPlace,
+        scan: pose,
+        steps: appFusion.stepCount,
+        distanceM: appFusion.distanceSinceFix,
+        stepsTrusted: sessionSteps + appFusion.stepCount > 0,
+      }),
+      anchorId: anchor.id,
+      previousAnchorId: lastCheckedAnchor,
+    };
+    sessionSteps += appFusion.stepCount;
+    lastExactPlace = { x: pose.x, y: pose.y, floor: pose.floor };
+    lastCheckedAnchor = anchor.id;
+  }
+  /** What to do about the check on the scan that has just been reported. */
+  function reactToScanCheck() {
+    const check = pendingScanCheck;
+    pendingScanCheck = null;
+    const verdict = check?.verdict ?? 'match';
+    cues.play(verdict === 'impossible' ? 'problem' : verdict === 'check' ? 'warn' : 'scan');
+    if (!check) return;
+    if (config.admin) {
+      admin?.training?.showScanCheck(check);
+      if ((verdict === 'check' || verdict === 'impossible') && check.previousAnchorId) {
+        recordObservation(storage, venue.id, {
+          k: 'scan',
+          a: check.previousAnchorId,
+          b: check.anchorId,
+          v: verdict,
+        });
+      }
+    } else if (verdict === 'check' || verdict === 'impossible') {
+      hud.showNotice('scan-check', t(`scan.check.${verdict}`, { jump: check.jumpM }));
+    } else {
+      hud.hideNotice('scan-check');
+    }
+  }
+
   const calibration =
     options.adaptiveStride === false || config.admin
       ? null
@@ -850,6 +922,7 @@ export async function bootApp(options = {}) {
   }
   const onFix = (pose) => {
     if (usesAppFusion() && pose.confidence >= 1) {
+      checkMarker(pose);
       noteMarkerWalk(pose);
       turns.reset();
       appFusion.applyFix(pose);
@@ -1033,6 +1106,7 @@ export async function bootApp(options = {}) {
         // PoseFusion emits a pose on every counted step: real time, not the 250 ms tick.
         subscribe: (fn) => appFusion.on('pose', () => fn(appFusion.stepCount)),
       },
+      audioCues: cues,
       torch: {
         // Whichever provider is reading the camera right now (only QR has one).
         get supported() {
@@ -1093,6 +1167,8 @@ export async function bootApp(options = {}) {
         scanOverlay.flash();
         if (scan.result === 'accepted' || scan.result === 'repeat') {
           nav?.vibrate?.(15); // short, distinct from the longer "problem" buzz below
+          // The cue for this scan first, so a "route saved" phrase that follows queues after it.
+          if (scan.result === 'accepted') reactToScanCheck();
           // Staff pressed START HERE / STOP HERE on a marker the venue already has.
           if (scan.result === 'accepted' && admin) admin.takeKnownScan(scan.text);
           hud.hideNotice('scan');
@@ -1107,6 +1183,7 @@ export async function bootApp(options = {}) {
             // venue not already knowing the code is the whole point.
             const anchor = admin.registerCode(scan.text);
             nav?.vibrate?.(15);
+            cues.play('scan');
             if (anchor) {
               returnToPlanAfterScan = false;
               showView('floorplan', { manual: true });
@@ -1116,10 +1193,12 @@ export async function bootApp(options = {}) {
           // A code recorded on this device but not yet published.
           if (admin.fixToCode(scan.text)) {
             nav?.vibrate?.(15);
+            cues.play('scan');
             return;
           }
         }
         nav?.vibrate?.(40);
+        cues.play('problem');
         const key = scan.result === 'wrong-venue' ? 'scan.wrongVenue' : 'scan.unrecognised';
         hud.showNotice('scan', t(key, { text: shortCode(scan.text) }));
       });
@@ -1199,6 +1278,7 @@ export async function bootApp(options = {}) {
     matcher,
     fusion: appFusion,
     calibration,
+    cues,
     get state() {
       return {
         cameraUsable,

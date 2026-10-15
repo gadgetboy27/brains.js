@@ -390,4 +390,77 @@ describe('TrainingScreen', () => {
       expect(torch.set).toHaveBeenLastCalledWith(false);
     });
   });
+
+  describe('sound and the scan check', () => {
+    function fakeCues(enabled = false) {
+      const c = {
+        enabled,
+        supported: true,
+        unlock: vi.fn(),
+        play: vi.fn(() => true),
+        setEnabled: vi.fn((on) => (c.enabled = on)),
+      };
+      return c;
+    }
+
+    it('has a sound switch that unlocks audio, remembers the choice, and plays a sample', () => {
+      const cues = fakeCues(false);
+      const { screen, f } = make({ cues });
+      screen.open();
+      expect(f('sound').hidden).toBe(false);
+      expect(f('sound').textContent).toBe(t('train.sound.off'));
+      f('sound').click();
+      expect(cues.unlock).toHaveBeenCalled(); // the tap is the gesture the browser wants
+      expect(cues.setEnabled).toHaveBeenCalledWith(true);
+      expect(cues.play).toHaveBeenCalledWith('scan');
+      expect(f('sound').textContent).toBe(t('train.sound.on'));
+      expect(f('sound').getAttribute('aria-pressed')).toBe('true');
+      f('sound').click();
+      expect(cues.setEnabled).toHaveBeenLastCalledWith(false);
+    });
+
+    it('hides the switch where audio is unsupported', () => {
+      const cues = fakeCues();
+      cues.supported = false;
+      const { screen, f } = make({ cues });
+      screen.open();
+      expect(f('sound').hidden).toBe(true);
+    });
+
+    it('plays a "saved" phrase when a route is saved, and a warning if it was flagged', () => {
+      const cues = fakeCues(true);
+      const { screen, wizard } = make({ cues });
+      screen.open();
+      wizard.go('walk');
+      wizard.route = { nodes: 3, distance: 10, scans: 2, edges: [], quality: { verdict: 'good' } };
+      wizard.go('done');
+      expect(cues.play).toHaveBeenLastCalledWith('saved');
+      wizard.go('start');
+      wizard.go('walk');
+      wizard.route = { nodes: 3, distance: 10, scans: 2, edges: [], quality: { verdict: 'check' } };
+      wizard.go('done');
+      expect(cues.play).toHaveBeenLastCalledWith('warn');
+    });
+
+    it('shows how the marker fitted, for a few seconds, and only when there is something to say', () => {
+      const { screen, f, advance } = make();
+      screen.open();
+      expect(f('scan-note').hidden).toBe(true);
+      screen.showScanCheck({ verdict: 'first' });
+      screen.showScanCheck({ verdict: 'unchecked' });
+      expect(f('scan-note').hidden).toBe(true);
+
+      screen.showScanCheck({ verdict: 'match', jumpM: 0.8 });
+      expect(f('scan-note').hidden).toBe(false);
+      expect(f('scan-note').dataset.verdict).toBe('match');
+      expect(f('scan-note').textContent).toBe(t('train.scan.match', { jump: 0.8 }));
+
+      screen.showScanCheck({ verdict: 'impossible', jumpM: 30, apartM: 60.4 });
+      expect(f('scan-note').dataset.verdict).toBe('impossible');
+      expect(f('scan-note').textContent).toBe(t('train.scan.impossible', { apart: 60 }));
+
+      advance(9000);
+      expect(f('scan-note').hidden).toBe(true);
+    });
+  });
 });

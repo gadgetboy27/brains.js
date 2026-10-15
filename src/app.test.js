@@ -88,6 +88,7 @@ describe('readConfig', () => {
       admin: false,
       survey: false,
       train: false,
+      sound: false,
       filter: { wheelchair: false, stepFree: false, accessLevel: 'visitor' },
     });
     // ?train=1 is staff mode too: it opens the admin panel into the training screen.
@@ -1394,6 +1395,147 @@ describe('bootApp — training: torch and undo', () => {
     expect(app.admin.draft.edges.length).toBe(before.edges);
     expect(app.admin.draft.nodes.length).toBe(before.nodes);
     expect(f('main').textContent).toBe(t('train.start'));
+    await app.destroy();
+  });
+});
+
+describe('bootApp — the scan check and scan sounds', () => {
+  const stream = { getTracks: () => [{ stop: vi.fn() }] };
+  const fakeCues = () => ({
+    enabled: true,
+    supported: true,
+    unlock: vi.fn(),
+    play: vi.fn(() => true),
+    setEnabled: vi.fn(),
+  });
+  async function bootScanning({ admin = false, storage } = {}) {
+    const json = structuredClone(demo);
+    json.anchors.push(
+      { id: 'a-near', x: 0, y: 7, z: 0, floor: 0, heading: 0 }, // 6 m from the entrance marker
+      { id: 'a-drift', x: 0, y: 20, z: 0, floor: 0, heading: 0 } // 19 m from it
+    );
+    const cues = fakeCues();
+    const { app } = await boot({
+      config: { provider: null, ...(admin ? { admin: true } : {}) },
+      options: {
+        venue: createVenue(json),
+        audioCues: cues,
+        ...(storage ? { storage } : {}),
+        ...(admin
+          ? {
+              adminOptions: {
+                storage: storage ?? null,
+                download: vi.fn(),
+                copy: vi.fn(),
+                prompt: vi.fn(() => 'x'),
+              },
+            }
+          : {}),
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    return { app, cues };
+  }
+  const stepOnce = () => {
+    for (const y of [2.5, 0.2]) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+      );
+    }
+  };
+  async function walk(steps) {
+    for (let i = 0; i < steps; i += 1) {
+      stepOnce();
+      await vi.advanceTimersByTimeAsync(400);
+    }
+  }
+  const scan = (app, id) => app.chain.active.handleScan(`brains://demo-health-centre/${id}`);
+  const notices = (app) => app.hud.text.notices.join(' | ');
+
+  it('a marker that fits plays the chime and says nothing', async () => {
+    const { app, cues } = await bootScanning();
+    scan(app, 'a-entrance');
+    await walk(8); // 5.8 m: the next marker is 6 m on
+    cues.play.mockClear();
+    scan(app, 'a-near');
+    expect(cues.play).toHaveBeenCalledWith('scan');
+    expect(notices(app)).not.toContain('That marker');
+    await app.destroy();
+  });
+
+  it('a marker further off than drift explains plays a warning and is flagged', async () => {
+    const { app, cues } = await bootScanning();
+    scan(app, 'a-entrance');
+    await walk(16); // 11.7 m walked, marker is 19 m on: 7 m off, tolerance ~3.8 m, but reachable
+    cues.play.mockClear();
+    scan(app, 'a-drift');
+    expect(cues.play).toHaveBeenCalledWith('warn');
+    expect(notices(app)).toContain(t('scan.check.check', { jump: 7.3 }));
+    await app.destroy();
+  });
+
+  it('two markers too far apart for the steps taken play the low tone and warn the visitor', async () => {
+    const { app, cues } = await bootScanning();
+    scan(app, 'a-entrance');
+    await walk(5); // 3.7 m of steps…
+    cues.play.mockClear();
+    scan(app, 'a-lift-g'); // …but this marker is 31 m away
+    expect(cues.play).toHaveBeenCalledWith('problem');
+    expect(notices(app)).toContain(t('scan.check.impossible'));
+    // A later marker that does fit clears the warning.
+    await walk(1);
+    scan(app, 'a-lift-g');
+    await app.destroy();
+  });
+
+  it('a code that is not a marker for this venue plays the low tone too', async () => {
+    const { app, cues } = await bootScanning();
+    cues.play.mockClear();
+    app.chain.active.handleScan('https://example.com/not-a-marker');
+    expect(cues.play).toHaveBeenCalledWith('problem');
+    await app.destroy();
+  });
+
+  it('sounds are off for visitors, on for staff, unless they chose otherwise', async () => {
+    const visitor = await boot({ config: { provider: 'mock' } });
+    expect(visitor.app.cues.enabled).toBe(false);
+    await visitor.app.destroy();
+    document.body.innerHTML = '<main id="app"></main>';
+    const sounds = await boot({ config: { provider: 'mock', sound: true } });
+    expect(sounds.app.cues.enabled).toBe(true);
+    await sounds.app.destroy();
+    document.body.innerHTML = '<main id="app"></main>';
+    const staff = await boot({
+      config: { provider: 'mock', admin: true },
+      options: { adminOptions: { storage: null, download: vi.fn(), copy: vi.fn() } },
+    });
+    expect(staff.app.cues.enabled).toBe(true);
+    await staff.app.destroy();
+  });
+
+  it('on a staff phone the training screen shows the result and the flagged pair is kept for the export', async () => {
+    const store = new Map();
+    const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+    const { app } = await bootScanning({ admin: true, storage });
+    scan(app, 'a-entrance');
+    await walk(5);
+    scan(app, 'a-lift-g');
+    const note = document.querySelector('.train [data-f="scan-note"]');
+    app.admin.openTraining();
+    app.admin.training.showScanCheck({ verdict: 'impossible', apartM: 31 }); // the screen formats it
+    expect(note.hidden).toBe(false);
+    const kept = loadObservations(storage, 'demo-health-centre').filter((o) => o.k === 'scan');
+    expect(kept).toEqual([
+      expect.objectContaining({ k: 'scan', a: 'a-entrance', b: 'a-lift-g', v: 'impossible' }),
+    ]);
     await app.destroy();
   });
 });

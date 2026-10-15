@@ -115,3 +115,34 @@ describe('heading suggestions', () => {
     expect(recordObservation(s, 'v', { ...gap(30, 22), dh: -12 })).not.toBeNull();
   });
 });
+
+describe('scan observations', () => {
+  const scan = (a, b, v = 'check') => ({ k: 'scan', a, b, v });
+
+  it('records flagged scans and rejects malformed ones', () => {
+    const s = store();
+    expect(recordObservation(s, 'v', scan('a1', 'a2'))).not.toBeNull();
+    expect(recordObservation(s, 'v', { k: 'scan', a: 'a1', b: 'a2', v: 'match' })).toBeNull();
+    expect(recordObservation(s, 'v', { k: 'scan', a: 'a1', v: 'check' })).toBeNull();
+  });
+
+  it('lists a marker pair that keeps not fitting, impossible ones first', () => {
+    const obs = [
+      scan('a1', 'a2'),
+      scan('a1', 'a2'),
+      scan('a1', 'a2'),
+      scan('a3', 'a4', 'impossible'),
+      scan('a3', 'a4', 'impossible'),
+      scan('a5', 'a6'),
+    ];
+    expect(suggestions(obs).suspectMarkers).toEqual([
+      { a: 'a3', b: 'a4', count: 2, impossible: 2 },
+      { a: 'a1', b: 'a2', count: 3, impossible: 0 },
+    ]);
+  });
+
+  it('says nothing about a one-off', () => {
+    expect(suggestions([scan('a1', 'a2')]).suspectMarkers).toEqual([]);
+    expect(suggestions([scan('a1', 'a2', 'impossible')]).suspectMarkers).toEqual([]);
+  });
+});
