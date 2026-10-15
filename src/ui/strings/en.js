@@ -325,6 +325,15 @@ export default {
     'train.banner.paused': 'Paused. Walk on, or stop here.',
     'train.banner.noSensor': 'Step counting is not available on this device.',
     'train.banner.saved': 'Route saved.',
+    'train.rewalk': 'Walk it again',
+    'train.quality.good': 'Good. Off by only {drift} m over {len} m.',
+    'train.quality.ok': 'Fixed up. Corrected {drift} m of drift over {len} m.',
+    'train.quality.check': 'Check this one. It ended {drift} m off over {len} m, too far to trust.',
+    'train.quality.unchecked': 'Saved. Nothing to check it against: the end code is new.',
+    'train.quality.short':
+      'Your steps look about {pct}% shorter than assumed. Setting your stride would improve this.',
+    'train.quality.long':
+      'Your steps look about {pct}% longer than assumed. Setting your stride would improve this.',
     'admin.wizard.scanHere': 'Scan the code here',
     'admin.wizard.codeRecorded': 'Code {code} recorded at this spot',
     'admin.wizard.advanced': 'Advanced (name it, pick a place, stairs/lift, no code here…)',

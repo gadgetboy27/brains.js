@@ -17,6 +17,7 @@ function fakeWizard() {
     stopHere: vi.fn(),
     nextFromHere: vi.fn(),
     reset: vi.fn(),
+    rewalk: vi.fn(),
     setChain: (on) => (w.chain = on),
     onStep: (fn) => {
       listeners.add(fn);
@@ -251,5 +252,63 @@ describe('TrainingScreen', () => {
     expect(timers.size).toBe(0);
     steps.step(3);
     expect(screen.steps).toBe(0);
+  });
+
+  describe('quality line on the result', () => {
+    function finish(quality) {
+      const m = make();
+      m.screen.open();
+      m.wizard.go('walk');
+      m.wizard.route = { nodes: 5, distance: 41, scans: 2, edges: [], quality };
+      m.steps.step(56);
+      m.wizard.go('done');
+      return m;
+    }
+
+    it('good: says how small the drift was, no re-walk offered', () => {
+      const { f } = finish({ verdict: 'good', driftM: 0.8, legM: 41.3, scale: 1.01 });
+      expect(f('quality').textContent).toBe(t('train.quality.good', { drift: 0.8, len: 41 }));
+      expect(f('quality').dataset.verdict).toBe('good');
+      expect(f('rewalk').hidden).toBe(true);
+      expect(f('quality-note').textContent).toBe('');
+    });
+
+    it('ok: says it was fixed up', () => {
+      const { f } = finish({ verdict: 'ok', driftM: 2.4, legM: 20, corrected: true });
+      expect(f('quality').textContent).toBe(t('train.quality.ok', { drift: 2.4, len: 20 }));
+      expect(f('rewalk').hidden).toBe(true);
+    });
+
+    it('check: warns, offers walking it again, and demotes "walk on"', () => {
+      const { f, wizard } = finish({ verdict: 'check', driftM: 8, legM: 18 });
+      expect(f('quality').dataset.verdict).toBe('check');
+      expect(f('rewalk').hidden).toBe(false);
+      expect(f('next').classList.contains('btn-primary')).toBe(false);
+      f('rewalk').click();
+      expect(wizard.rewalk).toHaveBeenCalled();
+    });
+
+    it('unchecked: says there was nothing to compare with', () => {
+      const { f } = finish({ verdict: 'unchecked' });
+      expect(f('quality').textContent).toBe(t('train.quality.unchecked'));
+      expect(f('rewalk').hidden).toBe(true);
+    });
+
+    it('points out steps that are consistently short or long', () => {
+      expect(
+        finish({ verdict: 'ok', driftM: 2, legM: 20, scale: 1.08 }).f('quality-note').textContent
+      ).toBe(t('train.quality.short', { pct: 8 }));
+      expect(
+        finish({ verdict: 'ok', driftM: 2, legM: 20, scale: 0.9 }).f('quality-note').textContent
+      ).toBe(t('train.quality.long', { pct: 10 }));
+    });
+
+    it('walking it again goes back to counting from zero', () => {
+      const { screen, f, wizard } = finish({ verdict: 'check', driftM: 8, legM: 18 });
+      wizard.go('walk');
+      expect(screen.mode).toBe('recording');
+      expect(f('count').textContent).toBe('0');
+      expect(f('result').hidden).toBe(true);
+    });
   });
 });

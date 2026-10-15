@@ -52,6 +52,13 @@ const CSS = `
 .train-link[hidden], .train-result[hidden], .train-main[hidden] { display: none; }
 .train-result p { font-size: 1.2em; font-weight: 700; margin: 4px 0 10px; }
 .train-result .btn { width: 100%; min-height: 64px; font-size: 1.2em; margin-top: 8px; }
+.train-result .btn[hidden] { display: none; }
+.train-quality { margin: 4px 0; padding: 8px 12px; border-radius: 8px; font-weight: 700; border: 2px solid var(--color-text-muted); }
+.train-quality[data-verdict='good'] { border-color: var(--color-ok); }
+.train-quality[data-verdict='ok'] { border-color: var(--color-poi); }
+.train-quality[data-verdict='check'] { border-color: var(--color-error); color: var(--color-error); }
+.train-quality:empty, .train-quality-note:empty { display: none; }
+.train-quality-note { margin: 4px 0; font-size: 0.95em; color: var(--color-text-muted); }
 @keyframes train-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 @keyframes train-tick { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .train-dot, .train-count.tick { animation: none; } }
@@ -155,6 +162,9 @@ export class TrainingScreen {
       <button type="button" class="train-link" data-f="alt"></button>
       <div class="train-result" data-f="result" hidden>
         <p data-f="result-text" role="status"></p>
+        <p class="train-quality" data-f="quality" role="status"></p>
+        <p class="train-quality-note" data-f="quality-note"></p>
+        <button type="button" class="btn btn-primary" data-f="rewalk"></button>
         <button type="button" class="btn btn-primary" data-f="next"></button>
         <button type="button" class="btn" data-f="done"></button>
       </div>
@@ -164,6 +174,8 @@ export class TrainingScreen {
     this.#f('unit').textContent = t('train.unit');
     this.#f('exit').textContent = t('train.exit');
     this.#f('next').textContent = t('train.next');
+    this.#f('rewalk').textContent = t('train.rewalk');
+    this.#f('rewalk').addEventListener('click', () => this.#o.wizard.rewalk());
     this.#f('done').textContent = t('train.done');
     this.#f('exit').addEventListener('click', () => this.close());
     this.#f('main').addEventListener('click', () => this.#o.wizard.scanHere());
@@ -316,6 +328,30 @@ export class TrainingScreen {
     return { key: 'train.banner.saved', warn: false };
   }
 
+  /**
+   * How well the route held together, in words: the drift against a marker the
+   * venue already knew, and what it means for the stride.
+   * @param {{ verdict: string, driftM?: number, legM?: number, scale?: number | null, corrected?: boolean } | null} q
+   */
+  #showQuality(q) {
+    const el = this.#f('quality');
+    const note = this.#f('quality-note');
+    const verdict = q?.verdict ?? 'unchecked';
+    el.dataset.verdict = verdict;
+    el.textContent = t(`train.quality.${verdict}`, {
+      drift: q?.driftM ?? 0,
+      len: Math.round(q?.legM ?? 0),
+    });
+    // Steps consistently off the true distance: say which way, so the stride can be set.
+    const off =
+      q?.scale && Math.abs(1 - q.scale) >= 0.05 ? Math.round(Math.abs(1 - q.scale) * 100) : 0;
+    note.textContent = off
+      ? t(q.scale > 1 ? 'train.quality.short' : 'train.quality.long', { pct: off })
+      : '';
+    this.#f('rewalk').hidden = verdict !== 'check';
+    this.#f('next').classList.toggle('btn-primary', verdict !== 'check');
+  }
+
   #refresh() {
     if (!this.#open) return;
     const mode = this.#mode;
@@ -350,6 +386,7 @@ export class TrainingScreen {
         steps: this.#savedSteps,
         points: route?.nodes ?? this.#points,
       });
+      this.#showQuality(route?.quality ?? null);
     }
   }
 }

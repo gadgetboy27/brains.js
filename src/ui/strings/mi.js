@@ -344,6 +344,17 @@ export default {
     'train.banner.paused': 'Kua tū. Haere tonu, whakamutu rānei i konei.',
     'train.banner.noSensor': 'Kāore e taea te tatau hikoi i tēnei pūrere.',
     'train.banner.saved': 'Kua tiakina te ara.',
+    'train.rewalk': 'Hīkoi anō',
+    'train.quality.good': 'Pai. {drift} m anake te wehenga i roto i te {len} m.',
+    'train.quality.ok': 'Kua whakatikaina. {drift} m te rere kua whakatikaina i roto i te {len} m.',
+    'train.quality.check':
+      'Tirohia tēnei. I mutu {drift} m te tawhiti i roto i te {len} m, he tino tawhiti rawa hei whakapono.',
+    'train.quality.unchecked':
+      'Kua tiakina. Kāore he mea hei whakataurite: he hou te waehere whakamutunga.',
+    'train.quality.short':
+      'He poto ake ō hikoi i te {pct}% i te whakaaro. Mā te whakarite i tō hikoi e pai ake ai.',
+    'train.quality.long':
+      'He roa ake ō hikoi i te {pct}% i te whakaaro. Mā te whakarite i tō hikoi e pai ake ai.',
     'admin.wizard.scanHere': 'Matawaia te waehere i konei',
     'admin.wizard.codeRecorded': 'Kua hopukina te waehere {code} ki tēnei wāhi',
     'admin.wizard.advanced':

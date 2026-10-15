@@ -1255,6 +1255,71 @@ describe('bootApp — training screen (?train=1)', () => {
   });
 });
 
+describe('bootApp — training quality check', () => {
+  const stream = { getTracks: () => [{ stop: vi.fn() }] };
+  async function bootWithWard() {
+    const json = structuredClone(demo);
+    json.anchors.push({ id: 'a-ward', x: 0, y: 10, z: 0, floor: 0, heading: 0, name: 'Ward' });
+    const { app } = await boot({
+      config: { admin: true, train: true, provider: null },
+      options: {
+        venue: createVenue(json),
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    return app;
+  }
+  const stepOnce = () => {
+    for (const y of [2.5, 0.2]) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+      );
+    }
+  };
+  async function walkAndStop(steps) {
+    const app = await bootWithWard();
+    const f = (n) => document.querySelector(`.train [data-f="${n}"]`);
+    f('main').click();
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance'); // (0, 1)
+    for (let i = 0; i < steps; i += 1) {
+      stepOnce();
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    f('main').click();
+    app.chain.active.handleScan('brains://demo-health-centre/a-ward'); // (0, 10): 9 m from the start
+    return { app, f };
+  }
+
+  it('ending at a known marker reports how far off the walk was', async () => {
+    const { app, f } = await walkAndStop(13); // 13 × 0.73 = 9.5 m for a 9 m walk
+    expect(app.admin.wizard.step).toBe('done');
+    expect(f('quality').dataset.verdict).toBe('good');
+    expect(f('quality').textContent).toContain('Off by only');
+    expect(f('rewalk').hidden).toBe(true);
+    await app.destroy();
+  });
+
+  it('a walk that ends far from the marker is flagged, left alone, and can be walked again', async () => {
+    const { app, f } = await walkAndStop(5); // 3.7 m for a 9 m walk: 5 m short
+    expect(f('quality').dataset.verdict).toBe('check');
+    expect(f('rewalk').hidden).toBe(false);
+    f('rewalk').click();
+    expect(app.admin.wizard.step).toBe('walk');
+    expect(f('result').hidden).toBe(true);
+    expect(f('count').textContent).toBe('0');
+    await app.destroy();
+  });
+});
+
 describe('bootApp — sticker survey of a new venue', () => {
   it('?survey=1 on an unpublished venue: blank sheet, scan-name-record, dead reckoning between codes', async () => {
     const stream = { getTracks: () => [{ stop: vi.fn() }] };

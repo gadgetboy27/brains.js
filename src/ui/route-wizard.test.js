@@ -284,3 +284,125 @@ describe('RouteWizard — one button at a time (chain: false, startHere, stopHer
     expect(w.step).toBe('start');
   });
 });
+
+describe('RouteWizard — quality check at the end of a route', () => {
+  /** A venue with a known marker A02 at (0, 10); the walker starts at a fresh sticker A01 at the origin. */
+  function setup(options) {
+    const h = host(undefined, { plan: { A01: 'Entrance', A02: 'Ward 7' } });
+    const a = h.draft.addAnchor({ x: 0, y: 10, floor: 0, name: 'Ward 7' });
+    a.code = 'A02';
+    const w = createRouteWizard(h, { chain: false, ...options });
+    w.scanHere();
+    h.decode('A01'); // new sticker: the origin, exact
+    return { h, w };
+  }
+  const walk = (h, w, ys, confidence = 0.6) => {
+    for (const y of ys) {
+      h.pose = pose(0, y, 0, 0, confidence);
+      w.onPose(h.pose);
+    }
+  };
+  /** The provider reads the marker (an exact pose reaches the wizard), then the wizard is told the code. */
+  const scanEnd = (h, w) => {
+    w.scanHere();
+    const p = pose(0, 10, 0, 0, 1);
+    h.pose = p;
+    w.onPose(p);
+    h.decode('A02');
+  };
+
+  it('good: small drift is reported and the route ends exactly on the marker', () => {
+    const { h, w } = setup();
+    walk(h, w, [3, 6, 9, 10.4]); // 0.4 m long over 10 m
+    scanEnd(h, w);
+    const q = w.route.quality;
+    expect(q.verdict).toBe('good');
+    expect(q.driftM).toBeCloseTo(0.4, 1);
+    expect(q.corrected).toBe(true);
+    expect(w.step).toBe('done');
+  });
+
+  it('ok: drift is spread back along the route instead of dumped on the last leg', () => {
+    const { h, w } = setup();
+    walk(h, w, [3, 6, 9, 12.4]); // 2.4 m long over 12.4 m
+    scanEnd(h, w);
+    const q = w.route.quality;
+    expect(q.verdict).toBe('ok');
+    expect(q.driftM).toBeCloseTo(2.4, 1);
+    const ys = h.draft.nodes
+      .filter((n) => n.x === 0)
+      .map((n) => n.y)
+      .sort((a, b) => a - b);
+    // Each recorded point moved back by its share (0.58 m at y=3 … 2.4 m at the end) and
+    // the last one merged into the marker's own point at 10.
+    expect(ys[0]).toBe(0);
+    expect(ys.at(-1)).toBeCloseTo(10, 1);
+    expect(ys).toHaveLength(new Set(ys.map((y) => y.toFixed(1))).size); // no duplicate points
+    const gaps = ys.slice(1).map((y, i) => y - ys[i]);
+    for (const g of gaps) expect(g).toBeGreaterThan(1.5); // evenly shortened, none collapsed
+    // Distances follow: the route's total matches the corridor it now describes.
+    expect(w.route.distance).toBeCloseTo(10, 0);
+  });
+
+  it('check: a big miss is reported, NOT baked into the map, and can be re-walked', () => {
+    const { h, w } = setup();
+    walk(h, w, [3, 6, 9, 12, 15, 18]); // 8 m long over 18 m
+    const nodesBefore = h.draft.nodes.length;
+    scanEnd(h, w);
+    const q = w.route.quality;
+    expect(q.verdict).toBe('check');
+    expect(q.driftM).toBeCloseTo(8, 1);
+    expect(q.corrected).toBe(false);
+    expect(h.draft.nodes.find((n) => n.y === 18)).toBeDefined(); // left as walked
+
+    expect(w.rewalk()).toBe(true);
+    expect(w.step).toBe('walk');
+    // Only this route's own points are gone; the start (and its place) remain.
+    expect(h.draft.nodes.map((n) => n.y)).toEqual(expect.arrayContaining([0]));
+    expect(h.draft.nodes.some((n) => n.y >= 3 && n.y !== 10)).toBe(false);
+    expect(h.draft.nodes.length).toBeLessThan(nodesBefore);
+    // Walking it again works and now ends fine.
+    walk(h, w, [3, 6, 9.4]);
+    scanEnd(h, w);
+    expect(w.route.quality.verdict).toBe('good');
+  });
+
+  it('unchecked: no comparison is possible when the end marker is new', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance', A03: 'New spot' } });
+    const w = createRouteWizard(h, { chain: false });
+    w.scanHere();
+    h.decode('A01');
+    walk(h, w, [3, 6, 9]);
+    w.scanHere();
+    h.decode('A03'); // a sticker nobody has recorded: it lives wherever dead reckoning says
+    expect(w.route.quality.verdict).toBe('unchecked');
+  });
+
+  it('unchecked: a route that began at an approximate position cannot be judged', () => {
+    const h = host(undefined, { plan: { A02: 'Ward 7' } });
+    const a = h.draft.addAnchor({ x: 0, y: 10, floor: 0 });
+    a.code = 'A02';
+    const w = createRouteWizard(h, { chain: false });
+    h.setPose({ x: 0, y: 0 }, { confidence: 0.5 });
+    w.startHere();
+    walk(h, w, [3, 6, 9]);
+    scanEnd(h, w);
+    expect(w.route.quality.verdict).toBe('unchecked');
+  });
+
+  it('rewalk only applies to a saved route', () => {
+    const { w } = setup();
+    expect(w.rewalk()).toBe(false);
+  });
+
+  it('judges against the length walked: the same miss is fine on a long route', () => {
+    const { h, w } = setup({ goodM: 0.1, goodPct: 0.02, okM: 0.5, okPct: 0.3 });
+    walk(h, w, [3, 6, 9, 12, 15, 18]); // 8 m miss over 18 m = 44%
+    scanEnd(h, w);
+    expect(w.route.quality.verdict).toBe('check');
+    const h2 = setup({ goodM: 0.1, goodPct: 0.02, okM: 0.5, okPct: 0.5 });
+    walk(h2.h, h2.w, [3, 6, 9, 12, 15, 18]);
+    scanEnd(h2.h, h2.w);
+    expect(h2.w.route.quality.verdict).toBe('ok');
+  });
+});

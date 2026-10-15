@@ -61,12 +61,28 @@ export class RouteWizard {
   #uncertain = false;
   /** @type {Set<(step: string) => void>} */
   #stepListeners = new Set();
+  /** Nodes this route passed through, in order; `created` ones are this route's own (safe to move or remove). */
+  #legNodes = [];
+  /** The last dead-reckoned (not exact) position seen since the last exact fix. */
+  #lastDr = null;
+  /**
+   * The stretch since the last exact fix: where it began (null if that was not
+   * an exact position, so the stretch cannot be judged) and the points dropped on it.
+   * @type {{ start: { x: number, y: number, floor: number } | null, nodes: Array<{ id: string, created: boolean }> }}
+   */
+  #seg = { start: null, nodes: [] };
+  /** True while the wizard is setting the position itself (a new sticker defines it): not ground truth. */
+  #selfFix = false;
   /** The code that started the current leg — re-scanning it mid-walk is a position fix, not an arrival. */
   #startCode = null;
 
   /**
    * @param {WizardHost} host
-   * @param {{ stepM?: number, turnDeg?: number, minConfidence?: number, snapM?: number, chain?: boolean }} [options]
+   * @param {{ stepM?: number, turnDeg?: number, minConfidence?: number, snapM?: number, chain?: boolean,
+   *   goodM?: number, goodPct?: number, okM?: number, okPct?: number }} [options]
+   *   `goodM`/`goodPct` and `okM`/`okPct` set the quality check's limits: the
+   *   end-of-route drift is "good" within the larger of `goodM` metres and
+   *   `goodPct` of the route's length, "ok" within the larger of `okM` and `okPct`.
    *   `chain: false` stops after a route is saved (at the `done` step) instead
    *   of starting the next route from where this one ended; the caller then
    *   chooses with {@link nextFromHere} or {@link reset}.
@@ -81,6 +97,10 @@ export class RouteWizard {
       minConfidence: 0.3,
       snapM: 1.5,
       chain: true,
+      goodM: 1,
+      goodPct: 0.05,
+      okM: 3,
+      okPct: 0.15,
       ...options,
     };
     this.#render();
@@ -356,15 +376,21 @@ export class RouteWizard {
     });
     anchor.code = text;
     // The code now lives here: the position is exact from this point.
-    this.#host.setPose(
+    this.#setPoseSelf(
       { x: anchor.x, y: anchor.y, z: anchor.z, floor: anchor.floor, heading: anchor.heading },
       { confidence: 1, quiet: true }
     );
     if (this.#route) this.#route.scans += 1;
     this.#host.toast(t('admin.wizard.codeRecorded', { code: text }));
     this.#host.changed();
-    if (this.#step === 'walk') this.onPose(this.#host.getPose());
-    else this.#updateStart();
+    if (this.#step === 'walk') {
+      this.#selfFix = true; // still our own definition of where this sticker is
+      try {
+        this.onPose(this.#host.getPose());
+      } finally {
+        this.#selfFix = false;
+      }
+    } else this.#updateStart();
     this.#autoAdvance(text);
     return anchor;
   }
@@ -445,11 +471,28 @@ export class RouteWizard {
   #startWalk() {
     this.#lastNode = this.#startNode;
     this.#lastHeading = this.#host.getPose()?.heading ?? null;
-    this.#route = { edges: [], nodes: 0, distance: 0, scans: 0 };
+    this.#route = { edges: [], nodes: 0, distance: 0, scans: 0, quality: null };
+    this.#legNodes = [{ id: this.#startNode, created: false }];
+    this.#lastDr = null;
+    const here = this.#host.getPose();
+    this.#seg = {
+      start: here && here.confidence >= 1 ? { x: here.x, y: here.y, floor: here.floor } : null,
+      nodes: [],
+    };
     this.#uncertain = false;
     this.#startCode = null; // set by #autoAdvance right after, for a scan-started leg
     this.#host.onRecording?.(true, 0);
     this.#show('walk');
+  }
+
+  /** Set the position ourselves: it is a definition, not a measurement, so it must not pass for ground truth. */
+  #setPoseSelf(point, options) {
+    this.#selfFix = true;
+    try {
+      return this.#host.setPose(point, options);
+    } finally {
+      this.#selfFix = false;
+    }
   }
 
   #sectionAttrs() {
@@ -470,6 +513,19 @@ export class RouteWizard {
     if (this.#step !== 'walk' || !pose) return;
     const draft = this.#host.draft;
     const last = draft.nodeById(this.#lastNode);
+    // An exact position straight after dead-reckoned walking is a marker being
+    // read; exact positions from a continuous provider have no such walk before them.
+    let markerFix = false;
+    if (pose.confidence < 1) {
+      this.#lastDr = { x: pose.x, y: pose.y, floor: pose.floor };
+    } else if (this.#selfFix) {
+      // A new sticker was just defined to be where dead reckoning says: nothing to compare with.
+      this.#seg = { start: { x: pose.x, y: pose.y, floor: pose.floor }, nodes: [] };
+      this.#lastDr = null;
+    } else {
+      markerFix = this.#lastDr !== null;
+      this.#closeSegment(pose);
+    }
     const uncertain = pose.confidence < this.#opts.minConfidence;
     if (uncertain !== this.#uncertain) {
       this.#uncertain = uncertain;
@@ -481,12 +537,122 @@ export class RouteWizard {
     const turn =
       this.#lastHeading === null ? 0 : Math.abs(wrap180(pose.heading - this.#lastHeading));
     const exact = pose.confidence >= 1;
-    if (floorChanged || d >= this.#opts.stepM || (exact && d >= 0.5)) {
+    if (markerFix && d >= 0.5) {
+      // A marker's position is known precisely: do not snap it onto a point 1.5 m away.
+      this.#drop(pose, { force: true });
+    } else if (floorChanged || d >= this.#opts.stepM || (exact && d >= 0.5)) {
       this.#drop(pose);
     } else if (d >= 1 && turn >= this.#opts.turnDeg) {
       // A corner close to the last point is still a corner: do not snap it away.
       this.#drop(pose, { force: true });
     }
+  }
+
+  /**
+   * The quality check. An exact position (a scan of a marker the venue
+   * already knows) says where the walker really is; the stretch walked since
+   * the last exact position was drawn from dead reckoning, so the gap between
+   * the two is the drift of that stretch. A small gap is spread back along the
+   * stretch's own points (the earlier a point, the less it moves) so the saved
+   * corridor ends exactly on the marker; a big one is reported and left alone,
+   * for a re-walk, rather than baked into the map.
+   *
+   * Nothing is judged when the stretch began at an approximate position, ran
+   * across floors, or had no points.
+   * @param {{ x: number, y: number, floor: number }} truth
+   */
+  #closeSegment(truth) {
+    const route = this.#route;
+    const seg = this.#seg;
+    const dr = this.#lastDr;
+    this.#seg = { start: { x: truth.x, y: truth.y, floor: truth.floor }, nodes: [] };
+    this.#lastDr = null;
+    if (!route || !seg.start || !dr || seg.nodes.length === 0) return;
+    const draft = this.#host.draft;
+    const points = seg.nodes.map((n) => draft.nodeById(n.id));
+    if (
+      points.some((n) => !n || n.floor !== truth.floor) ||
+      dr.floor !== truth.floor ||
+      seg.start.floor !== truth.floor
+    ) {
+      return;
+    }
+    // The stretch as dead reckoning drew it: where it began → each point
+    // dropped → where dead reckoning thought it was when the marker was read.
+    const path = [seg.start, ...points, dr];
+    const cum = [0];
+    for (let i = 1; i < path.length; i += 1) {
+      cum.push(cum[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
+    }
+    const legM = cum.at(-1);
+    const dx = truth.x - dr.x;
+    const dy = truth.y - dr.y;
+    const driftM = Math.hypot(dx, dy);
+    const o = this.#opts;
+    const verdict =
+      driftM <= Math.max(o.goodM, o.goodPct * legM)
+        ? 'good'
+        : driftM <= Math.max(o.okM, o.okPct * legM)
+          ? 'ok'
+          : 'check';
+    const straightDr = Math.hypot(dr.x - seg.start.x, dr.y - seg.start.y);
+    const straightTrue = Math.hypot(truth.x - seg.start.x, truth.y - seg.start.y);
+    const round = (n, dp = 1) => Math.round(n * 10 ** dp) / 10 ** dp;
+    // Fold this stretch into the route's overall verdict: the worst wins.
+    const rank = { good: 0, ok: 1, check: 2 };
+    const prev = route.quality?.verdict in rank ? route.quality : null;
+    const total = {
+      driftM: (prev?.driftM ?? 0) + driftM,
+      legM: (prev?.legM ?? 0) + legM,
+    };
+    route.quality = {
+      verdict: prev && rank[prev.verdict] > rank[verdict] ? prev.verdict : verdict,
+      driftM: round(total.driftM),
+      legM: round(total.legM),
+      driftPct: total.legM > 0 ? round((100 * total.driftM) / total.legM) : 0,
+      // Dead reckoning vs truth for the straight-line distance: <1 means steps were too short.
+      scale: straightDr >= 8 ? round(straightTrue / straightDr, 2) : (prev?.scale ?? null),
+      corrected: Boolean(prev?.corrected),
+    };
+    if (verdict === 'check' || legM === 0) return;
+
+    // Spread the drift back along this stretch's own points.
+    for (let i = 0; i < points.length; i += 1) {
+      if (!seg.nodes[i].created) continue; // a junction shared with another route stays put
+      const f = cum[i + 1] / legM;
+      draft.moveNode(points[i].id, { x: points[i].x + dx * f, y: points[i].y + dy * f });
+    }
+    route.quality.corrected = true;
+    // Edge lengths moved with the points: keep the route's own total in step.
+    route.distance = route.edges.reduce((t, e) => t + (e.distance ?? 0), 0);
+    this.#host.changed();
+  }
+
+  /**
+   * Throw away the route just saved and begin it again from the same start
+   * (for a route the quality check flagged). Removes only what this route
+   * created: its own points and edges, and the places it named at its end.
+   * @returns {boolean} false unless a route has just been saved.
+   */
+  rewalk() {
+    if (this.#step !== 'done' || !this.#route) return false;
+    const draft = this.#host.draft;
+    for (const e of this.#route.edges) draft.removeEdge(e.from, e.to);
+    for (const n of [...this.#legNodes].reverse()) {
+      if (n.created && n.id !== this.#startNode) draft.removeNode(n.id);
+    }
+    this.#host.changed();
+    // Back to the start, standing at it: the next scan or walk redraws the route.
+    const start = draft.nodeById(this.#startNode);
+    if (start) {
+      this.#host.setPose(
+        { x: start.x, y: start.y, z: start.z, floor: start.floor },
+        { confidence: 1, quiet: true }
+      );
+    }
+    this.#clearFields();
+    this.#startWalk();
+    return true;
   }
 
   /**
@@ -530,11 +696,15 @@ export class RouteWizard {
   #drop(pose, { force = false } = {}) {
     const draft = this.#host.draft;
     ensureFloor(draft, pose.floor);
+    const before = draft.nodes.length;
     const node = draft.addNode(
       { x: pose.x, y: pose.y, z: pose.z, floor: pose.floor },
       { linkFrom: this.#lastNode, snap: force ? 0.5 : this.#opts.snapM, edge: this.#sectionAttrs() }
     );
     if (node.id !== this.#lastNode) {
+      const entry = { id: node.id, created: draft.nodes.length > before };
+      this.#legNodes.push(entry);
+      this.#seg.nodes.push(entry);
       const edge = draft.edgeBetween(this.#lastNode, node.id);
       if (edge && !this.#route.edges.includes(edge)) {
         this.#route.edges.push(edge);
@@ -553,6 +723,7 @@ export class RouteWizard {
   /** Step 2 → 3. */
   arrive() {
     if (this.#step !== 'walk') return;
+    if (this.#route && !this.#route.quality) this.#route.quality = { verdict: 'unchecked' };
     this.#show('finish');
   }
 

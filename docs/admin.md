@@ -315,3 +315,25 @@ Motion access); or paused (you stopped walking). The screen is kept awake
 while it is open (a sleeping phone stops counting steps) where the browser
 supports it. Counting starts after the first scan of the session, because
 steps need a known starting position.
+
+### The quality check
+
+When a route ends at a marker the venue already knows, the app compares where
+the steps said you were with where that marker really is. The gap is the
+drift of that walk, shown on the result card:
+
+- **Good**: off by only about a metre (or 5% of the walk).
+- **Fixed up**: up to about 3 m (or 15%). The drift is spread back along the
+  route's own points, the earlier a point the less it moves, so the saved
+  corridor ends exactly on the marker.
+- **Check this one**: further than that. Nothing is changed in the map, and
+  **Walk it again** removes just that route's points so you can redo it.
+- **Saved, nothing to check it against**: the end code is new, so there is
+  no known position to compare with. Walk back to it from another marker
+  later to check it.
+
+If your steps are consistently 5% or more shorter or longer than the app
+assumes, it says so. Setting your stride (More tools, stride calibration)
+improves every later walk. A scan in the middle of a route is checked the
+same way, stretch by stretch. A route that began at an approximate position,
+or crossed floors, is not judged.
