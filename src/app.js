@@ -18,6 +18,7 @@
  *  - runtime:   `?runtime=<url>` / `RUNTIME_CONFIG_URL` / the venue's `runtimeConfigUrl`
  *  - harness:   `?harness=1` shows the accuracy test panel (docs/accuracy.md)
  *  - admin:     `?admin=1` shows the venue admin panel (docs/admin.md)
+ *  - train:     `?train=1` opens the admin panel straight into the training screen
  *
  * ## Views
  *
@@ -44,6 +45,7 @@ import {
   resolveRuntimeConfigUrl,
 } from './venues/runtime-config.js';
 import { createProviderChain } from './providers/index.js';
+import { parseQrPayload } from './providers/qr.js';
 import { NavigationArrow } from './ui/arrow.js';
 import { ArScene } from './ui/ar-scene.js';
 import { applyContrastPreference, createDestinationPicker } from './ui/destination-picker.js';
@@ -125,7 +127,8 @@ export function readConfig({
     allowMock: q.get('mock') === '1' || provider === 'mock' || Boolean(env.DEV),
     view: ['ar', 'floorplan', 'auto'].includes(view) ? view : 'auto',
     harness: q.get('harness') === '1',
-    admin: q.get('admin') === '1' || q.get('survey') === '1',
+    admin: q.get('admin') === '1' || q.get('survey') === '1' || q.get('train') === '1',
+    train: q.get('train') === '1',
     survey: q.get('survey') === '1',
     filter: {
       wheelchair: q.get('wheelchair') === '1',
@@ -1003,6 +1006,18 @@ export async function bootApp(options = {}) {
       mount: root,
       storage,
       initialPose: lastPose,
+      stepSource: {
+        get: () => appFusion.stepCount,
+        // PoseFusion emits a pose on every counted step: real time, not the 250 ms tick.
+        subscribe: (fn) => appFusion.on('pose', () => fn(appFusion.stepCount)),
+      },
+      strideM: venue.strideM,
+      anchorForCode: (text) => {
+        const reg = venue.anchorByCode?.(text);
+        if (reg) return reg.id;
+        const p = parseQrPayload(text);
+        return p && p.venueId === venue.id ? p.anchorId : null;
+      },
       onScanRequest: () => {
         // Show the camera; come back to the plan on the next exact fix (a scan).
         returnToPlanAfterScan = true;
@@ -1022,6 +1037,7 @@ export async function bootApp(options = {}) {
     if (view !== 'floorplan') showView('floorplan', { manual: true }); // editing happens on the plan
     hud.setCompact(true); // give the map the screen; the HUD keeps only the status line
     if (config.survey) admin.showTab('survey');
+    if (config.train) admin.openTraining();
   }
 
   // --- Every decoded code gets a visible reaction, so "the camera saw it"
@@ -1045,6 +1061,8 @@ export async function bootApp(options = {}) {
         scanOverlay.flash();
         if (scan.result === 'accepted' || scan.result === 'repeat') {
           nav?.vibrate?.(15); // short, distinct from the longer "problem" buzz below
+          // Staff pressed START HERE / STOP HERE on a marker the venue already has.
+          if (scan.result === 'accepted' && admin) admin.takeKnownScan(scan.text);
           hud.hideNotice('scan');
           hud.hideNotice('floor-change');
           showMarkerNote(scan.anchorId);

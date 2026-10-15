@@ -289,3 +289,29 @@ and a short list of proposals:
 
 Walk marker to marker along the real corridor (not cutting corners) for the
 stride figure to mean anything.
+
+## Training screen (the simple way to record routes)
+
+Open **Training screen** at the top of the Routes tab, or add `?train=1` to the
+address. Everything else steps out of the way and you get:
+
+- a huge **live step counter** that ticks (and buzzes) on every step, so you
+  can see the phone is tracking you right now;
+- one big button, **START HERE**, which opens the camera: scan the QR code
+  where the route starts;
+- walk. Route points, corners, floor changes and names are handled for you
+  (names come from the code or its printed-code list);
+- the same button now says **STOP HERE**: scan the QR code where you finish.
+  The route is saved, and the screen offers **Walk on from here** (that stop
+  becomes the next start) or **Finished**.
+
+No QR code to hand? "Start at my position" and "Stop at my position" do the
+same without a scan, naming the places Point 1, Point 2... (rename them later
+in the Edit tab).
+
+The line under the counter tells you what to do: keep walking; scan a QR soon
+(the position has drifted); no steps detected (hold the phone steady, or allow
+Motion access); or paused (you stopped walking). The screen is kept awake
+while it is open (a sleeping phone stops counting steps) where the browser
+supports it. Counting starts after the first scan of the session, because
+steps need a known starting position.

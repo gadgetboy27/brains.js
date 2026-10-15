@@ -87,8 +87,11 @@ describe('readConfig', () => {
       harness: false,
       admin: false,
       survey: false,
+      train: false,
       filter: { wheelchair: false, stepFree: false, accessLevel: 'visitor' },
     });
+    // ?train=1 is staff mode too: it opens the admin panel into the training screen.
+    expect(readConfig({ search: '?train=1', env: {} })).toMatchObject({ train: true, admin: true });
     expect(
       readConfig({
         search: '?venue=/v.json&provider=qr&view=floorplan&wheelchair=1&staff=1',
@@ -1178,6 +1181,76 @@ describe('bootApp — corners as position fixes', () => {
   it('can be switched off', async () => {
     const app = await walkToCorner({ turnCorrection: false });
     expect(app.fusion.getPose().y).toBeCloseTo(1 + 9 * 0.4, 1);
+    await app.destroy();
+  });
+});
+
+describe('bootApp — training screen (?train=1)', () => {
+  async function bootTraining() {
+    const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    const { app } = await boot({
+      config: { admin: true, train: true, provider: null },
+      options: {
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    return app;
+  }
+  const step = () => {
+    for (const y of [2.5, 0.2]) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+      );
+    }
+  };
+
+  it('opens straight into the training screen, with the rest of the panel out of the way', async () => {
+    const app = await bootTraining();
+    const train = document.querySelector('.train');
+    expect(train.hidden).toBe(false);
+    expect(app.admin.training.isOpen).toBe(true);
+    expect(document.querySelector('.admin').hidden).toBe(true);
+    expect(train.querySelector('[data-f="main"]').textContent).toBe(t('train.start'));
+    train.querySelector('[data-f="exit"]').click();
+    expect(document.querySelector('.admin').hidden).toBe(false);
+    await app.destroy();
+  });
+
+  it('START HERE on a marker the venue already has starts a route, steps tick, STOP HERE saves it', async () => {
+    const app = await bootTraining();
+    const train = document.querySelector('.train');
+    const f = (n) => train.querySelector(`[data-f="${n}"]`);
+
+    f('main').click(); // START HERE → camera
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance');
+    expect(app.admin.wizard.step).toBe('walk');
+    expect(f('main').textContent).toBe(t('train.stop'));
+    expect(f('count').textContent).toBe('0');
+
+    for (let i = 0; i < 12; i += 1) {
+      step();
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    expect(f('count').textContent).toBe('12'); // live, step by step
+    expect(f('sub').textContent).toContain('9 m'); // 12 × 0.73
+
+    f('main').click(); // STOP HERE → camera
+    app.chain.active.handleScan('brains://demo-health-centre/a-lift-g');
+    expect(app.admin.wizard.step).toBe('done');
+    expect(f('result').hidden).toBe(false);
+    expect(f('result-text').textContent).toContain('12 steps');
+    f('done').click();
+    expect(app.admin.wizard.step).toBe('start');
+    expect(f('main').textContent).toBe(t('train.start'));
     await app.destroy();
   });
 });

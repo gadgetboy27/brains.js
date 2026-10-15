@@ -225,3 +225,62 @@ describe('RouteWizard', () => {
     expect(h.recording.at(-1)).toEqual([false, undefined]);
   });
 });
+
+describe('RouteWizard — one button at a time (chain: false, startHere, stopHere)', () => {
+  const walkTo = (h, w, x, y) => {
+    h.pose = pose(x, y);
+    w.onPose(h.pose);
+  };
+
+  it('with chain off, the end scan saves the route and waits at "done"', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance', A02: 'Ward 7' } });
+    const w = createRouteWizard(h, { chain: false });
+    const seen = [];
+    w.onStep((s) => seen.push(s));
+    w.scanHere();
+    h.decode('A01');
+    walkTo(h, w, 0, 10);
+    w.scanHere();
+    h.decode('A02');
+    expect(w.step).toBe('done');
+    expect(seen).toEqual(['walk', 'finish', 'done']);
+    expect(h.draft.pois.map((p) => p.name)).toEqual(expect.arrayContaining(['Entrance', 'Ward 7']));
+    w.nextFromHere(); // the user chose "walk on from here"
+    expect(w.step).toBe('walk');
+  });
+
+  it('chain defaults on and can be switched', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance', A02: 'Ward 7' } });
+    const w = createRouteWizard(h);
+    w.setChain(false);
+    w.scanHere();
+    h.decode('A01');
+    walkTo(h, w, 0, 10);
+    w.scanHere();
+    h.decode('A02');
+    expect(w.step).toBe('done');
+  });
+
+  it('startHere and stopHere need no scan and name the places themselves', () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    h.setPose({ x: 0, y: 0 }, { confidence: 1 });
+    expect(w.startHere()).toBe(true);
+    expect(w.step).toBe('walk');
+    walkTo(h, w, 0, 12);
+    const saved = w.stopHere();
+    expect(saved.distance).toBeGreaterThan(10);
+    expect(w.step).toBe('done');
+    expect(h.draft.pois.map((p) => p.name)).toEqual([
+      t('admin.wizard.autoName', { n: 1 }),
+      t('admin.wizard.autoName', { n: 2 }),
+    ]);
+  });
+
+  it('startHere refuses without a position', () => {
+    const h = host();
+    const w = createRouteWizard(h);
+    expect(w.startHere()).toBe(false);
+    expect(w.step).toBe('start');
+  });
+});

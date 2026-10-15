@@ -318,6 +318,32 @@ export default {
     'admin.wizard.existing': 'He wāhi kua mōhiotia rānei',
     'admin.wizard.existingNone': '— kāore —',
     'admin.wizard.unnamed': 'ingoa-kore',
+    'admin.wizard.autoName': 'Wāhi {n}',
+
+    // Training screen (staff)
+    'train.title': 'Whakangungu',
+    'train.open': 'Mata whakangungu',
+    'train.live.idle': 'KUA RERI',
+    'train.live.recording': 'TŪTOHU',
+    'train.unit': 'hikoi',
+    'train.sub': '{metres} m · {points} wāhi kua tiakina',
+    'train.start': 'Tīmata i konei',
+    'train.stop': 'Whakamutu i konei',
+    'train.startNoScan': 'Kāore he QR? Tīmata i tōku wāhi',
+    'train.stopNoScan': 'Kāore he QR? Whakamutu i tōku wāhi',
+    'train.exit': 'Puta',
+    'train.next': 'Haere tonu mai i konei',
+    'train.done': 'Kua oti',
+    'train.result': 'Kua tiakina: {metres} m, {steps} hikoi, {points} wāhi.',
+    'train.banner.idle': 'Matawai te waehere QR ki te wāhi e tīmata ai tēnei ara.',
+    'train.banner.tracking':
+      'Kei te aroturuki. Haere tonu, ā, matawai te waehere QR ki te wāhi e mutu ai koe.',
+    'train.banner.uncertain': 'Kāore i te mārama te wāhi. Matawai he waehere QR i ōna wā poto nei.',
+    'train.banner.noSteps':
+      'Kāore anō kia kitea he hikoi. Pupuri mārire i te waea ka hīkoi, whakaaetia rānei te Nekeneke.',
+    'train.banner.paused': 'Kua tū. Haere tonu, whakamutu rānei i konei.',
+    'train.banner.noSensor': 'Kāore e taea te tatau hikoi i tēnei pūrere.',
+    'train.banner.saved': 'Kua tiakina te ara.',
     'admin.wizard.scanHere': 'Matawaia te waehere i konei',
     'admin.wizard.codeRecorded': 'Kua hopukina te waehere {code} ki tēnei wāhi',
     'admin.wizard.advanced':

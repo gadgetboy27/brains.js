@@ -59,18 +59,30 @@ export class RouteWizard {
   #lastHeading = null;
   #route = null;
   #uncertain = false;
+  /** @type {Set<(step: string) => void>} */
+  #stepListeners = new Set();
   /** The code that started the current leg — re-scanning it mid-walk is a position fix, not an arrival. */
   #startCode = null;
 
   /**
    * @param {WizardHost} host
-   * @param {{ stepM?: number, turnDeg?: number, minConfidence?: number, snapM?: number }} [options]
+   * @param {{ stepM?: number, turnDeg?: number, minConfidence?: number, snapM?: number, chain?: boolean }} [options]
+   *   `chain: false` stops after a route is saved (at the `done` step) instead
+   *   of starting the next route from where this one ended; the caller then
+   *   chooses with {@link nextFromHere} or {@link reset}.
    */
   constructor(host, options = {}) {
     if (!host?.draft || !host?.mount) throw new TypeError('RouteWizard needs a draft and a mount');
     this.#host = host;
     this.#doc = host.document ?? globalThis.document;
-    this.#opts = { stepM: 3, turnDeg: 35, minConfidence: 0.3, snapM: 1.5, ...options };
+    this.#opts = {
+      stepM: 3,
+      turnDeg: 35,
+      minConfidence: 0.3,
+      snapM: 1.5,
+      chain: true,
+      ...options,
+    };
     this.#render();
     this.#show('start');
   }
@@ -81,6 +93,26 @@ export class RouteWizard {
 
   get step() {
     return this.#step;
+  }
+
+  /**
+   * Be told whenever the wizard moves to another step.
+   * @param {(step: 'start' | 'walk' | 'finish' | 'done') => void} listener
+   * @returns {() => void} Unsubscribe.
+   */
+  onStep(listener) {
+    this.#stepListeners.add(listener);
+    return () => this.#stepListeners.delete(listener);
+  }
+
+  /** Whether to carry straight on into the next route after one is saved (see the `chain` option). */
+  setChain(on) {
+    this.#opts.chain = Boolean(on);
+  }
+
+  /** Whether the position is uncertain right now (dead reckoning has gone stale). */
+  get uncertain() {
+    return this.#uncertain;
   }
 
   /** Live figures for the route being walked (null outside a route). */
@@ -219,6 +251,7 @@ export class RouteWizard {
     if (step === 'start' || step === 'finish') this.#fillExisting(step);
     if (step === 'start') this.#updateStart();
     if (step === 'walk') this.#updateWalk();
+    for (const l of this.#stepListeners) l(step);
   }
 
   #fillExisting(side) {
@@ -355,8 +388,10 @@ export class RouteWizard {
       this.#f('finish-name').value = this.#resolveScanName(text);
       this.arrive();
       this.save();
-      this.nextFromHere();
-      this.#startCode = text;
+      if (this.#opts.chain) {
+        this.nextFromHere();
+        this.#startCode = text;
+      }
     }
   }
 
@@ -452,6 +487,37 @@ export class RouteWizard {
       // A corner close to the last point is still a corner: do not snap it away.
       this.#drop(pose, { force: true });
     }
+  }
+
+  /**
+   * Start a route at the current position without scanning anything: the
+   * place is named automatically. For when the position is already exact (the
+   * code was just scanned) or there is no code to hand.
+   * @returns {boolean} false when there is no position yet.
+   */
+  startHere() {
+    if (this.#step !== 'start') return false;
+    if (!this.#f('start-name').value.trim()) {
+      this.#f('start-name').value = t('admin.wizard.autoName', {
+        n: this.#host.draft.pois.length + 1,
+      });
+    }
+    return this.beginWalk();
+  }
+
+  /**
+   * End the route at the current position without scanning: named
+   * automatically, saved straight away. Returns the save result.
+   */
+  stopHere() {
+    if (this.#step !== 'walk') return null;
+    this.arrive();
+    if (!this.#f('finish-name').value.trim() && !this.#f('finish-existing').value) {
+      this.#f('finish-name').value = t('admin.wizard.autoName', {
+        n: this.#host.draft.pois.length + 1,
+      });
+    }
+    return this.save();
   }
 
   /** Drop a point right here (a turn the sensors did not catch). */

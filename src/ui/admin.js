@@ -31,6 +31,7 @@ import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/surv
 import { categoryName, t } from './strings/index.js';
 import { PoseFusion } from '../core/fusion.js';
 import { createRouteWizard } from './route-wizard.js';
+import { createTrainingScreen } from './training-screen.js';
 import { cssToken, ensureStyle } from './tokens.js';
 
 const CSS = `
@@ -118,6 +119,7 @@ export class AdminPanel {
   #unsub = [];
   #tab = 'routes';
   #wizard = null;
+  #training = null;
   /** @type {((text: string) => unknown) | null} */
   #codeHandler = null;
   #published = true;
@@ -164,6 +166,10 @@ export class AdminPanel {
    * @param {(text: string) => Promise<string>} [options.qrDataUrl]  Injectable QR renderer (tests).
    * @param {(text: string) => Promise<string>} [options.qrSvg]
    * @param {(html: string) => void} [options.openSheet]
+   * @param {{ get: () => number, subscribe: (fn: (steps: number) => void) => (() => void) } | null} [options.stepSource]
+   *   Live step count for the training screen's big counter (null: shows it as unavailable).
+   * @param {(text: string) => string | null} [options.anchorForCode]  The venue anchor id a scanned payload names, if any.
+   * @param {number} [options.strideM]   Metres per step for the training screen's distance figure.
    * @param {object | null} [options.initialPose]  Last known pose, if positioning started before this panel.
    * @param {Function} [options.getComputedStyle]
    */
@@ -233,6 +239,9 @@ export class AdminPanel {
       </details>
 
       <div class="admin-tool" data-tool="routes" role="tabpanel" hidden>
+        <div class="admin-actions" data-f="train-row">
+          <button type="button" class="btn btn-primary btn-big" data-f="train-open"></button>
+        </div>
         <div data-f="wizard-mount"></div>
       </div>
 
@@ -439,6 +448,17 @@ export class AdminPanel {
       resolveCodeName: (text) => findPlanRow(this.#plan, text)?.name ?? null,
       onRecording: (active, distanceM) => this.#opts.onRecording?.(active, distanceM),
     });
+    this.#training = createTrainingScreen({
+      wizard: this.#wizard,
+      mount: options.mount ?? this.#doc.body,
+      document: this.#doc,
+      steps: options.stepSource ?? null,
+      getStrideM: () => this.#draft.frame?.strideM ?? options.strideM ?? 0.73,
+      getPose: () => this.#pose,
+      onExit: () => (this.#el.hidden = false),
+    });
+    this.#f('train-open').textContent = t('train.open');
+    this.#f('train-open').addEventListener('click', () => this.openTraining());
     this.#f('survey-hint').textContent = t('admin.survey.hint');
     this.#f('survey-name-label').textContent = t('admin.survey.name');
     this.#f('survey-ward-label').textContent = t('admin.ward.number');
@@ -693,6 +713,21 @@ export class AdminPanel {
     this.#pose = pose;
     this.#updateRecording();
     this.#wizard?.onPose(pose);
+    this.#training?.onPose(pose);
+  }
+
+  /**
+   * The stripped-down recording screen: a step counter, START HERE and STOP
+   * HERE. The rest of the panel steps aside until it is closed.
+   */
+  openTraining() {
+    this.#el.hidden = true;
+    this.#training.open();
+  }
+
+  /** The training screen, for the app and tests. */
+  get training() {
+    return this.#training;
   }
 
   /** The guided start-to-finish route builder (the Routes tab). */
@@ -711,6 +746,19 @@ export class AdminPanel {
     this.#registering = false;
     this.#status(t('admin.survey.scanning'));
     this.#opts.onScanRequest?.();
+    return true;
+  }
+
+  /**
+   * A marker the venue already knows was just scanned. If the route wizard
+   * is waiting for a code (START HERE / STOP HERE), hand it over: it starts
+   * or ends a route there, exactly as for a sticker recorded on this phone.
+   * @param {string} text
+   * @returns {boolean} Whether the wizard took it.
+   */
+  takeKnownScan(text) {
+    if (this.#codeHandler === null) return false;
+    this.registerCode(text);
     return true;
   }
 
@@ -1146,7 +1194,12 @@ export class AdminPanel {
    * @param {string} text
    */
   fixToCode(text) {
-    const known = this.#draft.anchors.find((a) => a.code === text);
+    // A sticker registered here has its own text; a printed marker of the
+    // venue carries a payload naming the anchor (the app knows how to read it).
+    const id = this.#opts.anchorForCode?.(text);
+    const known =
+      this.#draft.anchors.find((a) => a.code === text) ??
+      (id ? this.#draft.anchors.find((a) => a.id === id) : undefined);
     if (!known) return false;
     this.setManualPose(
       { x: known.x, y: known.y, z: known.z, floor: known.floor, heading: known.heading },
@@ -1920,6 +1973,7 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
   destroy() {
     for (const off of this.#unsub) off();
     this.#strideCal?.detach();
+    this.#training?.destroy();
     this.#wizard?.destroy();
     if (this.#onBeforeUnload) {
       this.#opts.window?.removeEventListener?.('beforeunload', this.#onBeforeUnload);
