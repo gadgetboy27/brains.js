@@ -40,6 +40,10 @@ const CSS = `
 .train-tools { display: inline-flex; gap: 8px; }
 .train-exit, .train-torch { min-height: 40px; padding: 4px 14px; }
 .train-torch[hidden] { display: none; }
+.train-place { display: grid; gap: 4px; margin: 0 0 10px; text-align: left; font-weight: 600; }
+.train-place[hidden] { display: none; }
+.train-place input { width: 100%; min-height: 52px; padding: 8px 12px; font: inherit; font-size: 1.15em; border: 2px solid var(--color-accent);
+  border-radius: 8px; background: var(--color-surface); color: var(--color-text); }
 .train-scan { margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; font-weight: 700; border: 2px solid var(--color-text-muted); }
 .train-scan[hidden] { display: none; }
 .train-scan[data-verdict='match'] { border-color: var(--color-ok); }
@@ -194,6 +198,10 @@ export class TrainingScreen {
       <p class="train-sub" data-f="sub" role="status"></p>
       <p class="train-banner" data-f="banner" role="status" aria-live="polite"></p>
       <p class="train-scan" data-f="scan-note" role="status" aria-live="polite" hidden></p>
+      <label class="train-place" data-f="place-row">
+        <span data-f="place-label"></span>
+        <input data-f="place" list="admin-places" autocomplete="off" maxlength="80" enterkeyhint="done" />
+      </label>
       <button type="button" class="btn btn-primary train-main" data-f="main"></button>
       <button type="button" class="train-link" data-f="alt"></button>
       <button type="button" class="train-link" data-f="undo-last" hidden></button>
@@ -225,6 +233,10 @@ export class TrainingScreen {
     this.#f('next').textContent = t('train.next');
     this.#f('rewalk').textContent = t('train.rewalk');
     this.#f('rewalk').addEventListener('click', () => this.#o.wizard.rewalk());
+    this.#f('place').addEventListener('input', () => {
+      this.#o.wizard.setPlaceName?.(this.#f('place').value);
+      this.#refresh();
+    });
     this.#f('floor-link').textContent = t('train.floorLink');
     this.#f('kind-lift').textContent = t('train.kind.lift');
     this.#f('kind-stairs').textContent = t('train.kind.stairs');
@@ -438,6 +450,8 @@ export class TrainingScreen {
       this.#lastRaw = this.#o.steps?.get() ?? 0;
       this.#modeSince = now;
     }
+    // The wizard uses up the typed name when a route starts or is saved: show that.
+    this.#f('place').value = this.#o.wizard.placeName ?? '';
     this.#refresh();
   }
 
@@ -564,11 +578,17 @@ export class TrainingScreen {
 
     const recording = mode === 'recording';
     const result = mode === 'result';
+    const typed = this.#o.wizard.placeName ?? '';
+    this.#f('place-row').hidden = result;
+    this.#f('place-label').textContent = t(recording ? 'train.place.stop' : 'train.place.start');
+    this.#f('place').placeholder = t('train.place.hint');
     this.#f('undo-last').hidden = mode !== 'idle' || !this.#o.wizard.canUndo;
     this.#f('main').hidden = result;
     this.#f('main').textContent = t(recording ? 'train.stop' : 'train.start');
     this.#f('alt').hidden = result || (!recording && !this.#o.getPose());
-    this.#f('alt').textContent = t(recording ? 'train.stopNoScan' : 'train.startNoScan');
+    this.#f('alt').textContent = typed
+      ? t(recording ? 'train.stopNoScanNamed' : 'train.startNoScanNamed', { name: typed })
+      : t(recording ? 'train.stopNoScan' : 'train.startNoScan');
     this.#f('result').hidden = !result;
     if (result) {
       this.#f('result-text').textContent = t('train.result', {

@@ -1256,6 +1256,61 @@ describe('bootApp — training screen (?train=1)', () => {
   });
 });
 
+describe('bootApp — a destination with no QR code', () => {
+  const stream = { getTracks: () => [{ stop: vi.fn() }] };
+  const step = () => {
+    for (const y of [2.5, 0.2]) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+      );
+    }
+  };
+
+  it('type the destination, stop at my position: it is saved as a place, with a marker to print later', async () => {
+    const { app } = await boot({
+      config: { admin: true, train: true, provider: null },
+      options: {
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    const f = (n) => document.querySelector(`.train [data-f="${n}"]`);
+    f('main').click(); // START HERE
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance');
+    expect(app.admin.wizard.step).toBe('walk');
+    for (let i = 0; i < 10; i += 1) {
+      step();
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    f('place').value = 'Neonates';
+    f('place').dispatchEvent(new Event('input'));
+    expect(f('alt').textContent).toBe(t('train.stopNoScanNamed', { name: 'Neonates' }));
+    f('alt').click(); // no QR here: stop at my position
+
+    const draft = app.admin.draft;
+    expect(app.admin.wizard.step).toBe('done');
+    const poi = draft.pois.find((p) => p.name === 'Neonates');
+    expect(poi).toBeDefined();
+    const marker = draft.anchors.find((a) => a.name === 'Neonates');
+    expect(marker).toBeDefined();
+    expect(marker.code).toBeUndefined();
+    // It will print from the sticker sheet: the payload names this venue and marker.
+    expect(app.admin.markerPayload(marker)).toContain(`anchor=${marker.id}`);
+    expect(f('place-row').hidden).toBe(true); // the result card is showing
+    f('done').click();
+    expect(f('place').value).toBe('');
+    await app.destroy();
+  });
+});
+
 describe('bootApp — training quality check', () => {
   const stream = { getTracks: () => [{ stop: vi.fn() }] };
   async function bootWithWard() {

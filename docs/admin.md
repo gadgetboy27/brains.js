@@ -416,3 +416,28 @@ already known. A real loop, with a different way back, is where this shines.
 
 Each saved route's result (verdict, drift, length, loop or not) is kept with the
 walk data: Publish, **Download walk data**.
+
+### Naming a place, and stops with no QR code
+
+The training screen has a **Name** field above the buttons, with the usual place
+names suggested as you type. Before the route it names the starting place;
+once the route has started it names the destination (it clears when the route
+starts and when it is saved, so the next one to type is the next stop).
+
+- **With a QR code:** a new sticker scanned there takes the name you typed
+  instead of the code's own text.
+- **With no QR code:** type the destination and press **No QR here? Stop at my
+  position as "Neonates"**. The stop is saved as a place with that name, and a
+  **marker** is left at the spot with the name on it but no sticker yet. It
+  shows up under **QR markers** on the Publish tab, so a code can be printed
+  and stuck there later, and in the meantime it is a named reference point on
+  the map. (Starting at my position works the same way.) A marker is not added
+  where one already is within a metre, and **Undo** takes the planned marker out
+  with the route.
+- **Where a place is already:** a name you typed gets its own place even at a
+  point that already has another place (say, Reception); typing the name that
+  is already there reuses it.
+
+Positions without a scannable sticker are dead-reckoned, so they cannot be
+corrected by a scan the way a stickered marker can. They firm up once a sticker
+is installed and walked to from another marker.

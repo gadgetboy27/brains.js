@@ -18,6 +18,10 @@ function fakeWizard() {
     nextFromHere: vi.fn(),
     reset: vi.fn(),
     rewalk: vi.fn(),
+    placeName: '',
+    setPlaceName: vi.fn((name) => {
+      w.placeName = name.trim();
+    }),
     undoLastRoute: vi.fn(),
     canUndo: false,
     setChain: (on) => (w.chain = on),
@@ -570,6 +574,54 @@ describe('TrainingScreen', () => {
       idle.screen.open();
       idle.screen.offerFloorChange({ kind: 'lift', direction: 'up' });
       expect(idle.f('transfer').hidden).toBe(true);
+    });
+  });
+
+  describe('naming the place', () => {
+    const type = (f, value) => {
+      f('place').value = value;
+      f('place').dispatchEvent(new Event('input'));
+    };
+
+    it('has a field to name the starting place, then the destination, and none on the result', () => {
+      const { screen, f, wizard } = make();
+      screen.open();
+      expect(f('place-row').hidden).toBe(false);
+      expect(f('place-label').textContent).toBe(t('train.place.start'));
+      expect(f('place').placeholder).toBe(t('train.place.hint'));
+      wizard.go('walk');
+      expect(f('place-label').textContent).toBe(t('train.place.stop'));
+      wizard.go('done');
+      expect(f('place-row').hidden).toBe(true);
+    });
+
+    it('passes what is typed to the wizard and says it in the no-QR link', () => {
+      const { screen, f, wizard } = make({ getPose: () => ({ x: 0, y: 0 }) });
+      screen.open();
+      type(f, 'Maternity reception');
+      expect(wizard.setPlaceName).toHaveBeenLastCalledWith('Maternity reception');
+      expect(f('alt').textContent).toBe(
+        t('train.startNoScanNamed', { name: 'Maternity reception' })
+      );
+      wizard.go('walk');
+      type(f, 'Neonates');
+      expect(f('alt').textContent).toBe(t('train.stopNoScanNamed', { name: 'Neonates' }));
+    });
+
+    it('clears the field when the wizard uses the name up', () => {
+      const { screen, f, wizard } = make();
+      screen.open();
+      type(f, 'Maternity reception');
+      wizard.placeName = ''; // the route started: the wizard took the name
+      wizard.go('walk');
+      expect(f('place').value).toBe('');
+      expect(f('alt').textContent).toBe(t('train.stopNoScan'));
+    });
+
+    it('is a list-backed field, so existing place names are suggested', () => {
+      const { screen, f } = make();
+      screen.open();
+      expect(f('place').getAttribute('list')).toBe('admin-places');
     });
   });
 });

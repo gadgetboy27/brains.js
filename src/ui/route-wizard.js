@@ -82,6 +82,8 @@ export class RouteWizard {
   #sessionAnchors = new Map();
   /** Whether the latest exact fix was at a marker this wizard recorded ('session') or a known one ('independent'). */
   #endKind = 'session';
+  /** A name typed for the place being started from or stopped at (the training screen's field). */
+  #placeName = '';
   /** How the next floor change was made ('lift' | 'stairs'), set by {@link noteTransfer}. */
   #transferType = null;
   /** The last dead-reckoned (not exact) position seen since the last exact fix. */
@@ -351,7 +353,13 @@ export class RouteWizard {
     if (!name) return null;
     const draft = this.#host.draft;
     const there = draft.pois.find((p) => p.node === nodeId);
-    if (there) return there;
+    // A place is reused where one already is, unless the person typed a
+    // different name for this spot: what they typed is what they meant.
+    const typedHere =
+      this.#placeName &&
+      name === this.#placeName &&
+      there?.name.toLowerCase() !== name.toLowerCase();
+    if (there && !typedHere) return there;
     const template = findPlace(name, this.#host.places ?? HOSPITAL_PLACES);
     const poi = draft.addPoi({
       name,
@@ -451,6 +459,7 @@ export class RouteWizard {
 
   /** The best name for a scanned code: a printed-code list, an existing record of it, or the code itself. */
   #resolveScanName(text) {
+    if (this.#placeName) return this.#placeName; // the person said what this place is
     const planName = this.#host.resolveCodeName?.(text);
     if (planName) return planName;
     const draft = this.#host.draft;
@@ -503,6 +512,7 @@ export class RouteWizard {
     this.#legNodes = [{ id: this.#startNode, created: false }];
     this.#legPois = [];
     this.#legAnchors = [];
+    this.#placeName = ''; // used for the start; the next one to type is the destination
     this.#lastDr = null;
     const here = this.#host.getPose();
     this.#seg = {
@@ -838,33 +848,83 @@ export class RouteWizard {
 
   /**
    * Start a route at the current position without scanning anything: the
-   * place is named automatically. For when the position is already exact (the
-   * code was just scanned) or there is no code to hand.
+   * place is named with the name typed, else automatically. For when the
+   * position is already exact (the code was just scanned) or there is no code
+   * to hand. A typed name also leaves a marker at the spot (see
+   * {@link #plantMarker}).
    * @returns {boolean} false when there is no position yet.
    */
   startHere() {
     if (this.#step !== 'start') return false;
+    const typed = this.#placeName;
     if (!this.#f('start-name').value.trim()) {
-      this.#f('start-name').value = t('admin.wizard.autoName', {
-        n: this.#host.draft.pois.length + 1,
-      });
+      this.#f('start-name').value =
+        typed || t('admin.wizard.autoName', { n: this.#host.draft.pois.length + 1 });
     }
-    return this.beginWalk();
+    const ok = this.beginWalk();
+    if (ok && typed) this.#plantMarker(this.#startNode, typed, { atStart: true });
+    return ok;
   }
 
   /**
-   * End the route at the current position without scanning: named
-   * automatically, saved straight away. Returns the save result.
+   * End the route at the current position without scanning: named with the
+   * name typed, else automatically, and saved straight away. A typed name also
+   * leaves a marker at the spot, ready for a sticker to be printed for it
+   * later. Returns the save result.
    */
   stopHere() {
     if (this.#step !== 'walk') return null;
+    const typed = this.#placeName;
     this.arrive();
     if (!this.#f('finish-name').value.trim() && !this.#f('finish-existing').value) {
-      this.#f('finish-name').value = t('admin.wizard.autoName', {
-        n: this.#host.draft.pois.length + 1,
-      });
+      this.#f('finish-name').value =
+        typed || t('admin.wizard.autoName', { n: this.#host.draft.pois.length + 1 });
     }
-    return this.save();
+    const saved = this.save();
+    if (saved && typed) this.#plantMarker(saved.node.id, typed);
+    return saved;
+  }
+
+  /**
+   * A marker for a place that has no QR code yet: it shows up on the sticker
+   * sheet, so a code can be printed and stuck there later, and it is a named
+   * reference point on the map meanwhile. Not placed where a marker already is.
+   */
+  #plantMarker(nodeId, name, { atStart = false } = {}) {
+    const draft = this.#host.draft;
+    const node = draft.nodeById(nodeId);
+    if (!node) return;
+    const taken = draft.anchors.some(
+      (a) => a.floor === node.floor && Math.hypot(a.x - node.x, a.y - node.y) < 1
+    );
+    if (taken) return;
+    const anchor = draft.addAnchor({
+      x: node.x,
+      y: node.y,
+      z: node.z,
+      floor: node.floor,
+      heading: this.#host.getPose()?.heading ?? 0,
+      name,
+    });
+    // A marker at the end belongs to the route just saved, so undo takes it too.
+    if (!atStart) this.#saved.at(-1)?.anchors.push(anchor.id);
+    this.#host.changed();
+  }
+
+  /**
+   * The name typed for the place being started from or stopped at. Used for a
+   * new sticker scanned there, or for "start/stop at my position"; cleared once
+   * the route starts or is saved.
+   * @param {string} name
+   */
+  setPlaceName(name) {
+    this.#placeName = String(name ?? '')
+      .trim()
+      .slice(0, 80);
+  }
+
+  get placeName() {
+    return this.#placeName;
   }
 
   /**
@@ -987,6 +1047,7 @@ export class RouteWizard {
       pts: this.#route.nodes,
       dist: Math.round(this.#route.distance * 10) / 10,
     });
+    this.#placeName = '';
     this.#host.toast(t('admin.wizard.done.saved'));
     this.#show('done');
     return { node, distance: this.#route.distance, edges: this.#route.edges.length };
@@ -1020,6 +1081,7 @@ export class RouteWizard {
   }
 
   #clearFields() {
+    this.#placeName = '';
     for (const f of ['start-name', 'start-ward', 'finish-name', 'finish-ward'])
       this.#f(f).value = '';
     for (const f of ['start-existing', 'finish-existing']) this.#f(f).value = '';

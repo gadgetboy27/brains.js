@@ -717,3 +717,125 @@ describe('RouteWizard — keeping the evidence of a test walk', () => {
     );
   });
 });
+
+describe('RouteWizard — naming a place by typing it', () => {
+  const walkTo = (h, w, x, y, confidence = 0.6) => {
+    h.pose = pose(x, y, 0, 0, confidence);
+    w.onPose(h.pose);
+  };
+  const poiNames = (h) => h.draft.pois.map((p) => p.name);
+  const marker = (h, name) => h.draft.anchors.find((a) => a.name === name);
+
+  it("a typed name beats the code's own text for a new sticker, at the start and at the end", () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    w.setPlaceName('Maternity reception');
+    w.scanHere();
+    h.decode('MAT-01'); // a sticker with no name of its own
+    expect(poiNames(h)).toContain('Maternity reception');
+    expect(poiNames(h)).not.toContain('MAT-01');
+    expect(w.placeName).toBe(''); // used up: the next name typed is the destination
+    for (const y of [4, 8, 12]) walkTo(h, w, 0, y);
+    w.setPlaceName('Neonates');
+    w.scanHere();
+    h.decode('NEO-01');
+    expect(poiNames(h)).toContain('Neonates');
+    expect(w.step).toBe('done');
+    expect(w.placeName).toBe('');
+  });
+
+  it('"stop at my position" with a typed name saves the place and leaves a marker to print later', () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    h.setPose({ x: 0, y: 0 }, { confidence: 1 });
+    w.startHere();
+    for (const y of [4, 8, 12]) walkTo(h, w, 0, y);
+    w.setPlaceName('Neonates');
+    const saved = w.stopHere();
+    expect(saved).not.toBeNull();
+    const poi = h.draft.pois.find((p) => p.name === 'Neonates');
+    expect(poi.node).toBe(saved.node.id);
+    const m = marker(h, 'Neonates');
+    expect(m).toMatchObject({ x: saved.node.x, y: saved.node.y, floor: 0 });
+    expect(m.code).toBeUndefined(); // no sticker yet: it prints from the sticker sheet
+    expect(w.placeName).toBe('');
+  });
+
+  it('undoing the route takes the planned marker out too', () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    h.setPose({ x: 0, y: 0 }, { confidence: 1 });
+    w.startHere();
+    for (const y of [4, 8, 12]) walkTo(h, w, 0, y);
+    w.setPlaceName('Neonates');
+    w.stopHere();
+    expect(w.undoLastRoute()).toBe(true);
+    expect(marker(h, 'Neonates')).toBeUndefined();
+    expect(poiNames(h)).not.toContain('Neonates');
+  });
+
+  it('with nothing typed it stays quiet: an automatic name and no marker', () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    h.setPose({ x: 0, y: 0 }, { confidence: 1 });
+    w.startHere();
+    for (const y of [4, 8, 12]) walkTo(h, w, 0, y);
+    w.stopHere();
+    expect(h.draft.anchors).toHaveLength(0);
+    expect(poiNames(h).every((n) => /^Point \d+$/.test(n))).toBe(true);
+  });
+
+  it('a typed starting place at my position gets a marker too, and does not duplicate one already there', () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    h.draft.addAnchor({ x: 0, y: 0, floor: 0, name: 'Existing' });
+    h.setPose({ x: 0, y: 0 }, { confidence: 1 });
+    w.setPlaceName('Maternity reception');
+    w.startHere();
+    expect(poiNames(h)).toContain('Maternity reception');
+    expect(h.draft.anchors).toHaveLength(1); // a marker is already within a metre
+    expect(w.placeName).toBe('');
+  });
+
+  it('tidies and caps what is typed', () => {
+    const h = host();
+    const w = createRouteWizard(h);
+    w.setPlaceName('   Neonates  ');
+    expect(w.placeName).toBe('Neonates');
+    w.setPlaceName('x'.repeat(200));
+    expect(w.placeName).toHaveLength(80);
+    w.setPlaceName(null);
+    expect(w.placeName).toBe('');
+  });
+
+  it('a typed name makes its own place even where another place already is', () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    h.setPose({ x: 0, y: 0 }, { confidence: 1 });
+    w.startHere(); // an automatic name, at the origin
+    for (const y of [4, 8, 12]) walkTo(h, w, 0, y);
+    const nodeAtEnd = h.draft.nodes.at(-1);
+    h.draft.addPoi({ name: 'Reception', node: nodeAtEnd.id }); // a place is already at the spot
+    walkTo(h, w, 0, 12.2); // still within a metre of it
+    w.setPlaceName('Neonates');
+    w.stopHere();
+    const names = h.draft.pois
+      .filter((p) => p.node === h.draft.pois.find((q) => q.name === 'Neonates').node)
+      .map((p) => p.name);
+    expect(names).toEqual(expect.arrayContaining(['Reception', 'Neonates']));
+  });
+
+  it('but the same name again, or no typed name, reuses the place that is there', () => {
+    const h = host();
+    const w = createRouteWizard(h, { chain: false });
+    h.setPose({ x: 0, y: 0 }, { confidence: 1 });
+    w.startHere();
+    for (const y of [4, 8, 12]) walkTo(h, w, 0, y);
+    h.draft.addPoi({ name: 'Neonates', node: h.draft.nodes.at(-1).id });
+    w.setPlaceName('neonates'); // same place, different capitals
+    const before = h.draft.pois.length;
+    w.stopHere();
+    expect(h.draft.pois.filter((p) => p.name.toLowerCase() === 'neonates')).toHaveLength(1);
+    expect(h.draft.pois.length).toBe(before + 0); // the end point added nothing new
+  });
+});
