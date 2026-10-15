@@ -152,3 +152,49 @@ Caveats: the sensor models are plausible, not measured on real phones; the
 short with few corners. Treat the numbers as a ranking of strategies and a
 way to try "what if the compass is worse here", then confirm on a real walk
 with `?harness=1`.
+
+## Adaptive stride (visitors' phones learn their own stride)
+
+Dead reckoning assumes everyone's stride is the same, and it is not. A visitor
+whose stride is 8% longer than the default drifts 8% short on every walk. Each
+QR scan between two markers is a measurement: the venue's own distance between
+them divided by the steps counted is that person's stride. A small Kalman
+filter (`src/core/calibration.js`) folds each such walk into a running
+estimate, weighting long walks more than short ones, rejecting a walk that
+cannot have been this person following the route (wandered, took another way
+round), and clamping to 0.5 to 1.0 m. The next steps use the new stride.
+
+It runs on the phone for one session and keeps nothing: no stored data, nothing
+sent anywhere. It is off on staff phones (a survey defines the map from dead
+reckoning and must stay on one scale) and when `adaptiveStride: false`. A
+stretch that included a reroute is not used.
+
+Simulated, with a marker every 15 to 40 m along a multi-leg tour (mean error /
+error at the end of the walk, metres; "gyro + corners" with a fixed stride vs
+the same plus learning):
+
+| Conditions (marker every 25 m) | Fixed stride | Learns stride |
+| ------------------------------ | -----------: | ------------: |
+| Stride 8% longer than assumed  |  1.33 / 1.44 |   1.22 / 1.12 |
+| Stride 15% longer              |  1.53 / 1.69 |   1.33 / 1.20 |
+| Stride 10% shorter             |  0.90 / 1.02 |   0.86 / 0.97 |
+| Stride already right           |  0.98 / 1.23 |   0.98 / 1.19 |
+| Harsh compass                  |  2.26 / 3.15 |   2.22 / 2.81 |
+
+Over 21 combinations of conditions and marker spacing, it was never worse on
+mean error and was clearly better wherever the stride was off (for example,
+3.22 to 1.72 m at the end of a long walk with a 15% long stride, markers 40 m
+apart). It does nothing with a single marker, since there is nothing to learn
+from; it needs at least one scan after the start.
+
+**A compass-offset filter was tried too and dropped.** Learning a correction
+to the compass heading from the same scans made no consistent difference in
+simulation (within about 0.05 m either way), and real compass error varies from
+place to place (a lift, a steel door), so a single learned offset would likely
+do more harm than good in a real building. Run
+`node scripts/compare-positioning.mjs --markers 25 --routes n-entrance:n-lift-g:n-toilets-g:n-clinic-a:n-entrance`
+to reproduce the comparison (the `--markers`, `--map-error` and tour `a:b:c`
+options are new).
+
+The same caveats as above apply: the sensor models are plausible, not
+measured, and the demo venue is small. Confirm on a real walk.

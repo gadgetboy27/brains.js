@@ -114,3 +114,33 @@ describe('PoseFusion.applySoftFix', () => {
     expect(f.getPose().heading).toBeCloseTo(40, 0);
   });
 });
+
+describe('learning stride from markers', () => {
+  const tour = [['n-entrance', 'n-lift-g', 'n-toilets-g', 'n-clinic-a', 'n-entrance']];
+
+  it("beats a fixed stride when the walker's stride is off, and does no harm when it is right", () => {
+    const off = compareVariants({
+      venue,
+      routes: tour,
+      runs: 15,
+      scenario: { markerSpacingM: 25, strideError: 0.15 },
+    });
+    expect(byId(off, 'gyro+corners+stride').finalMeanM).toBeLessThan(
+      byId(off, 'gyro+corners').finalMeanM * 0.9
+    );
+    const right = compareVariants({
+      venue,
+      routes: tour,
+      runs: 15,
+      scenario: { markerSpacingM: 25, strideError: 0 },
+    });
+    expect(byId(right, 'gyro+corners+stride').meanM).toBeLessThanOrEqual(
+      byId(right, 'gyro+corners').meanM * 1.03
+    );
+  });
+
+  it('has nothing to learn from with a single marker, so it equals the fixed stride', () => {
+    const c = compareVariants({ venue, routes: tour, runs: 5 });
+    expect(byId(c, 'gyro+corners+stride').meanM).toBe(byId(c, 'gyro+corners').meanM);
+  });
+});

@@ -1320,6 +1320,82 @@ describe('bootApp — training quality check', () => {
   });
 });
 
+describe('bootApp — adaptive stride', () => {
+  const stream = { getTracks: () => [{ stop: vi.fn() }] };
+  async function bootVisitor(extra = {}) {
+    const json = structuredClone(demo);
+    // A second marker beside the corridor junction, 16 m from the entrance by the venue's routes.
+    json.anchors.push({ id: 'a-corr', x: 10, y: 6.5, z: 0, floor: 0, heading: 90 });
+    const { app } = await boot({
+      config: { provider: null, ...extra.config },
+      options: { venue: createVenue(json), ...extra.options },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    return app;
+  }
+  const stepOnce = () => {
+    for (const y of [2.5, 0.2]) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+      );
+    }
+  };
+  async function walk(app, steps) {
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance');
+    for (let i = 0; i < steps; i += 1) {
+      stepOnce();
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    app.chain.active.handleScan('brains://demo-health-centre/a-corr');
+  }
+
+  it('learns a longer stride from a walk between two markers, and uses it from then on', async () => {
+    const app = await bootVisitor();
+    expect(app.calibration.strideM).toBe(0.73);
+    await walk(app, 19); // 16 m in 19 steps: 0.84 m per step
+    expect(app.calibration.walks).toBe(1);
+    expect(app.calibration.strideM).toBeGreaterThan(0.76);
+    expect(app.calibration.strideM).toBeLessThan(0.84);
+
+    // The very next step advances by the learnt stride, not the default.
+    const before = app.fusion.getPose();
+    window.dispatchEvent(
+      Object.assign(new Event('deviceorientation'), { webkitCompassHeading: 90 })
+    );
+    stepOnce();
+    await vi.advanceTimersByTimeAsync(400);
+    const after = app.fusion.getPose();
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeCloseTo(
+      app.calibration.strideM,
+      2
+    );
+    await app.destroy();
+  });
+
+  it('does nothing on staff phones, or when switched off', async () => {
+    const staff = await bootVisitor({
+      config: { admin: true },
+      options: {
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+    });
+    expect(staff.calibration).toBeNull();
+    await staff.destroy();
+    document.body.innerHTML = '<main id="app"></main>';
+    const off = await bootVisitor({ options: { adaptiveStride: false } });
+    expect(off.calibration).toBeNull();
+    await off.destroy();
+  });
+});
+
 describe('bootApp — sticker survey of a new venue', () => {
   it('?survey=1 on an unpublished venue: blank sheet, scan-name-record, dead reckoning between codes', async () => {
     const stream = { getTracks: () => [{ stop: vi.fn() }] };

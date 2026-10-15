@@ -246,6 +246,15 @@ export class PoseFusion {
   }
 
   /**
+   * Change the stride used per counted step (calibration learnt on the way).
+   * @param {number} metres
+   */
+  setStrideM(metres) {
+    if (!Number.isFinite(metres) || metres <= 0) throw new RangeError('stride must be positive');
+    this.#opts.strideM = metres;
+  }
+
+  /**
    * Accept a position correction that is *not* a fresh start: move the
    * estimate and restart the confidence decay from the pose's confidence, but
    * keep everything the heading filter has learnt (an exact fix re-seeds the

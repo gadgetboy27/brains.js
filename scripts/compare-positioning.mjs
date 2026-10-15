@@ -4,7 +4,9 @@
  *
  *   node scripts/compare-positioning.mjs [--venue file] [--routes a:b,c:d] [--runs 40] [--seed 1] [--json]
  *        [--stride-error 0.08] [--compass-bias 5] [--compass-noise 6] [--disturbance 25]
- *        [--glitches 2] [--gyro-bias 0.4] [--gyro-noise 1.5]
+ *        [--glitches 2] [--gyro-bias 0.4] [--gyro-noise 1.5] [--markers 25] [--map-error 0.7]
+ *
+ * `--routes` takes `from:to` pairs, or longer tours as `a:b:c:d` (comma between routes).
  *
  * Simulates walks along routes of the venue with only one QR scan, at the
  * start, and runs compass-only, gyro-blended and corner-fix strategies over
@@ -53,6 +55,8 @@ try {
       burstsPerWalk: num(opts.glitches),
       gyroBiasDps: num(opts['gyro-bias']),
       gyroNoiseDps: num(opts['gyro-noise']),
+      markerSpacingM: num(opts.markers),
+      mapErrorM: num(opts['map-error']),
     }).filter(([, v]) => v !== undefined)
   );
   const result = compareVariants({

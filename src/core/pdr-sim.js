@@ -18,6 +18,7 @@
 import { findRoute } from './router.js';
 import { MapMatcher } from './map-matching.js';
 import { PoseFusion } from './fusion.js';
+import { createCalibration } from './calibration.js';
 import { applyCornerCorrection, createTurnDetector } from './turn-correction.js';
 
 /** Deterministic PRNG so runs are reproducible. */
@@ -51,6 +52,8 @@ const angleDiff = (a, b) => ((((a - b) % 360) + 540) % 360) - 180;
  * @property {number} [burstsPerWalk=2]         Short, large compass glitches (a lift, a steel door).
  * @property {number} [gyroBiasDps=0.4]         Constant gyro bias.
  * @property {number} [gyroNoiseDps=1.5]        Gyro noise, 1σ.
+ * @property {number} [markerSpacingM=0]        A QR marker every this many metres along the route (0: only the one at the start).
+ * @property {number} [mapErrorM=0.7]           1σ error in the venue's distance between two markers (they sit near, not on, the graph).
  */
 
 const SCENARIO = Object.freeze({
@@ -62,6 +65,8 @@ const SCENARIO = Object.freeze({
   burstsPerWalk: 2,
   gyroBiasDps: 0.4,
   gyroNoiseDps: 1.5,
+  markerSpacingM: 0,
+  mapErrorM: 0.7,
 });
 
 export const VARIANTS = Object.freeze([
@@ -69,6 +74,13 @@ export const VARIANTS = Object.freeze([
   { id: 'compass+corners', label: 'Compass + corner fixes', gyro: false, corners: true },
   { id: 'gyro', label: 'Gyro blended with compass', gyro: true, corners: false },
   { id: 'gyro+corners', label: 'Gyro blend + corner fixes', gyro: true, corners: true },
+  {
+    id: 'gyro+corners+stride',
+    label: 'Gyro + corners + learns stride',
+    gyro: true,
+    corners: true,
+    learnStride: true,
+  },
 ]);
 
 /**
@@ -105,6 +117,11 @@ export function generateWalk(nodes, scenario, random) {
   const wavelength = 10 + random() * 8;
   const phase = random() * Math.PI * 2;
 
+  const scanAt = [];
+  if (sc.markerSpacingM > 0) {
+    for (let at = sc.markerSpacingM; at < total - 3; at += sc.markerSpacingM) scanAt.push(at);
+  }
+  let nextScan = 0;
   let d = 0;
   let heading = bearing(0);
   let nextStep = stepPeriod;
@@ -134,9 +151,16 @@ export function generateWalk(nodes, scenario, random) {
       peak = 2.5;
       nextStep += stepPeriod;
     }
+    let scan = null;
+    if (nextScan < scanAt.length && d >= scanAt[nextScan]) {
+      scan = { d, heading, routeNoiseM: gaussian(random) * sc.mapErrorM };
+      nextScan += 1;
+    }
     samples.push({
       t,
+      d,
       truth,
+      scan,
       compass,
       motion: {
         // Phone flat, face up: anticlockwise turns are positive about z.
@@ -177,10 +201,33 @@ export function runVariant(venue, nodes, walk, variant, scenario = {}) {
   const displayErrors = [];
   const rawErrors = [];
   const corrections = [];
+  const calibration = variant.learnStride ? createCalibration({ strideM: sc.strideM }) : null;
+  let prevScan = { truth: { x: nodes[0].x, y: nodes[0].y }, d: 0 };
   let lastTick = 0;
   let last = null;
   for (const s of walk.samples) {
     nowMs = 1_000_000 + Math.round(s.t * 1000);
+    if (s.scan) {
+      // A marker read: an exact fix at the true position. The walk since the
+      // previous one is the evidence the calibration learns from.
+      if (calibration) {
+        const routeM = s.d - prevScan.d + s.scan.routeNoiseM;
+        if (calibration.observe({ steps: fusion.stepCount, routeM })) {
+          fusion.setStrideM(calibration.strideM);
+        }
+      }
+      fusion.applyFix({
+        x: s.truth.x,
+        y: s.truth.y,
+        z: 0,
+        floor: nodes[0].floor ?? 0,
+        heading: s.scan.heading,
+        confidence: 1,
+        timestamp: nowMs,
+      });
+      turns.reset();
+      prevScan = { truth: s.truth, d: s.d };
+    }
     fusion.handleMotion(
       variant.gyro ? s.motion : { acceleration: s.motion.acceleration } // no rotationRate: compass only
     );
@@ -214,6 +261,17 @@ export function runVariant(venue, nodes, walk, variant, scenario = {}) {
   };
 }
 
+/** The nodes of a walk through several places in turn (each leg by the venue's own routes). */
+export function tourRoute(venue, stops) {
+  const nodes = [];
+  for (let i = 0; i + 1 < stops.length; i += 1) {
+    const leg = findRoute(venue.graph, stops[i], stops[i + 1]);
+    if (!leg.found) throw new Error(`no route from ${stops[i]} to ${stops[i + 1]}`);
+    nodes.push(...(i === 0 ? leg.nodes : leg.nodes.slice(1)));
+  }
+  return { found: true, nodes };
+}
+
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const quantile = (xs, q) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -225,7 +283,7 @@ const quantile = (xs, q) => {
  *
  * @param {object} options
  * @param {import('./venue.js').Venue} options.venue
- * @param {Array<[string, string]>} options.routes  [from node id, to node id] pairs.
+ * @param {string[][]} options.routes  Each a list of node ids to walk between, in order (two or more).
  * @param {number} [options.runs=40]   Random walks per route.
  * @param {Scenario} [options.scenario]
  * @param {number} [options.seed=1]
@@ -235,9 +293,8 @@ export function compareVariants({ venue, routes, runs = 40, scenario = {}, seed 
     VARIANTS.map((v) => [v.id, { display: [], raw: [], finals: [], corrections: [] }])
   );
   let walks = 0;
-  routes.forEach(([from, to], routeIndex) => {
-    const route = findRoute(venue.graph, from, to);
-    if (!route.found) throw new Error(`no route from ${from} to ${to}`);
+  routes.forEach((stops, routeIndex) => {
+    const route = tourRoute(venue, stops);
     for (let r = 0; r < runs; r += 1) {
       // Same seed for every variant: identical footsteps and sensor noise.
       const walk = generateWalk(
@@ -283,7 +340,11 @@ export function formatComparison(c) {
   const lines = [
     `# Positioning strategy comparison`,
     '',
-    `${c.walks} simulated walks (${c.runs} per route, ${c.routes.length} routes), one QR scan at the start and none after.`,
+    `${c.walks} simulated walks (${c.runs} per route, ${c.routes.length} routes), ${
+      c.scenario.markerSpacingM > 0
+        ? `a QR marker at the start and one every ${c.scenario.markerSpacingM} m`
+        : 'one QR scan at the start and none after'
+    }.`,
     '',
     `Scenario: stride ${c.scenario.strideM} m assumed, true stride ${(c.scenario.strideError * 100).toFixed(0)}% longer; ` +
       `compass bias ${c.scenario.compassBiasDeg}°, noise ${c.scenario.compassNoiseDeg}°, magnetic wobble ±${c.scenario.disturbanceDeg}° ` +

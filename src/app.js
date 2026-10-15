@@ -32,6 +32,7 @@
 
 import { PoseFusion } from './core/fusion.js';
 import { MapMatcher } from './core/map-matching.js';
+import { createCalibration } from './core/calibration.js';
 import { createNavigator } from './core/navigation.js';
 import { applyCornerCorrection, createTurnDetector } from './core/turn-correction.js';
 import { createOffRouteDetector } from './core/off-route.js';
@@ -594,6 +595,7 @@ export async function bootApp(options = {}) {
       ? findRoute(venue.graph, from.id, target.id, { ...config.filter, timeOfDay: new Date() })
       : { found: false };
     offRoute.acknowledge();
+    offRouteSinceFix = true;
     if (config.admin && navigator.state) {
       const { nodes } = navigator.route;
       const i = navigator.state.nextIndex;
@@ -784,31 +786,51 @@ export async function bootApp(options = {}) {
   });
   // An exact fix (a scan, or staff fixing their position in admin mode)
   // re-seeds the dead reckoning.
-  // Staff phones only: what a walk between two markers looked like (steps
-  // counted vs the graph's distance), for ./core/learning.js. Must run before
-  // applyFix resets the step count.
+  // What a walk between two markers looked like: steps counted vs the venue's
+  // own distance between them. Staff phones record it for ./core/learning.js;
+  // visitor phones learn their stride from it (./core/calibration.js). Must
+  // run before applyFix resets the step count.
   let lastExactAnchor = null;
-  function noteMarkerWalk(pose) {
+  let offRouteSinceFix = false; // a wandered or rerouted stretch is no measure of stride
+  const calibration =
+    options.adaptiveStride === false || config.admin
+      ? null
+      : createCalibration({ strideM: venue.strideM ?? 0.73 });
+  function markerWalk(pose) {
     const anchor = venue.anchors.find(
       (a) => a.floor === pose.floor && a.x === pose.x && a.y === pose.y
     );
     const previous = lastExactAnchor;
     lastExactAnchor = anchor?.id ?? null;
-    if (!anchor || !previous || previous === anchor.id || appFusion.stepCount === 0) return;
+    if (!anchor || !previous || previous === anchor.id || appFusion.stepCount === 0) return null;
     const prev = venue.anchorById(previous);
     const a = prev && nearestNode(venue, prev);
     const b = nearestNode(venue, anchor);
     // The graph only stands in for the walked path where each marker sits on it.
     const onGraph = (m, n) => n && n.floor === m.floor && Math.hypot(n.x - m.x, n.y - m.y) <= 2.5;
-    if (!onGraph(prev ?? {}, a) || !onGraph(anchor, b) || a.id === b.id) return;
-    const r = findRoute(venue.graph, a.id, b.id, { ...config.filter });
-    if (!r.found) return;
+    if (!onGraph(prev ?? {}, a) || !onGraph(anchor, b) || a.id === b.id) return null;
+    const route = findRoute(venue.graph, a.id, b.id, { ...config.filter });
+    return route.found ? { previous, anchor, prev, steps: appFusion.stepCount, route } : null;
+  }
+  function noteMarkerWalk(pose) {
+    const walk = markerWalk(pose);
+    const skip = offRouteSinceFix;
+    offRouteSinceFix = false;
+    if (!walk) return;
+    const { previous, anchor, prev, steps, route } = walk;
+    if (calibration) {
+      if (!skip && calibration.observe({ steps, routeM: route.distance })) {
+        appFusion.setStrideM(calibration.strideM);
+      }
+      return;
+    }
+    if (!config.admin) return;
     const obs = {
       k: 'gap',
       a: previous,
       b: anchor.id,
-      steps: appFusion.stepCount,
-      routeM: Math.round(r.distance * 100) / 100,
+      steps,
+      routeM: Math.round(route.distance * 100) / 100,
     };
     // Heading error, only from a walk that was about straight: the bearing
     // of where dead reckoning ended up vs the bearing between the markers.
@@ -817,7 +839,7 @@ export async function bootApp(options = {}) {
     const trueDx = anchor.x - prev.x;
     const trueDy = anchor.y - prev.y;
     const straight = Math.hypot(trueDx, trueDy);
-    if (est && straight >= 8 && r.distance / straight <= 1.15 && appFusion.stepCount >= 10) {
+    if (est && straight >= 8 && route.distance / straight <= 1.15 && steps >= 10) {
       const bearing = (dx, dy) => (Math.atan2(dx, dy) * 180) / Math.PI;
       const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180 || 180;
       obs.dh =
@@ -828,7 +850,7 @@ export async function bootApp(options = {}) {
   }
   const onFix = (pose) => {
     if (usesAppFusion() && pose.confidence >= 1) {
-      if (config.admin) noteMarkerWalk(pose);
+      noteMarkerWalk(pose);
       turns.reset();
       appFusion.applyFix(pose);
       startAppFusion();
@@ -1166,6 +1188,7 @@ export async function bootApp(options = {}) {
     scanOverlay,
     matcher,
     fusion: appFusion,
+    calibration,
     get state() {
       return {
         cameraUsable,
