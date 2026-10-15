@@ -57,6 +57,12 @@ const CSS = `
 .train-main { width: 100%; min-height: 76px; font-size: 1.5em; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; }
 .train-link { display: block; margin: 10px auto 0; min-height: 44px; padding: 6px 12px; background: none; border: 0; color: var(--color-text);
   font: inherit; text-decoration: underline; cursor: pointer; }
+.train-transfer { margin: 6px 0 10px; padding: 10px 12px; border: 2px solid var(--color-accent); border-radius: 8px; }
+.train-transfer[hidden] { display: none; }
+.train-transfer p { margin: 0 0 8px; font-weight: 700; }
+.train-kinds, .train-floors { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.train-kinds .btn, .train-floors .btn { flex: 1 1 40%; min-height: 56px; font-size: 1.1em; font-weight: 700; }
+.train-kinds .btn[aria-pressed='true'] { background: var(--color-accent); color: var(--color-accent-contrast); }
 .train-link[hidden], .train-result[hidden], .train-main[hidden] { display: none; }
 .train-result p { font-size: 1.2em; font-weight: 700; margin: 4px 0 10px; }
 .train-result .btn { width: 100%; min-height: 64px; font-size: 1.2em; margin-top: 8px; }
@@ -88,6 +94,9 @@ const CSS = `
  *   appears when the camera has one (Android Chrome; not iOS Safari).
  * @property {{ enabled: boolean, supported: boolean, setEnabled: (on: boolean) => boolean, unlock: () => void, play: (name: string) => boolean } | null} [cues]
  *   Sounds for what just happened; the screen has the on/off switch and plays "saved".
+ * @property {() => Array<{ index: number, name: string }>} [floors]  The venue's floors, for "Changed floor?".
+ * @property {() => number} [getFloor]  The floor the position is on now.
+ * @property {(pick: { floor: number, kind: 'lift' | 'stairs' }) => void} [onFloorPick]  Staff said which floor they are on, and how they got there.
  * @property {() => void} [onExit]
  * @property {(ms: number) => void} [vibrate]
  * @property {{ request: (type: 'screen') => Promise<{ release: () => Promise<void>, addEventListener?: Function }> } | null} [wakeLock]
@@ -113,6 +122,8 @@ export class TrainingScreen {
   #unsubs = [];
   /** The latest marker check shown, and when (it fades after a few seconds). */
   #scanNote = null;
+  /** The open "which floor are you on?" question: what was detected (or null for a manual one). */
+  #transfer = null;
   #timer = null;
   #sentinel = null;
   #open = false;
@@ -130,6 +141,9 @@ export class TrainingScreen {
       getPose: () => null,
       torch: null,
       cues: null,
+      floors: () => [],
+      getFloor: () => 0,
+      onFloorPick: () => {},
       onExit: () => {},
       vibrate: (ms) => globalThis.navigator?.vibrate?.(ms),
       wakeLock: globalThis.navigator?.wakeLock ?? null,
@@ -183,6 +197,16 @@ export class TrainingScreen {
       <button type="button" class="btn btn-primary train-main" data-f="main"></button>
       <button type="button" class="train-link" data-f="alt"></button>
       <button type="button" class="train-link" data-f="undo-last" hidden></button>
+      <button type="button" class="train-link" data-f="floor-link" hidden></button>
+      <div class="train-transfer" data-f="transfer" role="group" hidden>
+        <p data-f="transfer-text"></p>
+        <div class="train-kinds" data-f="kinds">
+          <button type="button" class="btn" data-f="kind-lift"></button>
+          <button type="button" class="btn" data-f="kind-stairs"></button>
+        </div>
+        <div class="train-floors" data-f="floors"></div>
+        <button type="button" class="train-link" data-f="transfer-cancel"></button>
+      </div>
       <div class="train-result" data-f="result" hidden>
         <p data-f="result-text" role="status"></p>
         <p class="train-quality" data-f="quality" role="status"></p>
@@ -201,6 +225,14 @@ export class TrainingScreen {
     this.#f('next').textContent = t('train.next');
     this.#f('rewalk').textContent = t('train.rewalk');
     this.#f('rewalk').addEventListener('click', () => this.#o.wizard.rewalk());
+    this.#f('floor-link').textContent = t('train.floorLink');
+    this.#f('kind-lift').textContent = t('train.kind.lift');
+    this.#f('kind-stairs').textContent = t('train.kind.stairs');
+    this.#f('transfer-cancel').textContent = t('train.transfer.cancel');
+    this.#f('floor-link').addEventListener('click', () => this.offerFloorChange(null));
+    this.#f('transfer-cancel').addEventListener('click', () => this.#closeTransfer());
+    this.#f('kind-lift').addEventListener('click', () => this.#setKind('lift'));
+    this.#f('kind-stairs').addEventListener('click', () => this.#setKind('stairs'));
     this.#f('undo').textContent = t('train.undo');
     this.#f('undo-last').textContent = t('train.undoLast');
     this.#f('undo').addEventListener('click', () => this.#o.wizard.undoLastRoute());
@@ -308,6 +340,77 @@ export class TrainingScreen {
     if (!['match', 'check', 'impossible'].includes(result?.verdict)) return;
     this.#scanNote = { ...result, at: this.#o.now() };
     this.#refresh();
+  }
+
+  /**
+   * Ask which floor the walker is now on. Called when a lift ride or a climb
+   * of stairs is noticed (with what was seen), or from the "Changed floor?"
+   * link (nothing detected: they say how they got there).
+   * @param {{ kind: 'lift' | 'stairs', direction?: 'up' | 'down' } | null} seen
+   */
+  offerFloorChange(seen) {
+    if (!this.#open || this.#mode !== 'recording') return;
+    const others = this.#o.floors().filter((f) => f.index !== this.#o.getFloor());
+    if (others.length === 0) return; // a one-floor venue has nowhere to go
+    this.#transfer = {
+      kind: seen?.kind ?? 'lift',
+      direction: seen?.direction ?? null,
+      seen: Boolean(seen),
+    };
+    this.#renderTransfer();
+  }
+
+  #setKind(kind) {
+    if (!this.#transfer) return;
+    this.#transfer.kind = kind;
+    this.#renderTransfer();
+  }
+
+  #closeTransfer() {
+    this.#transfer = null;
+    this.#f('transfer').hidden = true;
+  }
+
+  #renderTransfer() {
+    const tr = this.#transfer;
+    const box = this.#f('transfer');
+    if (!tr) {
+      box.hidden = true;
+      return;
+    }
+    const key = tr.seen
+      ? tr.kind === 'lift'
+        ? tr.direction === 'down'
+          ? 'train.transfer.liftDown'
+          : tr.direction === 'up'
+            ? 'train.transfer.liftUp'
+            : 'train.transfer.lift'
+        : 'train.transfer.stairs'
+      : 'train.transfer.manual';
+    this.#f('transfer-text').textContent = t(key);
+    for (const kind of ['lift', 'stairs']) {
+      this.#f(`kind-${kind}`).setAttribute('aria-pressed', String(tr.kind === kind));
+    }
+    const here = this.#o.getFloor();
+    const floors = this.#f('floors');
+    floors.textContent = '';
+    for (const fl of this.#o.floors().filter((f) => f.index !== here)) {
+      const b = this.#doc.createElement('button');
+      b.type = 'button';
+      b.className = 'btn';
+      // Going up in a lift: the floors above are the likely answer.
+      const likely =
+        (tr.direction === 'up' && fl.index > here) || (tr.direction === 'down' && fl.index < here);
+      if (likely) b.classList.add('btn-primary');
+      b.textContent = fl.name;
+      b.addEventListener('click', () => {
+        const kind = this.#transfer?.kind ?? 'lift';
+        this.#closeTransfer();
+        this.#o.onFloorPick({ floor: fl.index, kind });
+      });
+      floors.appendChild(b);
+    }
+    box.hidden = false;
   }
 
   #onWizardStep(step) {
@@ -447,6 +550,9 @@ export class TrainingScreen {
     soundEl.hidden = !cues?.supported;
     soundEl.textContent = t(cues?.enabled ? 'train.sound.on' : 'train.sound.off');
     soundEl.setAttribute('aria-pressed', String(Boolean(cues?.enabled)));
+
+    if (mode !== 'recording' && this.#transfer) this.#closeTransfer();
+    this.#f('floor-link').hidden = !(mode === 'recording' && this.#o.floors().length > 1);
 
     const torch = this.#o.torch;
     const torchEl = this.#f('torch');

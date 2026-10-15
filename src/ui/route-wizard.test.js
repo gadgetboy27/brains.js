@@ -512,3 +512,53 @@ describe('RouteWizard — undo last route', () => {
     expect(w.canUndo).toBe(false); // the redone route is not saved until it is finished
   });
 });
+
+describe('RouteWizard — how the floor was changed', () => {
+  function twoFloorWalk(noteKind) {
+    const h = host(undefined, { plan: { A01: 'Lobby' } });
+    const w = createRouteWizard(h, { chain: false });
+    w.scanHere();
+    h.decode('A01'); // origin, floor 0
+    h.pose = pose(0, 4, 0, 0, 0.6);
+    w.onPose(h.pose);
+    h.pose = pose(0, 8, 0, 0, 0.6);
+    w.onPose(h.pose);
+    if (noteKind) w.noteTransfer(noteKind); // staff said how they went up
+    h.pose = pose(0, 8, 0, 1, 1); // now on the floor above, exactly
+    w.onPose(h.pose);
+    return h;
+  }
+  const crossing = (h) => h.draft.edges.find((e) => e.floorChange);
+
+  it('records a lift as a lift when told, not as the default stairs', () => {
+    const h = twoFloorWalk('lift');
+    expect(crossing(h)).toMatchObject({ type: 'lift', floorChange: true });
+    expect(h.draft.floorByIndex(1)).not.toBeNull(); // the new floor was added
+  });
+
+  it('records stairs as stairs, and the default stays stairs', () => {
+    expect(crossing(twoFloorWalk('stairs')).type).toBe('stairs');
+    expect(crossing(twoFloorWalk(null)).type).toBe('stairs');
+  });
+
+  it('applies only to the next floor change', () => {
+    // Two hops up: the first noted as a lift, the second not noted at all.
+    const h2 = host(undefined, { plan: { A01: 'Lobby' } });
+    const w2 = createRouteWizard(h2, { chain: false });
+    w2.scanHere();
+    h2.decode('A01');
+    for (const [y, floor] of [
+      [4, 0],
+      [8, 0],
+      [8, 1],
+      [12, 1],
+      [12, 2],
+    ]) {
+      if (y === 8 && floor === 1) w2.noteTransfer('lift');
+      h2.pose = pose(0, y, 0, floor, floor === 0 || y !== 12 ? 0.6 : 1);
+      w2.onPose(h2.pose);
+    }
+    const types = h2.draft.edges.filter((e) => e.floorChange).map((e) => e.type);
+    expect(types).toEqual(['lift', 'stairs']);
+  });
+});

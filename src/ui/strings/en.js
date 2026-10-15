@@ -203,6 +203,10 @@ export default {
     'hud.floor.change': 'I changed floor',
     'hud.floor.which': 'Which floor are you on now?',
     'hud.floor.now': 'You are now on {floor}. Scan a marker to confirm exactly where.',
+    'hud.floor.auto.lift':
+      'Looks like you took the lift: now on {floor}. If that is wrong, pick your floor below. Scan a marker to confirm exactly where.',
+    'hud.floor.auto.stairs':
+      'Looks like you took the stairs: now on {floor}. If that is wrong, pick your floor below. Scan a marker to confirm exactly where.',
     'scan.markerNote': 'Note for this marker: {text}',
     'admin.anchor.heading': 'Heading when scanning (degrees)',
     'admin.undo': 'Undo',
@@ -336,6 +340,15 @@ export default {
     'train.torch.on': 'Torch on',
     'train.sound.off': 'Sound',
     'train.sound.on': 'Sound on',
+    'train.floorLink': 'Changed floor? Tap here',
+    'train.kind.lift': 'Lift',
+    'train.kind.stairs': 'Stairs',
+    'train.transfer.cancel': 'Not a floor change',
+    'train.transfer.liftUp': 'Looks like you went up in a lift. Which floor are you on now?',
+    'train.transfer.liftDown': 'Looks like you went down in a lift. Which floor are you on now?',
+    'train.transfer.lift': 'Looks like you took a lift. Which floor are you on now?',
+    'train.transfer.stairs': 'Looks like you took the stairs. Which floor are you on now?',
+    'train.transfer.manual': 'How did you change floor, and which floor are you on now?',
     'train.scan.match': 'Marker fits: {jump} m from where your steps put you.',
     'train.scan.check':
       'Marker is {jump} m from where your steps put you. Check it is the right sticker.',

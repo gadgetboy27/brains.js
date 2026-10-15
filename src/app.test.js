@@ -1540,6 +1540,138 @@ describe('bootApp — the scan check and scan sounds', () => {
   });
 });
 
+describe('bootApp — lifts and stairs', () => {
+  const stream = { getTracks: () => [{ stop: vi.fn() }] };
+  const qr = {
+    order: ['qr'],
+    qr: {
+      getUserMedia: async () => stream,
+      BarcodeDetector: class {
+        detect = async () => [];
+      },
+    },
+  };
+  const motion = (a) =>
+    window.dispatchEvent(
+      Object.assign(new Event('devicemotion'), {
+        acceleration: { x: 0, y: 0, z: a },
+        accelerationIncludingGravity: { x: 0, y: 0, z: 9.81 + a },
+      })
+    );
+  /** A lift ride at 20 Hz: quiet, push, glide, brake, quiet. Positive pushes go up. */
+  async function ride(direction = 'up') {
+    const k = direction === 'up' ? 1 : -1;
+    for (const [seconds, a] of [
+      [2, 0],
+      [1.5, 0.8],
+      [5, 0],
+      [1.5, -0.8],
+      [2, 0],
+    ]) {
+      for (let i = 0; i < seconds * 20; i += 1) {
+        motion(k * a);
+        await vi.advanceTimersByTimeAsync(50);
+      }
+    }
+  }
+  const scan = (app, id) => app.chain.active.handleScan(`brains://demo-health-centre/${id}`);
+  const wheelchair = { wheelchair: true, stepFree: true, accessLevel: 'visitor' };
+
+  async function visitorAtLift() {
+    vi.setSystemTime(new Date('2026-10-16T12:00:00')); // the demo lift is out of service overnight
+    const { app } = await boot({
+      config: { provider: null, filter: wheelchair },
+      providerOptions: qr,
+    });
+    scan(app, 'a-lift-g'); // at the lift on the ground floor
+    expect(app.setDestination(app.venue.poiById('poi-clinic-b'))).toBe(true);
+    return app;
+  }
+
+  it('a visitor on a route that takes the lift is moved to the next floor when the ride is felt', async () => {
+    const app = await visitorAtLift();
+    expect(app.floorplan.floor).toBe(0);
+    await ride('up');
+    expect(app.floorplan.floor).toBe(1);
+    expect(app.hud.text.notices.join(' ')).toContain('Looks like you took the lift');
+    await app.destroy();
+  });
+
+  it('does nothing for a ride the wrong way, or with no lift on the route', async () => {
+    const app = await visitorAtLift();
+    await ride('down'); // the route goes up
+    expect(app.floorplan.floor).toBe(0);
+    await app.destroy();
+    document.body.innerHTML = '<main id="app"></main>';
+
+    const { app: free } = await boot({ config: { provider: null }, providerOptions: qr });
+    scan(free, 'a-lift-g'); // standing at the lift, but not going anywhere
+    await ride('up');
+    expect(free.floorplan.floor).toBe(0);
+    await free.destroy();
+  });
+
+  it('a visitor climbing the stairs the route uses is moved up after the flights and the landing turn', async () => {
+    vi.setSystemTime(new Date('2026-10-16T12:00:00'));
+    const json = structuredClone(demo);
+    json.anchors.push({ id: 'a-stairs', x: 10, y: 3, z: 0, floor: 0, heading: 0 });
+    const { app } = await boot({
+      config: { provider: null },
+      options: { venue: createVenue(json) },
+      providerOptions: qr,
+    });
+    scan(app, 'a-stairs');
+    expect(app.setDestination(app.venue.poiById('poi-clinic-b'))).toBe(true);
+    const step = () => {
+      for (const y of [2.5, 0.2]) {
+        window.dispatchEvent(
+          Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+        );
+      }
+    };
+    const climb = async (steps, heading) => {
+      for (let i = 0; i < steps; i += 1) {
+        window.dispatchEvent(
+          Object.assign(new Event('deviceorientation'), { webkitCompassHeading: heading })
+        );
+        step();
+        await vi.advanceTimersByTimeAsync(550);
+      }
+    };
+    await climb(8, 0); // the first flight
+    expect(app.floorplan.floor).toBe(0);
+    await climb(16, 180); // round the landing and up the second
+    expect(app.floorplan.floor).toBe(1);
+    expect(app.hud.text.notices.join(' ')).toContain('Looks like you took the stairs');
+    await app.destroy();
+  });
+
+  it('on a staff phone a ride asks which floor, and picking it moves there', async () => {
+    const { app } = await boot({
+      config: { admin: true, train: true, provider: null },
+      options: {
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: qr,
+    });
+    const f = (n) => document.querySelector(`.train [data-f="${n}"]`);
+    f('main').click(); // START HERE
+    scan(app, 'a-lift-g');
+    expect(app.admin.wizard.step).toBe('walk');
+    const noted = vi.spyOn(app.admin.wizard, 'noteTransfer');
+    await ride('up');
+    expect(f('transfer').hidden).toBe(false);
+    expect(f('transfer-text').textContent).toBe(t('train.transfer.liftUp'));
+    const buttons = [...f('floors').querySelectorAll('button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['First floor']); // not the floor they are on
+    buttons[0].click();
+    expect(noted).toHaveBeenCalledWith('lift'); // so the connection is recorded as a lift
+    expect(app.floorplan.floor).toBe(1);
+    expect(f('transfer').hidden).toBe(true);
+    await app.destroy();
+  });
+});
+
 describe('bootApp — adaptive stride', () => {
   const stream = { getTracks: () => [{ stop: vi.fn() }] };
   async function bootVisitor(extra = {}) {

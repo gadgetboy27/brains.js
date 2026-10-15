@@ -210,6 +210,10 @@ export default {
     'hud.floor.change': 'I hurihuri au i te papa',
     'hud.floor.which': 'Kei tēhea papa koe inaianei?',
     'hud.floor.now': 'Kei {floor} koe inaianei. Matawaihia he tohu hei whakapūmau i tō tūnga tika.',
+    'hud.floor.auto.lift':
+      'Te āhua nei i eke koe i te hikuhiku: kei {floor} koe inaianei. Mēnā he he, tīpakohia tō papa kei raro. Matawaihia he tohu hei whakapūmau i tō tūnga tika.',
+    'hud.floor.auto.stairs':
+      'Te āhua nei i piki koe i ngā arapiki: kei {floor} koe inaianei. Mēnā he he, tīpakohia tō papa kei raro. Matawaihia he tohu hei whakapūmau i tō tūnga tika.',
     'scan.markerNote': 'Tuhipoka mō tēnei tohu: {text}',
     'admin.anchor.heading': 'Anga i te matawai (tākiri)',
     'admin.undo': 'Wetekia',
@@ -356,6 +360,15 @@ export default {
     'train.torch.on': 'Kua pāho te rama',
     'train.sound.off': 'Oro',
     'train.sound.on': 'Kua pāho te oro',
+    'train.floorLink': 'I huri papa? Pāwhiri i konei',
+    'train.kind.lift': 'Hikuhiku',
+    'train.kind.stairs': 'Arapiki',
+    'train.transfer.cancel': 'Ehara i te huri papa',
+    'train.transfer.liftUp': 'Te āhua nei i piki koe i te hikuhiku. Kei tēhea papa koe inaianei?',
+    'train.transfer.liftDown': 'Te āhua nei i heke koe i te hikuhiku. Kei tēhea papa koe inaianei?',
+    'train.transfer.lift': 'Te āhua nei i eke koe i te hikuhiku. Kei tēhea papa koe inaianei?',
+    'train.transfer.stairs': 'Te āhua nei i piki koe i ngā arapiki. Kei tēhea papa koe inaianei?',
+    'train.transfer.manual': 'I pēhea tō huri papa, ā, kei tēhea papa koe inaianei?',
     'train.scan.match': 'Kei te tika te tohu: {jump} m mai i tō wāhi i whakaaro ai ō hikoi.',
     'train.scan.check':
       'He {jump} m te tawhiti o te tohu i tō wāhi i whakaaro ai ō hikoi. Tirohia mēnā ko te whakapiri tika.',

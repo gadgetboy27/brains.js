@@ -198,3 +198,42 @@ options are new).
 
 The same caveats as above apply: the sensor models are plausible, not
 measured, and the demo venue is small. Confirm on a real walk.
+
+## Lifts and stairs
+
+Browsers have no barometer, so a phone cannot measure which floor it is on.
+What it can feel is the shape of a ride, and the app uses that only together
+with something it already knows.
+
+**Lifts** (`src/core/vertical-motion.js`) start and stop with a push along
+gravity: up-then-down going up, down-then-up going down, with a smooth ride
+between and the person standing still. The detector integrates each push into a
+speed, requires the two to roughly cancel (the lift starts and ends at rest),
+and rejects anything with steps during the ride, a single bump, pushes too weak
+to matter, and a push never answered. The first push gives the direction. It
+also copes with platforms whose sensors read with the opposite sign.
+
+**Stairs** are much weaker evidence from a phone: a long run of steps with a
+turn at the landing. So the stairs tracker only counts when the app already
+expects stairs (the user is at the foot of some, on a route that uses them), and
+it cannot tell up from down.
+
+What the app does with them:
+
+- **A visitor on a route that is about to change floor**: a lift ride (felt, in
+  the direction the route is heading) or a climb of the stairs the route uses is
+  taken as arriving on the route's next floor, replacing the manual "I changed
+  floor" tap. The notice says what it assumed and the floor picker is still
+  there to correct it. A ride that does not match the route (wrong direction,
+  stairs when a lift was expected, no route) changes nothing.
+- **A staff phone recording a route**: the training screen asks "Which floor are
+  you on now?" with the lift or stairs already filled in, and the connection
+  recorded across the floors is typed accordingly (lifts are step-free, stairs
+  are not). "Changed floor? Tap here" does the same when nothing was detected.
+
+Limits: the thresholds (0.3 m/s² push, 0.35 m/s speed, 20 steps and a landing
+turn) are reasonable starting points that have only been tested against
+simulated rides, not real lifts. Slow or very smooth lifts, escalators, and a
+lift ridden while fidgeting will be missed or rejected, which is the safe side:
+the manual picker is always there. Check on real devices in the lifts of the
+building before relying on it, and tune `thresholdMps2` if rides are missed.

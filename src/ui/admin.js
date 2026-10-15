@@ -169,6 +169,8 @@ export class AdminPanel {
    * @param {{ get: () => number, subscribe: (fn: (steps: number) => void) => (() => void) } | null} [options.stepSource]
    *   Live step count for the training screen's big counter (null: shows it as unavailable).
    * @param {(text: string) => string | null} [options.anchorForCode]  The venue anchor id a scanned payload names, if any.
+   * @param {() => Array<{ index: number, name: string }>} [options.floors]  The venue's floors, for the training screen's floor picker.
+   * @param {(floor: number) => void} [options.onFloorPick]  Move the position to this floor (staff confirmed a lift or stairs).
    * @param {object | null} [options.audioCues]  Sound cues for the training screen (see ./audio-cues.js).
    * @param {object | null} [options.torch]  The camera light for the training screen: `{ supported, on, set(on) }`.
    * @param {number} [options.strideM]   Metres per step for the training screen's distance figure.
@@ -457,6 +459,12 @@ export class AdminPanel {
       steps: options.stepSource ?? null,
       torch: options.torch ?? null,
       cues: options.audioCues ?? null,
+      floors: () => options.floors?.() ?? [],
+      getFloor: () => this.#pose?.floor ?? 0,
+      onFloorPick: ({ floor, kind }) => {
+        this.#wizard.noteTransfer(kind); // before the position moves, so the edge is typed
+        options.onFloorPick?.(floor);
+      },
       getStrideM: () => this.#draft.frame?.strideM ?? options.strideM ?? 0.73,
       getPose: () => this.#pose,
       onExit: () => (this.#el.hidden = false),

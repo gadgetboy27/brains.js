@@ -36,6 +36,7 @@ import { MapMatcher } from './core/map-matching.js';
 import { createCalibration } from './core/calibration.js';
 import { createNavigator } from './core/navigation.js';
 import { applyCornerCorrection, createTurnDetector } from './core/turn-correction.js';
+import { createLiftDetector, createStairsTracker } from './core/vertical-motion.js';
 import { createOffRouteDetector } from './core/off-route.js';
 import { findRoute } from './core/router.js';
 import { createVenue, loadVenue } from './core/venue.js';
@@ -669,7 +670,7 @@ export async function bootApp(options = {}) {
    * lift landing that connects to that floor (else straight above/below),
    * and let dead reckoning carry on from there. A scan corrects it exactly.
    */
-  function changeFloor(target) {
+  function changeFloor(target, { auto = null } = {}) {
     const from = lastPose;
     const fl = venue.floorByIndex(target);
     if (!from || !fl || from.floor === target) return;
@@ -698,7 +699,12 @@ export async function bootApp(options = {}) {
       timestamp: Date.now(),
     });
     floorplan.showFloor(target);
-    hud.showNotice('floor-change', t('hud.floor.now', { floor: fl.name }));
+    hud.showNotice(
+      'floor-change',
+      auto
+        ? t(`hud.floor.auto.${auto}`, { floor: fl.name })
+        : t('hud.floor.now', { floor: fl.name })
+    );
   }
 
   function onPose(raw) {
@@ -736,6 +742,7 @@ export async function bootApp(options = {}) {
     for (const fn of poseListeners) fn(pose);
     if (navigator) {
       const state = navigator.update(pose);
+      updateArmedTransfer(pose, state);
       hud.setProgress(state, { floorName });
       speech.narrate(state, { floorName, destinationName: destination?.name });
       if (state.arrived) arrow.setTarget(null);
@@ -763,9 +770,82 @@ export async function bootApp(options = {}) {
   const cornerCorrection = options.turnCorrection !== false && !config.admin;
   const correctAtCorner = (fused) =>
     cornerCorrection ? applyCornerCorrection(appFusion, turns, venue, fused) : null;
+  // Lifts and stairs (./core/vertical-motion.js): noticed from the accelerometer
+  // and acted on only with context, because a phone cannot measure height.
+  //  - A visitor on a route that is about to change floor: a lift ride (or a
+  //    climb of stairs) at the transfer is taken as arriving on the route's
+  //    next floor, instead of waiting to be told. The manual floor picker stays.
+  //  - A staff phone recording: ask which floor they are on, with the lift or
+  //    stairs already filled in.
+  const lift = createLiftDetector();
+  const stairsTracker = createStairsTracker();
+  let armedTransfer = null; // { from, to, kind, lastNearAt }
+  let rawSteps = 0;
+  let stepTotal = 0; // steps across the resets at every exact fix
+  let lastStepAt = -Infinity;
+  /** The route's next floor change, once the user is at it (or armed from before). */
+  function updateArmedTransfer(pose, state) {
+    const fc = state?.floorChange;
+    const nowS = Date.now() / 1000;
+    if (fc && pose.floor === fc.from.floor) {
+      const near = Math.hypot(pose.x - fc.from.x, pose.y - fc.from.y) <= 8;
+      if (near) {
+        const kind =
+          fc.edge?.type === 'stairs' ? 'stairs' : fc.edge?.type === 'lift' ? 'lift' : null;
+        armedTransfer = kind ? { from: fc.from, to: fc.to, kind, lastNearAt: nowS } : null;
+      }
+    }
+    // Position wanders while climbing stairs, so stay armed a while after leaving the spot.
+    if (
+      armedTransfer &&
+      (pose.floor === armedTransfer.to.floor || nowS - armedTransfer.lastNearAt > 120)
+    ) {
+      armedTransfer = null;
+    }
+  }
+  function onTransferDetected(ev) {
+    if (config.admin) {
+      admin?.training?.offerFloorChange({ kind: ev.kind, direction: ev.direction });
+      return;
+    }
+    const a = armedTransfer;
+    if (!a || a.kind !== ev.kind) return;
+    // A lift says which way it went: it must agree with where the route is heading.
+    if (ev.direction && (ev.direction === 'up') !== a.to.floor > a.from.floor) return;
+    armedTransfer = null;
+    changeFloor(a.to.floor, { auto: ev.kind });
+  }
+  function feedVertical(e) {
+    const t = Date.now() / 1000;
+    const sc = appFusion.stepCount;
+    if (sc !== rawSteps) {
+      stepTotal += sc >= rawSteps ? sc - rawSteps : sc; // counts restart at every exact fix
+      rawSteps = sc;
+      lastStepAt = t;
+    }
+    const liftEv = lift.update({
+      t,
+      acc: e.acceleration,
+      accG: e.accelerationIncludingGravity,
+      stepping: t - lastStepAt < 1.5,
+    });
+    if (liftEv) onTransferDetected(liftEv);
+    const stairsEv = stairsTracker.update({
+      t,
+      steps: stepTotal,
+      heading: appFusion.getPose()?.heading ?? 0,
+      armed: armedTransfer?.kind === 'stairs',
+    });
+    if (stairsEv) onTransferDetected(stairsEv);
+  }
+  let verticalDetach = null;
   const startAppFusion = () => {
     if (fusionTimer !== null) return;
-    if (win?.addEventListener) fusionDetach = appFusion.attach(win);
+    if (win?.addEventListener) {
+      fusionDetach = appFusion.attach(win);
+      win.addEventListener('devicemotion', feedVertical);
+      verticalDetach = () => win.removeEventListener('devicemotion', feedVertical);
+    }
     fusionTimer = (options.setInterval ?? ((f, ms) => win.setInterval(f, ms)))(() => {
       if (!usesAppFusion()) return;
       let fused = appFusion.getPose();
@@ -779,6 +859,8 @@ export async function bootApp(options = {}) {
   const stopAppFusion = () => {
     fusionDetach?.();
     fusionDetach = null;
+    verticalDetach?.();
+    verticalDetach = null;
     if (fusionTimer !== null)
       (options.clearInterval ?? ((id) => win.clearInterval(id)))(fusionTimer);
     fusionTimer = null;
@@ -1107,6 +1189,8 @@ export async function bootApp(options = {}) {
         subscribe: (fn) => appFusion.on('pose', () => fn(appFusion.stepCount)),
       },
       audioCues: cues,
+      floors: () => venue.floors.map((f) => ({ index: f.index, name: f.name })),
+      onFloorPick: (floor) => changeFloor(floor),
       torch: {
         // Whichever provider is reading the camera right now (only QR has one).
         get supported() {

@@ -463,4 +463,95 @@ describe('TrainingScreen', () => {
       expect(f('scan-note').hidden).toBe(true);
     });
   });
+
+  describe('changing floor', () => {
+    const FLOORS = [
+      { index: 0, name: 'Ground' },
+      { index: 1, name: 'First floor' },
+      { index: 2, name: 'Second floor' },
+    ];
+    function recording(overrides = {}) {
+      const onFloorPick = vi.fn();
+      const m = make({ floors: () => FLOORS, getFloor: () => 0, onFloorPick, ...overrides });
+      m.screen.open();
+      m.wizard.go('walk');
+      return { ...m, onFloorPick };
+    }
+    const floorButtons = (f) => [...f('floors').querySelectorAll('button')];
+
+    it('offers "Changed floor?" only mid-route and only in a venue with more than one floor', () => {
+      const { f } = recording();
+      expect(f('floor-link').hidden).toBe(false);
+      const single = recording({ floors: () => [{ index: 0, name: 'Ground' }] });
+      expect(single.f('floor-link').hidden).toBe(true);
+      const idle = make({ floors: () => FLOORS });
+      idle.screen.open();
+      expect(idle.f('floor-link').hidden).toBe(true);
+    });
+
+    it('a detected lift ride asks which floor, with the likely ones highlighted', () => {
+      const { screen, f } = recording();
+      screen.offerFloorChange({ kind: 'lift', direction: 'up' });
+      expect(f('transfer').hidden).toBe(false);
+      expect(f('transfer-text').textContent).toBe(t('train.transfer.liftUp'));
+      expect(f('kind-lift').getAttribute('aria-pressed')).toBe('true');
+      const buttons = floorButtons(f);
+      expect(buttons.map((b) => b.textContent)).toEqual(['First floor', 'Second floor']); // not where you are
+      expect(buttons.every((b) => b.classList.contains('btn-primary'))).toBe(true); // both are above
+    });
+
+    it('going down highlights only floors below', () => {
+      const m = make({ floors: () => FLOORS, getFloor: () => 1 });
+      m.screen.open();
+      m.wizard.go('walk');
+      m.screen.offerFloorChange({ kind: 'lift', direction: 'down' });
+      const lit = floorButtons(m.f)
+        .filter((b) => b.classList.contains('btn-primary'))
+        .map((b) => b.textContent);
+      expect(lit).toEqual(['Ground']);
+    });
+
+    it('picking a floor reports it with the lift or stairs, and closes the question', () => {
+      const { screen, f, onFloorPick } = recording();
+      screen.offerFloorChange({ kind: 'stairs' });
+      expect(f('transfer-text').textContent).toBe(t('train.transfer.stairs'));
+      floorButtons(f)[1].click();
+      expect(onFloorPick).toHaveBeenCalledWith({ floor: 2, kind: 'stairs' });
+      expect(f('transfer').hidden).toBe(true);
+    });
+
+    it('the person can correct the kind before picking', () => {
+      const { screen, f, onFloorPick } = recording();
+      screen.offerFloorChange({ kind: 'lift', direction: 'up' });
+      f('kind-stairs').click();
+      expect(f('kind-stairs').getAttribute('aria-pressed')).toBe('true');
+      expect(f('kind-lift').getAttribute('aria-pressed')).toBe('false');
+      floorButtons(f)[0].click();
+      expect(onFloorPick).toHaveBeenCalledWith({ floor: 1, kind: 'stairs' });
+    });
+
+    it('the manual link asks the same question without guessing', () => {
+      const { f } = recording();
+      f('floor-link').click();
+      expect(f('transfer-text').textContent).toBe(t('train.transfer.manual'));
+      expect(floorButtons(f).some((b) => b.classList.contains('btn-primary'))).toBe(false);
+    });
+
+    it('can be dismissed, and goes away when the route ends', () => {
+      const { screen, f, wizard } = recording();
+      screen.offerFloorChange({ kind: 'lift', direction: 'up' });
+      f('transfer-cancel').click();
+      expect(f('transfer').hidden).toBe(true);
+      screen.offerFloorChange({ kind: 'lift', direction: 'up' });
+      wizard.go('done');
+      expect(f('transfer').hidden).toBe(true);
+    });
+
+    it('ignores a detection when no route is being recorded', () => {
+      const idle = make({ floors: () => FLOORS });
+      idle.screen.open();
+      idle.screen.offerFloorChange({ kind: 'lift', direction: 'up' });
+      expect(idle.f('transfer').hidden).toBe(true);
+    });
+  });
 });

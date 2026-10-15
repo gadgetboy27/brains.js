@@ -72,6 +72,8 @@ export class RouteWizard {
    * @type {Array<{ nodes: string[], edges: Array<{ from: string, to: string }>, pois: string[], anchors: string[] }>}
    */
   #saved = [];
+  /** How the next floor change was made ('lift' | 'stairs'), set by {@link noteTransfer}. */
+  #transferType = null;
   /** The last dead-reckoned (not exact) position seen since the last exact fix. */
   #lastDr = null;
   /**
@@ -724,6 +726,16 @@ export class RouteWizard {
     return this.save();
   }
 
+  /**
+   * Say how the floor is about to change, so the connection recorded across
+   * floors is a lift or stairs rather than the default. Call before moving the
+   * position to the new floor.
+   * @param {'lift' | 'stairs'} kind
+   */
+  noteTransfer(kind) {
+    this.#transferType = kind === 'lift' ? 'lift' : 'stairs';
+  }
+
   /** Drop a point right here (a turn the sensors did not catch). */
   markTurn() {
     const pose = this.#host.getPose();
@@ -735,9 +747,15 @@ export class RouteWizard {
     const draft = this.#host.draft;
     ensureFloor(draft, pose.floor);
     const before = draft.nodes.length;
+    const from = draft.nodeById(this.#lastNode);
+    const attrs = this.#sectionAttrs();
+    if (from && from.floor !== pose.floor && this.#transferType) {
+      attrs.type = this.#transferType; // how the floor was changed: not the default 'stairs'
+      this.#transferType = null;
+    }
     const node = draft.addNode(
       { x: pose.x, y: pose.y, z: pose.z, floor: pose.floor },
-      { linkFrom: this.#lastNode, snap: force ? 0.5 : this.#opts.snapM, edge: this.#sectionAttrs() }
+      { linkFrom: this.#lastNode, snap: force ? 0.5 : this.#opts.snapM, edge: attrs }
     );
     if (node.id !== this.#lastNode) {
       const entry = { id: node.id, created: draft.nodes.length > before };
