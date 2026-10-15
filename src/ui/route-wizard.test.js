@@ -41,6 +41,8 @@ function host(draft = new VenueDraft(blankVenue('test-site')), { plan = {} } = {
     },
     toast: (text) => h.toasts.push(text),
     wardFields: AdminPanel.wardFields,
+    recorded: [], // observations kept about saved routes
+    record: (obs) => h.recorded.push(obs),
     recording: [], // [active, distanceM][] — every onRecording call, in order
     onRecording: (active, distanceM) => h.recording.push([active, distanceM]),
     // A printed-code list, like AdminPanel's — most codes name themselves.
@@ -560,5 +562,158 @@ describe('RouteWizard — how the floor was changed', () => {
     }
     const types = h2.draft.edges.filter((e) => e.floorChange).map((e) => e.type);
     expect(types).toEqual(['lift', 'stairs']);
+  });
+});
+
+describe('RouteWizard — loop closure', () => {
+  const walkTo = (h, w, x, y, confidence = 0.6) => {
+    h.pose = pose(x, y, 0, 0, confidence);
+    w.onPose(h.pose);
+  };
+  /** The provider reads a marker (an exact pose reaches the wizard) and the wizard is told the code. */
+  const arriveAt = (h, w, x, y, code) => {
+    w.scanHere();
+    const p = pose(x, y, 0, 0, 1);
+    h.pose = p;
+    w.onPose(p);
+    h.decode(code);
+  };
+  const anchor = (h, code) => h.draft.anchors.find((a) => a.code === code);
+
+  /** Maternity reception (A01, the origin) out to Neonates (A02, new) 20 m north. */
+  function outLeg() {
+    const h = host(undefined, { plan: { A01: 'Maternity reception', A02: 'Neonates' } });
+    const w = createRouteWizard(h, { chain: false });
+    w.scanHere();
+    h.decode('A01');
+    for (const y of [5, 10, 15, 20]) walkTo(h, w, 0, y);
+    w.scanHere();
+    h.decode('A02'); // a new sticker: wherever the steps say, here (0, 20)
+    expect(w.step).toBe('done');
+    w.nextFromHere();
+    return { h, w };
+  }
+  const squareBack = (h, w, end) => {
+    for (const [x, y] of [
+      [5, 20],
+      [10, 20],
+      [10, 15],
+      [10, 10],
+      [10, 5],
+      [10, 0],
+      [5, 0],
+    ]) {
+      walkTo(h, w, x, y);
+    }
+    walkTo(h, w, end[0], end[1]); // where the steps say they are, back at the start
+  };
+
+  it('closing a real loop spreads the drift over every route in it, markers included', () => {
+    const { h, w } = outLeg();
+    squareBack(h, w, [0.8, 1.5]); // the steps end 1.7 m from where the first marker is
+    arriveAt(h, w, 0, 0, 'A01');
+    const q = w.route.quality;
+    expect(q).toMatchObject({ verdict: 'good', loop: true, corrected: true, retraced: false });
+    expect(q.driftM).toBeCloseTo(1.7, 1);
+    expect(q.legM).toBeGreaterThan(55);
+
+    // The far marker was recorded 1/3 of the way round, so it takes 1/3 of the correction…
+    const far = anchor(h, 'A02');
+    expect(far.x).toBeCloseTo(-0.26, 1);
+    expect(far.y).toBeCloseTo(20 - 0.49, 1);
+    // …the marker the walker came back to does not move…
+    expect(anchor(h, 'A01')).toMatchObject({ x: 0, y: 0 });
+    // …and the corner points of the loop moved by their share, the later the more.
+    const corner = h.draft.nodes.find((n) => Math.abs(n.x - 10) < 1.5 && Math.abs(n.y - 20) < 1.5);
+    const last = h.draft.nodes.find((n) => Math.abs(n.x - 5) < 2 && Math.abs(n.y) < 2);
+    expect(corner.x - 10).toBeLessThan(0); // pulled towards the start
+    expect(Math.hypot(last.x - 5, last.y - 0)).toBeGreaterThan(
+      Math.hypot(corner.x - 10, corner.y - 20)
+    );
+  });
+
+  it('says so when the way back was the way out, since that cancels the errors it is looking for', () => {
+    const { h, w } = outLeg();
+    for (const y of [15, 10, 5]) walkTo(h, w, 0, y);
+    walkTo(h, w, 0, 0.4);
+    arriveAt(h, w, 0, 0, 'A01');
+    expect(w.route.quality).toMatchObject({ loop: true, retraced: true, verdict: 'good' });
+  });
+
+  it('a loop that does not close is reported and nothing is moved', () => {
+    const { h, w } = outLeg();
+    squareBack(h, w, [6, 8]); // 10 m out over a 60 m loop
+    const before = { ...anchor(h, 'A02') };
+    const nodes = JSON.stringify(h.draft.nodes);
+    arriveAt(h, w, 0, 0, 'A01');
+    const q = w.route.quality;
+    expect(q).toMatchObject({ verdict: 'check', loop: true, corrected: false });
+    expect(anchor(h, 'A02').x).toBe(before.x);
+    expect(anchor(h, 'A02').y).toBe(before.y);
+    expect(JSON.stringify(h.draft.nodes.filter((n) => n.id !== 'n-start'))).toContain('"x":10');
+    expect(nodes).toBeTruthy();
+  });
+
+  it('is not a loop when an independently known marker was visited on the way round', () => {
+    const h = host(undefined, { plan: { A01: 'Maternity reception' } });
+    const known = h.draft.addAnchor({ x: 0, y: 20, floor: 0, name: 'Surveyed' });
+    known.code = 'K1';
+    const w = createRouteWizard(h, { chain: false });
+    w.scanHere();
+    h.decode('A01');
+    for (const y of [5, 10, 15, 20]) walkTo(h, w, 0, y);
+    arriveAt(h, w, 0, 20, 'K1'); // a marker whose position was surveyed
+    w.nextFromHere();
+    squareBack(h, w, [0.8, 1.5]);
+    arriveAt(h, w, 0, 0, 'A01');
+    expect(w.route.quality.loop).toBeFalsy(); // judged as an ordinary stretch from the surveyed marker
+  });
+
+  it('a route back to a marker recorded in an earlier session is not a loop', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance' } });
+    const old = h.draft.addAnchor({ x: 0, y: 12, floor: 0 });
+    old.code = 'A09';
+    const w = createRouteWizard(h, { chain: false });
+    w.scanHere();
+    h.decode('A01');
+    for (const y of [5, 10, 12.3]) walkTo(h, w, 0, y);
+    arriveAt(h, w, 0, 12, 'A09');
+    expect(w.route.quality.loop).toBeFalsy();
+    expect(w.route.quality.verdict).toBe('good'); // checked against it as a known marker instead
+  });
+
+  it('undoing a route forgets the markers it recorded, so they cannot close a later loop', () => {
+    const { h, w } = outLeg();
+    w.cancel(); // abandon leg 2, back at the start screen
+    expect(w.undoLastRoute()).toBe(true); // takes leg 1, and with it Neonates
+    expect(anchor(h, 'A02')).toBeUndefined();
+    // Scanning A02 again now makes it a new marker once more, not a loop closure.
+    w.scanHere();
+    h.decode('A01');
+    walkTo(h, w, 0, 9);
+    arriveAt(h, w, 0, 9, 'A02');
+    expect(w.route.quality.loop).toBeFalsy();
+  });
+});
+
+describe('RouteWizard — keeping the evidence of a test walk', () => {
+  it('records how each saved route turned out, loop or not', () => {
+    const h = host(undefined, { plan: { A01: 'Maternity reception', A02: 'Neonates' } });
+    const w = createRouteWizard(h, { chain: false });
+    w.scanHere();
+    h.decode('A01');
+    for (const y of [5, 10, 15, 20]) {
+      h.pose = pose(0, y, 0, 0, 0.6);
+      w.onPose(h.pose);
+    }
+    w.scanHere();
+    h.decode('A02');
+    expect(h.recorded).toHaveLength(1);
+    expect(h.recorded[0]).toMatchObject({ k: 'route', v: 'unchecked', loop: false, pts: 4 });
+    expect(h.recorded[0].len).toBeGreaterThan(19);
+    // No names or positions in it: ids, a verdict and some distances.
+    expect(Object.keys(h.recorded[0]).sort()).toEqual(
+      ['dist', 'drift', 'from', 'k', 'len', 'loop', 'pts', 'retraced', 'to', 'v'].sort()
+    );
   });
 });

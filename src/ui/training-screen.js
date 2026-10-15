@@ -498,16 +498,18 @@ export class TrainingScreen {
     const note = this.#f('quality-note');
     const verdict = q?.verdict ?? 'unchecked';
     el.dataset.verdict = verdict;
-    el.textContent = t(`train.quality.${verdict}`, {
+    el.textContent = t(q?.loop ? `train.quality.loop.${verdict}` : `train.quality.${verdict}`, {
       drift: q?.driftM ?? 0,
       len: Math.round(q?.legM ?? 0),
     });
     // Steps consistently off the true distance: say which way, so the stride can be set.
     const off =
       q?.scale && Math.abs(1 - q.scale) >= 0.05 ? Math.round(Math.abs(1 - q.scale) * 100) : 0;
-    note.textContent = off
-      ? t(q.scale > 1 ? 'train.quality.short' : 'train.quality.long', { pct: off })
-      : '';
+    note.textContent = q?.retraced
+      ? t('train.quality.retraced')
+      : off
+        ? t(q.scale > 1 ? 'train.quality.short' : 'train.quality.long', { pct: off })
+        : '';
     this.#f('rewalk').hidden = verdict !== 'check';
     this.#f('next').classList.toggle('btn-primary', verdict !== 'check');
   }

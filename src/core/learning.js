@@ -11,6 +11,9 @@
  *    where the steps said, or too far from the previous marker for the steps
  *    taken. A pair that keeps being flagged points at a marker that is in the
  *    wrong place on the map, or a sticker that has moved.
+ *  - **route**: how each saved route turned out (the quality check's verdict,
+ *    its drift and length, whether it was a loop), so a test walk can be
+ *    analysed afterwards.
  *  - **off**: the route leg a walker left. Legs that keep appearing point at
  *    a missing marker, a bad edge or a confusing junction.
  *
@@ -45,7 +48,8 @@ export function loadObservations(storage, venueId) {
  * @param {string} venueId
  * @param {{ k: 'gap', a: string, b: string, steps: number, routeM: number, dh?: number }
  *        | { k: 'off', from: string, to: string }
- *        | { k: 'scan', a: string, b: string, v: 'check' | 'impossible' }} obs
+ *        | { k: 'scan', a: string, b: string, v: 'check' | 'impossible' }
+ *        | { k: 'route', from: string, to: string, v: string, len: number }} obs
  *   `dh` on a gap is the heading error in degrees, (-180, 180]: how far the
  *   true bearing between the two markers is clockwise of the dead-reckoned one.
  * @param {Date} [now]
@@ -76,6 +80,14 @@ function valid(o) {
     );
   }
   if (o?.k === 'off') return typeof o.from === 'string' && typeof o.to === 'string';
+  if (o?.k === 'route') {
+    return (
+      typeof o.from === 'string' &&
+      typeof o.to === 'string' &&
+      typeof o.v === 'string' &&
+      Number.isFinite(o.len)
+    );
+  }
   if (o?.k === 'scan') {
     return (
       typeof o.a === 'string' &&

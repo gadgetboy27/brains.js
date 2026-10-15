@@ -296,6 +296,24 @@ describe('TrainingScreen', () => {
       expect(f('rewalk').hidden).toBe(true);
     });
 
+    it('words a closed loop as a loop, and warns when it was only an out-and-back', () => {
+      const good = finish({ verdict: 'good', loop: true, driftM: 1.7, legM: 61 });
+      expect(good.f('quality').textContent).toBe(
+        t('train.quality.loop.good', { drift: 1.7, len: 61 })
+      );
+      const back = finish({ verdict: 'good', loop: true, retraced: true, driftM: 0.4, legM: 40 });
+      expect(back.f('quality-note').textContent).toBe(t('train.quality.retraced'));
+      const fixed = finish({ verdict: 'ok', loop: true, driftM: 4, legM: 60, corrected: true });
+      expect(fixed.f('quality').textContent).toBe(
+        t('train.quality.loop.ok', { drift: 4, len: 60 })
+      );
+      const bad = finish({ verdict: 'check', loop: true, driftM: 10, legM: 60 });
+      expect(bad.f('quality').textContent).toBe(
+        t('train.quality.loop.check', { drift: 10, len: 60 })
+      );
+      expect(bad.f('rewalk').hidden).toBe(false);
+    });
+
     it('points out steps that are consistently short or long', () => {
       expect(
         finish({ verdict: 'ok', driftM: 2, legM: 20, scale: 1.08 }).f('quality-note').textContent

@@ -358,6 +358,13 @@ export default {
     'train.quality.ok': 'Fixed up. Corrected {drift} m of drift over {len} m.',
     'train.quality.check': 'Check this one. It ended {drift} m off over {len} m, too far to trust.',
     'train.quality.unchecked': 'Saved. Nothing to check it against: the end code is new.',
+    'train.quality.loop.good': 'Loop closed. Off by only {drift} m over a {len} m loop.',
+    'train.quality.loop.ok':
+      'Loop closed. Corrected {drift} m of drift over a {len} m loop, along every route in it.',
+    'train.quality.loop.check':
+      'The loop did not close: {drift} m off over {len} m, too far to trust. The earlier routes are unchanged.',
+    'train.quality.retraced':
+      'You came back the way you went, which cancels step-length errors, so this cannot catch them. Set your stride, or end at a marker whose position is already known.',
     'train.quality.short':
       'Your steps look about {pct}% shorter than assumed. Setting your stride would improve this.',
     'train.quality.long':

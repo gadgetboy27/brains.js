@@ -380,6 +380,14 @@ export default {
       'Tirohia tēnei. I mutu {drift} m te tawhiti i roto i te {len} m, he tino tawhiti rawa hei whakapono.',
     'train.quality.unchecked':
       'Kua tiakina. Kāore he mea hei whakataurite: he hou te waehere whakamutunga.',
+    'train.quality.loop.good':
+      'Kua katia te porowhita. {drift} m anake te wehenga i roto i te porowhita {len} m.',
+    'train.quality.loop.ok':
+      'Kua katia te porowhita. Kua whakatikaina te {drift} m o te rere i roto i te porowhita {len} m, i ia ara katoa o roto.',
+    'train.quality.loop.check':
+      'Kīhai te porowhita i kati: {drift} m te tawhiti i roto i te {len} m, he tino tawhiti rawa hei whakapono. Kāore i huri ngā ara o mua.',
+    'train.quality.retraced':
+      'I hoki mai koe i te ara i haere ai koe, ā, ka whakakore tērā i ngā hapa o te roa o te hikoi, nō reira kāore e kitea e tēnei. Whakaritea tō hikoi, whakamutua rānei ki tētahi tohu kua mōhiotia tōna wāhi.',
     'train.quality.short':
       'He poto ake ō hikoi i te {pct}% i te whakaaro. Mā te whakarite i tō hikoi e pai ake ai.',
     'train.quality.long':

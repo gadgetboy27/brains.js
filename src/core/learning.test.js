@@ -146,3 +146,23 @@ describe('scan observations', () => {
     expect(suggestions([scan('a1', 'a2', 'impossible')]).suspectMarkers).toEqual([]);
   });
 });
+
+describe('route observations', () => {
+  it('keeps how a route turned out, and rejects an incomplete one', () => {
+    const s = store();
+    const ok = {
+      k: 'route',
+      from: 'n-start',
+      to: 'n-3',
+      v: 'good',
+      drift: 1.2,
+      len: 41.3,
+      loop: false,
+      retraced: false,
+      pts: 6,
+      dist: 41,
+    };
+    expect(recordObservation(s, 'v', ok)).toMatchObject({ k: 'route', v: 'good', len: 41.3 });
+    expect(recordObservation(s, 'v', { k: 'route', from: 'a', to: 'b', v: 'good' })).toBeNull();
+  });
+});

@@ -41,6 +41,7 @@ import { t } from './strings/index.js';
  * @property {(n: unknown) => { name: string, aliases: string[] } | null} wardFields
  * @property {ReadonlyArray<object>} [places]
  * @property {(code: string) => string | null} [resolveCodeName]  A printed-code list's name for this code, if any.
+ * @property {(observation: object) => void} [record]     Keep how each saved route turned out (for analysing a test walk).
  * @property {(active: boolean, distanceM?: number) => void} [onRecording]  A leg started/stopped, or its distance moved.
  */
 
@@ -69,9 +70,18 @@ export class RouteWizard {
   /**
    * Routes saved this session, newest last, with everything each created, so
    * the latest can be taken back out.
-   * @type {Array<{ nodes: string[], edges: Array<{ from: string, to: string }>, pois: string[], anchors: string[] }>}
+   * @type {Array<{ nodes: string[], edges: Array<{ from: string, to: string }>, pois: string[], anchors: string[], path: string[], endKind: 'session' | 'independent' }>}
    */
   #saved = [];
+  /**
+   * Markers this wizard recorded itself (so their positions are dead-reckoned,
+   * not surveyed), with how many routes were complete when each was defined.
+   * Returning to one closes a loop.
+   * @type {Map<string, { afterLegs: number }>}
+   */
+  #sessionAnchors = new Map();
+  /** Whether the latest exact fix was at a marker this wizard recorded ('session') or a known one ('independent'). */
+  #endKind = 'session';
   /** How the next floor change was made ('lift' | 'stairs'), set by {@link noteTransfer}. */
   #transferType = null;
   /** The last dead-reckoned (not exact) position seen since the last exact fix. */
@@ -389,6 +399,10 @@ export class RouteWizard {
     });
     anchor.code = text;
     if (this.#route) this.#legAnchors.push(anchor.id);
+    // A marker defined here sits wherever dead reckoning says: loops can close on it.
+    this.#sessionAnchors.set(anchor.id, {
+      afterLegs: this.#route ? this.#saved.length + 1 : this.#saved.length,
+    });
     // The code now lives here: the position is exact from this point.
     this.#setPoseSelf(
       { x: anchor.x, y: anchor.y, z: anchor.z, floor: anchor.floor, heading: anchor.heading },
@@ -536,6 +550,7 @@ export class RouteWizard {
       this.#lastDr = { x: pose.x, y: pose.y, floor: pose.floor };
     } else if (this.#selfFix) {
       // A new sticker was just defined to be where dead reckoning says: nothing to compare with.
+      this.#endKind = 'session';
       this.#seg = { start: { x: pose.x, y: pose.y, floor: pose.floor }, nodes: [] };
       this.#lastDr = null;
     } else {
@@ -564,6 +579,125 @@ export class RouteWizard {
     }
   }
 
+  /** The marker this wizard recorded at this position, if any. */
+  #sessionAnchorAt(place) {
+    for (const a of this.#host.draft.anchors) {
+      const info = this.#sessionAnchors.get(a.id);
+      if (info && a.floor === place.floor && Math.hypot(a.x - place.x, a.y - place.y) < 0.05) {
+        return { ...a, ...info };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Loop closure. Dead reckoning drifts, and a marker recorded earlier this
+   * session sits wherever the drift put it. Walking back to it measures what
+   * the whole loop drifted: the gap between where the steps say the walker is
+   * and where that marker was recorded. That gap is spread back along every
+   * route in the loop, by distance walked, moving the points those routes
+   * created and the markers recorded along the way, and leaving the marker
+   * returned to (and anything that was already on the map) where it is.
+   *
+   * Only when the loop is unbroken: each route starts where the last ended,
+   * and none of them ended at a marker whose position was known independently
+   * (that already corrected the stretch it ended). Otherwise it reports false
+   * and the stretch is checked on its own.
+   *
+   * What it cannot do: an out-and-back along the same corridor cancels a
+   * step-length or heading error (the way back undoes the way out), so the
+   * loop closes with almost no gap even if the far end was placed too close.
+   * `retraced` says when that is the case.
+   *
+   * @param {{ x: number, y: number, floor: number }} truth  The marker's recorded position.
+   * @param {{ x: number, y: number, floor: number }} dr     Where dead reckoning put the walker.
+   * @param {{ id: string, afterLegs: number }} home
+   * @returns {boolean} Whether the loop was judged here.
+   */
+  #closeLoop(truth, dr, home) {
+    const draft = this.#host.draft;
+    const route = this.#route;
+    const legs = this.#saved.slice(home.afterLegs);
+    if (legs.some((l) => l.endKind !== 'session')) return false;
+    const current = {
+      path: this.#legNodes.map((n) => n.id),
+      created: new Set(this.#legNodes.filter((n) => n.created).map((n) => n.id)),
+    };
+    const chain = [...legs.map((l) => ({ path: l.path, created: new Set(l.nodes) })), current];
+    for (let i = 1; i < chain.length; i += 1) {
+      if (chain[i].path[0] !== chain[i - 1].path.at(-1)) return false; // a route started elsewhere
+    }
+    const first = draft.nodeById(chain[0].path[0]);
+    if (!first || Math.hypot(first.x - truth.x, first.y - truth.y) > 1.5) return false;
+
+    const ids = [];
+    for (const leg of chain) for (const id of leg.path) if (ids.at(-1) !== id) ids.push(id);
+    const pts = ids.map((id) => draft.nodeById(id));
+    if (pts.some((n) => !n || n.floor !== truth.floor) || dr.floor !== truth.floor) return false;
+
+    const path = [...pts, dr];
+    const cum = [0];
+    for (let i = 1; i < path.length; i += 1) {
+      cum.push(cum[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
+    }
+    const loopM = cum.at(-1);
+    if (!(loopM > 0)) return false;
+    const dx = truth.x - dr.x;
+    const dy = truth.y - dr.y;
+    const driftM = Math.hypot(dx, dy);
+    const o = this.#opts;
+    const verdict =
+      driftM <= Math.max(o.goodM, o.goodPct * loopM)
+        ? 'good'
+        : driftM <= Math.max(o.okM, o.okPct * loopM)
+          ? 'ok'
+          : 'check';
+    // Mostly walking back over points already on the map: scale errors cancel.
+    const mine = current.path.length;
+    const retraced = mine > 0 && 1 - current.created.size / mine >= 0.6;
+    const round = (n) => Math.round(n * 10) / 10;
+    route.quality = {
+      verdict,
+      loop: true,
+      retraced,
+      driftM: round(driftM),
+      legM: round(loopM),
+      driftPct: round((100 * driftM) / loopM),
+      scale: null,
+      corrected: false,
+    };
+    if (verdict === 'check') return true; // left as walked, for a re-walk
+
+    const fractionAt = (point) => {
+      let best = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < pts.length; i += 1) {
+        const d = Math.hypot(pts[i].x - point.x, pts[i].y - point.y);
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      }
+      return cum[best] / loopM;
+    };
+    const mineNodes = new Set(chain.flatMap((l) => [...l.created]));
+    const anchorsToMove = draft.anchors.filter((a) => {
+      const info = this.#sessionAnchors.get(a.id);
+      return info && info.afterLegs > home.afterLegs && a.floor === truth.floor;
+    });
+    // Fractions first (from where everything is now), then move.
+    const nodeMoves = pts
+      .map((n, i) => ({ id: n.id, x: n.x, y: n.y, f: cum[i] / loopM }))
+      .filter((m, i) => mineNodes.has(m.id) && i > 0);
+    const anchorMoves = anchorsToMove.map((a) => ({ id: a.id, x: a.x, y: a.y, f: fractionAt(a) }));
+    for (const m of nodeMoves) draft.moveNode(m.id, { x: m.x + dx * m.f, y: m.y + dy * m.f });
+    for (const m of anchorMoves) draft.updateAnchor(m.id, { x: m.x + dx * m.f, y: m.y + dy * m.f });
+    route.quality.corrected = true;
+    route.distance = route.edges.reduce((t, e) => t + (e.distance ?? 0), 0);
+    this.#host.changed();
+    return true;
+  }
+
   /**
    * The quality check. An exact position (a scan of a marker the venue
    * already knows) says where the walker really is; the stretch walked since
@@ -583,6 +717,10 @@ export class RouteWizard {
     const dr = this.#lastDr;
     this.#seg = { start: { x: truth.x, y: truth.y, floor: truth.floor }, nodes: [] };
     this.#lastDr = null;
+    const home = this.#sessionAnchorAt(truth);
+    this.#endKind = home ? 'session' : 'independent';
+    // Back at a marker recorded earlier in this session: the whole loop is the evidence.
+    if (route && dr && home && this.#closeLoop(truth, dr, home)) return;
     if (!route || !seg.start || !dr || seg.nodes.length === 0) return;
     const draft = this.#host.draft;
     const points = seg.nodes.map((n) => draft.nodeById(n.id));
@@ -650,7 +788,10 @@ export class RouteWizard {
     for (const e of rec.edges) draft.removeEdge(e.from, e.to);
     for (const id of rec.pois) draft.removePoi(id);
     for (const id of [...rec.nodes].reverse()) draft.removeNode(id);
-    for (const id of rec.anchors) draft.removeAnchor(id);
+    for (const id of rec.anchors) {
+      draft.removeAnchor(id);
+      this.#sessionAnchors.delete(id);
+    }
     this.#host.changed();
   }
 
@@ -829,8 +970,23 @@ export class RouteWizard {
       edges: this.#route.edges.map((e) => ({ from: e.from, to: e.to })),
       pois: [...this.#legPois],
       anchors: [...this.#legAnchors],
+      path: this.#legNodes.map((n) => n.id),
+      endKind: this.#endKind,
     });
     if (this.#saved.length > 20) this.#saved.shift();
+    const q = this.#route.quality;
+    this.#host.record?.({
+      k: 'route',
+      from: this.#startNode,
+      to: node.id,
+      v: q?.verdict ?? 'unchecked',
+      drift: q?.driftM ?? null,
+      len: Math.round((q?.legM ?? this.#route.distance) * 10) / 10,
+      loop: Boolean(q?.loop),
+      retraced: Boolean(q?.retraced),
+      pts: this.#route.nodes,
+      dist: Math.round(this.#route.distance * 10) / 10,
+    });
     this.#host.toast(t('admin.wizard.done.saved'));
     this.#show('done');
     return { node, distance: this.#route.distance, edges: this.#route.edges.length };

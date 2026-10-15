@@ -24,7 +24,7 @@
 import QRCode from 'qrcode';
 
 import { feedbackRows } from '../core/feedback.js';
-import { loadObservations, suggestions } from '../core/learning.js';
+import { loadObservations, recordObservation, suggestions } from '../core/learning.js';
 import { VenueDraft } from '../core/venue-draft.js';
 import { HOSPITAL_PLACES, findPlace } from '../venues/places-library.js';
 import { DEMO_HOSPITAL_PLAN, findPlanRow, parseSurveyPlan } from '../venues/survey-plan.js';
@@ -451,6 +451,7 @@ export class AdminPanel {
       places: options.places ?? HOSPITAL_PLACES,
       resolveCodeName: (text) => findPlanRow(this.#plan, text)?.name ?? null,
       onRecording: (active, distanceM) => this.#opts.onRecording?.(active, distanceM),
+      record: (obs) => recordObservation(this.#opts.storage, this.#draft.id, obs),
     });
     this.#training = createTrainingScreen({
       wizard: this.#wizard,

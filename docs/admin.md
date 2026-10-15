@@ -389,3 +389,30 @@ false alarms.
 On staff phones every flagged scan is kept, and the walk-data export lists
 **suspect markers**: pairs flagged three or more times (or "too far" twice),
 which points at a misplaced marker or a sticker that has moved.
+
+### Loop closure
+
+When a route ends back at a marker you recorded earlier in the same session,
+the gap between where the steps say you are and where that marker was recorded
+is how far the whole loop drifted. It is spread back along every route in the
+loop, in proportion to distance walked: the points those routes created and the
+markers recorded along the way all move by their share (the earlier, the less),
+and the marker you came back to stays put. The result card says "Loop closed"
+with the drift and the loop's length.
+
+It only applies to an unbroken loop (each route starts where the last ended)
+that did not pass an independently known marker on the way (that already
+corrected the stretch it ended). A loop that misses by more than the
+good/fixed-up limits is reported and nothing is moved, so a bad walk is not
+averaged into the map.
+
+**What it cannot catch:** an out-and-back along the same corridor. The way back
+undoes the way out, so a step-length or compass error cancels and the loop
+closes with almost no gap even if the far end was placed too short. The result
+says so when most of the way back was over points already on the map. To catch
+a step-length error, set your stride first (More tools, stride calibration, by
+walking a measured distance), or end the walk at a marker whose position is
+already known. A real loop, with a different way back, is where this shines.
+
+Each saved route's result (verdict, drift, length, loop or not) is kept with the
+walk data: Publish, **Download walk data**.
