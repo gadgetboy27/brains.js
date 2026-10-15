@@ -1121,8 +1121,11 @@ describe('bootApp — registering a printed sticker from the scanner', () => {
 describe('bootApp — corners as position fixes', () => {
   async function walkToCorner(options = {}) {
     const stream = { getTracks: () => [{ stop: vi.fn() }] };
+    // A short stride makes the dead-reckoned corner fall well short of the real one.
+    const json = structuredClone(demo);
+    json.frame = { ...json.frame, strideM: 0.4 };
     const { app } = await boot({
-      options,
+      options: { venue: createVenue(json), ...options },
       providerOptions: {
         order: ['qr'],
         qr: {
@@ -1153,9 +1156,9 @@ describe('bootApp — corners as position fixes', () => {
         await vi.advanceTimersByTimeAsync(400);
       }
     };
-    // Six strides north (the lobby corner is 5 m up, but strides here are short
-    // of it), then turn east and keep walking.
-    await walk(6, 0);
+    // Nine short strides north (3.6 m: the lobby corner is 5 m up), then turn
+    // east and keep walking.
+    await walk(9, 0);
     await walk(8, 90);
     await vi.advanceTimersByTimeAsync(300);
     return app;
@@ -1166,15 +1169,15 @@ describe('bootApp — corners as position fixes', () => {
   // a corner corrects, and what every later step builds on.
   it('pulls the dead-reckoned position onto the junction the user turned at', async () => {
     const app = await walkToCorner();
-    // Uncorrected, six strides north stop at y = 1 + 6 × 0.73 = 5.4; the corner is y = 6.
+    // Uncorrected, nine strides north stop at y = 1 + 9 × 0.4 = 4.6; the corner is y = 6.
     expect(app.fusion.getPose().y).toBeGreaterThan(5.8);
-    expect(app.fusion.getPose().y).toBeLessThan(6.2);
+    expect(app.fusion.getPose().y).toBeLessThan(6.3);
     await app.destroy();
   });
 
   it('can be switched off', async () => {
     const app = await walkToCorner({ turnCorrection: false });
-    expect(app.fusion.getPose().y).toBeCloseTo(1 + 6 * 0.73, 1);
+    expect(app.fusion.getPose().y).toBeCloseTo(1 + 9 * 0.4, 1);
     await app.destroy();
   });
 });

@@ -179,3 +179,37 @@ export function matchTurn(turn, venue, options = {}) {
   const { node, distanceM } = fits[0];
   return { node, dx: node.x - turn.x, dy: node.y - turn.y, distanceM };
 }
+
+/**
+ * The whole corner-correction step, shared by the app and the accuracy
+ * simulator so both run exactly the same logic: feed the fused pose to the
+ * detector and, if that completes a corner that matches exactly one junction,
+ * re-seed the fusion there as a soft fix.
+ *
+ * @param {import('./fusion.js').PoseFusion} fusion
+ * @param {ReturnType<typeof createTurnDetector>} detector
+ * @param {Venue} venue
+ * @param {Pose} fused  The fusion's current pose.
+ * @param {{ minOffsetM?: number }} [options]  Ignore corrections smaller than this (default 1 m).
+ * @returns {Pose | null} The corrected pose, or null when nothing changed.
+ */
+export function applyCornerCorrection(fusion, detector, venue, fused, { minOffsetM = 1 } = {}) {
+  const turn = detector.update(fused);
+  if (!turn) return null;
+  const match = matchTurn(turn, venue, {
+    radiusM: Math.min(10, 3 + 0.2 * fusion.distanceSinceFix),
+  });
+  if (!match) return null;
+  // Dead reckoning already agrees with the map to within the noise in where
+  // the turn is placed: moving it would add jitter, not remove drift.
+  if (Math.hypot(match.dx, match.dy) < minOffsetM) return null;
+  // Same walked distance since the corner, but from where the corner really is.
+  // A soft fix: it is not a scan, so confidence stays below exact.
+  fusion.applySoftFix({
+    ...fused,
+    x: fused.x + match.dx,
+    y: fused.y + match.dy,
+    confidence: Math.max(fused.confidence, 0.75),
+  });
+  return fusion.getPose();
+}

@@ -103,3 +103,52 @@ Tuning: `compassTimeConstantS` (longer trusts the gyro more; steady drift
 error is about gyro bias times this), `compassRejectDeg`,
 `compassTrustAfterMs`. The unit tests simulate the sensors; confirm on real
 phones (iPhone and Android) with the accuracy harness before relying on it.
+
+## Comparing positioning strategies (simulation)
+
+```sh
+node scripts/compare-positioning.mjs                       # default scenario
+node scripts/compare-positioning.mjs --disturbance 40 --glitches 4 --compass-noise 10   # a harsh building
+node scripts/compare-positioning.mjs --routes n-entrance:n-lift-g --runs 100 --json
+```
+
+Simulates people walking routes of the venue with **one QR scan at the start
+and none after**, with plausible sensor errors (stride 8% longer than assumed,
+a slightly wrong compass offset, compass noise and magnetic wobble, a few
+large compass glitches, gyro bias and noise). Every strategy sees identical
+footsteps and noise, and runs the app's real `PoseFusion`, `MapMatcher` and
+corner-correction code, so differences are down to the strategy. Flags set the
+scenario (`--stride-error`, `--compass-bias`, `--compass-noise`,
+`--disturbance`, `--glitches`, `--gyro-bias`, `--gyro-noise`).
+
+Results on the demo venue (3 routes, 40 walks each, default scenario; mean
+error of the displayed position, and error at the end of the walk):
+
+| Strategy                  | Mean (m) | End (m) | Time over 3 m off |
+| ------------------------- | -------: | ------: | ----------------: |
+| Compass only              |     3.02 |    5.10 |               40% |
+| Compass + corner fixes    |     3.11 |    4.69 |               40% |
+| Gyro blended with compass |     1.83 |    3.04 |               21% |
+| Gyro blend + corner fixes |     1.86 |    2.13 |               17% |
+
+What it shows:
+
+- **Gyro blending is the big win**: about 40% less mean error, and half the
+  time spent more than 3 m off. It matters most when the compass is disturbed.
+- **Corner fixes help the gyro-blended position at the end of a walk** (3.0 m
+  to 2.1 m) and in harsh conditions, and are neutral when sensors are already
+  good (they ignore corrections under 1 m, which otherwise add jitter). When
+  they fire they cut the error from about 1.8 m to 1.0 m.
+- **Corner fixes on top of a bad compass do not help**: the turn is then
+  matched against the wrong direction, so the mean is no better and the worst
+  case can be worse. They are worth having only with the gyro blend.
+- Even the best strategy drifts to 2 m or so after a single scan on these
+  routes, and the 95th percentile is over 4 m. That is why markers still
+  matter: space them so no stretch between scans is longer than the distance
+  over which these figures stay under your tolerance.
+
+Caveats: the sensor models are plausible, not measured on real phones; the
+1 m dead band was tuned on these same scenarios; and the demo routes are
+short with few corners. Treat the numbers as a ranking of strategies and a
+way to try "what if the compass is worse here", then confirm on a real walk
+with `?harness=1`.

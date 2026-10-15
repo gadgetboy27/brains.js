@@ -32,7 +32,7 @@
 import { PoseFusion } from './core/fusion.js';
 import { MapMatcher } from './core/map-matching.js';
 import { createNavigator } from './core/navigation.js';
-import { createTurnDetector, matchTurn } from './core/turn-correction.js';
+import { applyCornerCorrection, createTurnDetector } from './core/turn-correction.js';
 import { createOffRouteDetector } from './core/off-route.js';
 import { findRoute } from './core/router.js';
 import { createVenue, loadVenue } from './core/venue.js';
@@ -752,25 +752,8 @@ export async function bootApp(options = {}) {
   // must not be pulled towards the map it is still drawing.
   const turns = createTurnDetector();
   const cornerCorrection = options.turnCorrection !== false && !config.admin;
-  /** @returns {Pose | null} the corrected pose, if this sample completed a recognised corner. */
-  function correctAtCorner(fused) {
-    if (!cornerCorrection) return null;
-    const turn = turns.update(fused);
-    if (!turn) return null;
-    const match = matchTurn(turn, venue, {
-      radiusM: Math.min(10, 3 + 0.2 * appFusion.distanceSinceFix),
-    });
-    if (!match) return null;
-    // Same walked distance since the corner, but from where the corner really is.
-    // A soft fix: it is not a scan, so confidence stays below exact.
-    appFusion.applyFix({
-      ...fused,
-      x: fused.x + match.dx,
-      y: fused.y + match.dy,
-      confidence: Math.max(fused.confidence, 0.75),
-    });
-    return appFusion.getPose();
-  }
+  const correctAtCorner = (fused) =>
+    cornerCorrection ? applyCornerCorrection(appFusion, turns, venue, fused) : null;
   const startAppFusion = () => {
     if (fusionTimer !== null) return;
     if (win?.addEventListener) fusionDetach = appFusion.attach(win);

@@ -246,6 +246,26 @@ export class PoseFusion {
   }
 
   /**
+   * Accept a position correction that is *not* a fresh start: move the
+   * estimate and restart the confidence decay from the pose's confidence, but
+   * keep everything the heading filter has learnt (an exact fix re-seeds the
+   * heading from the compass; a soft correction has no reason to throw away
+   * the smoothed heading), and keep counting steps.
+   *
+   * @param {Pose} pose  Position and confidence to adopt; its heading is ignored.
+   */
+  applySoftFix(pose) {
+    validatePose(pose);
+    if (!this.#estimate) return this.applyFix(pose);
+    this.#estimate.x = pose.x;
+    this.#estimate.y = pose.y;
+    this.#fix = { ...this.#estimate, confidence: pose.confidence, timestamp: this.#opts.now() };
+    this.#distanceSinceFix = 0;
+    this.#rescanEmitted = false;
+    this.#emit('pose', this.getPose());
+  }
+
+  /**
    * Update heading from a DeviceOrientationEvent-shaped object.
    *
    * Uses `webkitCompassHeading` where present (iOS, already clockwise from
