@@ -1320,6 +1320,84 @@ describe('bootApp — training quality check', () => {
   });
 });
 
+describe('bootApp — training: torch and undo', () => {
+  async function bootTrainingWithTorch() {
+    const track = {
+      stop: vi.fn(),
+      getCapabilities: () => ({ torch: true }),
+      applyConstraints: vi.fn(async () => {}),
+    };
+    const stream = { getTracks: () => [track], getVideoTracks: () => [track] };
+    const json = structuredClone(demo);
+    json.anchors.push({ id: 'a-ward', x: 0, y: 10, z: 0, floor: 0, heading: 0, name: 'Ward' });
+    const { app } = await boot({
+      config: { admin: true, train: true, provider: null },
+      options: {
+        venue: createVenue(json),
+        adminOptions: { storage: null, download: vi.fn(), copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    return { app, track };
+  }
+  const stepOnce = () => {
+    for (const y of [2.5, 0.2]) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+      );
+    }
+  };
+
+  it('the torch button appears when the camera has one and switches the light', async () => {
+    const { app, track } = await bootTrainingWithTorch();
+    await vi.advanceTimersByTimeAsync(1100);
+    const btn = document.querySelector('.train [data-f="torch"]');
+    expect(btn.hidden).toBe(false);
+    btn.click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(track.applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: true }] });
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    // Scanning a code is the point of the light: once it reads, it goes off again.
+    document.querySelector('.train [data-f="main"]').click(); // START HERE
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(track.applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: false }] });
+    await app.destroy();
+  });
+
+  it('undo takes a saved route back out of the venue', async () => {
+    const { app } = await bootTrainingWithTorch();
+    const f = (n) => document.querySelector(`.train [data-f="${n}"]`);
+    const draft = app.admin.draft;
+    const before = { nodes: draft.nodes.length, edges: draft.edges.length };
+    f('main').click();
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance');
+    for (let i = 0; i < 13; i += 1) {
+      stepOnce();
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    f('main').click();
+    app.chain.active.handleScan('brains://demo-health-centre/a-ward');
+    expect(app.admin.wizard.step).toBe('done');
+    expect(app.admin.draft.edges.length).toBeGreaterThan(before.edges);
+
+    f('undo').click();
+    expect(app.admin.wizard.step).toBe('start');
+    expect(app.admin.draft.edges.length).toBe(before.edges);
+    expect(app.admin.draft.nodes.length).toBe(before.nodes);
+    expect(f('main').textContent).toBe(t('train.start'));
+    await app.destroy();
+  });
+});
+
 describe('bootApp — adaptive stride', () => {
   const stream = { getTracks: () => [{ stop: vi.fn() }] };
   async function bootVisitor(extra = {}) {

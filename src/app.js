@@ -1033,6 +1033,16 @@ export async function bootApp(options = {}) {
         // PoseFusion emits a pose on every counted step: real time, not the 250 ms tick.
         subscribe: (fn) => appFusion.on('pose', () => fn(appFusion.stepCount)),
       },
+      torch: {
+        // Whichever provider is reading the camera right now (only QR has one).
+        get supported() {
+          return Boolean(chain.active?.torchSupported);
+        },
+        get on() {
+          return Boolean(chain.active?.torchOn);
+        },
+        set: async (on) => (await chain.active?.setTorch?.(on)) ?? false,
+      },
       strideM: venue.strideM,
       anchorForCode: (text) => {
         const reg = venue.anchorByCode?.(text);

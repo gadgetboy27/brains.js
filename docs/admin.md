@@ -337,3 +337,17 @@ assumes, it says so. Setting your stride (More tools, stride calibration)
 improves every later walk. A scan in the middle of a route is checked the
 same way, stretch by stretch. A route that began at an approximate position,
 or crossed floors, is not judged.
+
+### Undo last route, and the torch
+
+- **Undo this route** (on the result card) or **Undo last route** (at the
+  start screen, until the next route begins) takes the most recent saved
+  route back out: its points, its edges, the places it named and any new
+  markers it recorded. Anything it only passed through (a junction shared with
+  another route, a marker that already existed) stays. Repeat it to step back
+  through the session. It is not offered mid-route; use Stop first.
+- **Torch** appears in the corner when the camera has one (Android Chrome on
+  the back camera; iPhones do not expose a torch to web pages). Switch it on to
+  read a code in a dim corridor. It goes off by itself as soon as the code is
+  read, or when you leave the training screen, so it does not drain the
+  battery.

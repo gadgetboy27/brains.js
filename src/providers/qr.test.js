@@ -524,3 +524,61 @@ describe('QrProvider — registered pre-printed stickers', () => {
     expect(provider.handleScan('STICKER-0018')).toBe('unrecognised');
   });
 });
+
+describe('QrProvider — torch', () => {
+  /** A stream whose camera track may or may not have a torch. */
+  function streamWithTorch(capabilities) {
+    const track = {
+      stop: vi.fn(),
+      getCapabilities: () => capabilities,
+      applyConstraints: vi.fn(async () => {}),
+    };
+    return { getTracks: () => [track], getVideoTracks: () => [track], track };
+  }
+
+  it('is unsupported before scanning starts, and on a camera with no torch (iOS)', async () => {
+    const a = make();
+    expect(a.provider.torchSupported).toBe(false);
+    expect(await a.provider.setTorch(true)).toBe(false);
+    const stream = streamWithTorch({});
+    const b = make({ getUserMedia: vi.fn(async () => stream) });
+    await b.provider.start();
+    expect(b.provider.torchSupported).toBe(false);
+    expect(await b.provider.setTorch(true)).toBe(false);
+    expect(stream.track.applyConstraints).not.toHaveBeenCalledWith(
+      expect.objectContaining({ advanced: [{ torch: true }] })
+    );
+  });
+
+  it('switches the light on and off through the camera track', async () => {
+    const stream = streamWithTorch({ torch: true });
+    const { provider } = make({ getUserMedia: vi.fn(async () => stream) });
+    await provider.start();
+    expect(provider.torchSupported).toBe(true);
+    expect(provider.torchOn).toBe(false);
+    expect(await provider.setTorch(true)).toBe(true);
+    expect(stream.track.applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: true }] });
+    expect(provider.torchOn).toBe(true);
+    expect(await provider.setTorch(false)).toBe(false);
+    expect(provider.torchOn).toBe(false);
+  });
+
+  it('reports off, rather than throwing, when the browser refuses', async () => {
+    const stream = streamWithTorch({ torch: true });
+    stream.track.applyConstraints = vi.fn(async () => Promise.reject(new Error('denied')));
+    const { provider } = make({ getUserMedia: vi.fn(async () => stream) });
+    await provider.start();
+    expect(await provider.setTorch(true)).toBe(false);
+    expect(provider.torchOn).toBe(false);
+  });
+
+  it('goes off when scanning stops', async () => {
+    const stream = streamWithTorch({ torch: true });
+    const { provider } = make({ getUserMedia: vi.fn(async () => stream) });
+    await provider.start();
+    await provider.setTorch(true);
+    await provider.stop();
+    expect(provider.torchOn).toBe(false);
+    expect(provider.torchSupported).toBe(false);
+  });
+});

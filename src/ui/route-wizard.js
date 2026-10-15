@@ -63,6 +63,15 @@ export class RouteWizard {
   #stepListeners = new Set();
   /** Nodes this route passed through, in order; `created` ones are this route's own (safe to move or remove). */
   #legNodes = [];
+  /** POIs and markers this route created (as opposed to ones it found already there). */
+  #legPois = [];
+  #legAnchors = [];
+  /**
+   * Routes saved this session, newest last, with everything each created, so
+   * the latest can be taken back out.
+   * @type {Array<{ nodes: string[], edges: Array<{ from: string, to: string }>, pois: string[], anchors: string[] }>}
+   */
+  #saved = [];
   /** The last dead-reckoned (not exact) position seen since the last exact fix. */
   #lastDr = null;
   /**
@@ -332,13 +341,15 @@ export class RouteWizard {
     const there = draft.pois.find((p) => p.node === nodeId);
     if (there) return there;
     const template = findPlace(name, this.#host.places ?? HOSPITAL_PLACES);
-    return draft.addPoi({
+    const poi = draft.addPoi({
       name,
       node: nodeId,
       aliases: [...new Set([...(ward?.aliases ?? []), ...(template?.aliases ?? [])])],
       category: ward ? 'ward' : template?.category,
       access: template?.access,
     });
+    if (this.#route) this.#legPois.push(poi.id);
+    return poi;
   }
 
   // ------------------------------------------------------------------ scans
@@ -375,6 +386,7 @@ export class RouteWizard {
       name: name || undefined,
     });
     anchor.code = text;
+    if (this.#route) this.#legAnchors.push(anchor.id);
     // The code now lives here: the position is exact from this point.
     this.#setPoseSelf(
       { x: anchor.x, y: anchor.y, z: anchor.z, floor: anchor.floor, heading: anchor.heading },
@@ -473,6 +485,8 @@ export class RouteWizard {
     this.#lastHeading = this.#host.getPose()?.heading ?? null;
     this.#route = { edges: [], nodes: 0, distance: 0, scans: 0, quality: null };
     this.#legNodes = [{ id: this.#startNode, created: false }];
+    this.#legPois = [];
+    this.#legAnchors = [];
     this.#lastDr = null;
     const here = this.#host.getPose();
     this.#seg = {
@@ -628,20 +642,44 @@ export class RouteWizard {
     this.#host.changed();
   }
 
+  /** Take out everything a saved route created (and nothing it merely used). */
+  #remove(rec) {
+    const draft = this.#host.draft;
+    for (const e of rec.edges) draft.removeEdge(e.from, e.to);
+    for (const id of rec.pois) draft.removePoi(id);
+    for (const id of [...rec.nodes].reverse()) draft.removeNode(id);
+    for (const id of rec.anchors) draft.removeAnchor(id);
+    this.#host.changed();
+  }
+
+  /** Whether there is a saved route to take back (before one is begun, or just after saving). */
+  get canUndo() {
+    return this.#saved.length > 0 && (this.#step === 'start' || this.#step === 'done');
+  }
+
+  /**
+   * Take back the most recent saved route: its points, edges, the places it
+   * named and any new markers it recorded, all gone; everything it only
+   * passed through stays. Can be repeated to step back through the session.
+   * @returns {boolean} false when there is nothing to undo, or a route is in progress.
+   */
+  undoLastRoute() {
+    if (!this.canUndo) return false;
+    this.#remove(this.#saved.pop());
+    this.reset();
+    this.#host.toast(t('admin.wizard.undone'));
+    return true;
+  }
+
   /**
    * Throw away the route just saved and begin it again from the same start
-   * (for a route the quality check flagged). Removes only what this route
-   * created: its own points and edges, and the places it named at its end.
+   * (for a route the quality check flagged).
    * @returns {boolean} false unless a route has just been saved.
    */
   rewalk() {
-    if (this.#step !== 'done' || !this.#route) return false;
+    if (this.#step !== 'done' || !this.#route || this.#saved.length === 0) return false;
+    this.#remove(this.#saved.pop());
     const draft = this.#host.draft;
-    for (const e of this.#route.edges) draft.removeEdge(e.from, e.to);
-    for (const n of [...this.#legNodes].reverse()) {
-      if (n.created && n.id !== this.#startNode) draft.removeNode(n.id);
-    }
-    this.#host.changed();
     // Back to the start, standing at it: the next scan or walk redraws the route.
     const start = draft.nodeById(this.#startNode);
     if (start) {
@@ -768,6 +806,13 @@ export class RouteWizard {
       points: this.#route.nodes,
       scans: this.#route.scans,
     });
+    this.#saved.push({
+      nodes: this.#legNodes.filter((n) => n.created && n.id !== this.#startNode).map((n) => n.id),
+      edges: this.#route.edges.map((e) => ({ from: e.from, to: e.to })),
+      pois: [...this.#legPois],
+      anchors: [...this.#legAnchors],
+    });
+    if (this.#saved.length > 20) this.#saved.shift();
     this.#host.toast(t('admin.wizard.done.saved'));
     this.#show('done');
     return { node, distance: this.#route.distance, edges: this.#route.edges.length };

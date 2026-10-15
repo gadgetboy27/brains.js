@@ -18,6 +18,8 @@ function fakeWizard() {
     nextFromHere: vi.fn(),
     reset: vi.fn(),
     rewalk: vi.fn(),
+    undoLastRoute: vi.fn(),
+    canUndo: false,
     setChain: (on) => (w.chain = on),
     onStep: (fn) => {
       listeners.add(fn);
@@ -309,6 +311,83 @@ describe('TrainingScreen', () => {
       expect(screen.mode).toBe('recording');
       expect(f('count').textContent).toBe('0');
       expect(f('result').hidden).toBe(true);
+    });
+  });
+
+  describe('undo', () => {
+    it('offers "undo last route" at the start only when there is one to undo', () => {
+      const { screen, f, wizard } = make();
+      screen.open();
+      expect(f('undo-last').hidden).toBe(true);
+      wizard.canUndo = true;
+      wizard.go('start'); // a step change refreshes the screen
+      expect(f('undo-last').hidden).toBe(false);
+      f('undo-last').click();
+      expect(wizard.undoLastRoute).toHaveBeenCalledTimes(1);
+      wizard.go('walk');
+      expect(f('undo-last').hidden).toBe(true); // not mid-route
+    });
+
+    it('the result card has "undo this route"', () => {
+      const { screen, f, wizard } = make();
+      screen.open();
+      wizard.go('walk');
+      wizard.route = { nodes: 3, distance: 10, scans: 2, edges: [], quality: { verdict: 'good' } };
+      wizard.go('done');
+      f('undo').click();
+      expect(wizard.undoLastRoute).toHaveBeenCalled();
+    });
+  });
+
+  describe('torch', () => {
+    function fakeTorch(supported = true) {
+      const t = {
+        supported,
+        on: false,
+        set: vi.fn(async (on) => {
+          t.on = on;
+          return on;
+        }),
+      };
+      return t;
+    }
+
+    it('is hidden when the camera has no torch, shown when it does', () => {
+      const none = make({ torch: fakeTorch(false) });
+      none.screen.open();
+      expect(none.f('torch').hidden).toBe(true);
+      const some = make({ torch: fakeTorch(true) });
+      some.screen.open();
+      expect(some.f('torch').hidden).toBe(false);
+      expect(some.f('torch').textContent).toBe(t('train.torch.off'));
+      expect(some.f('torch').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('toggles the light and shows its state', async () => {
+      const torch = fakeTorch();
+      const { screen, f } = make({ torch });
+      screen.open();
+      f('torch').click();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(torch.set).toHaveBeenCalledWith(true);
+      expect(f('torch').textContent).toBe(t('train.torch.on'));
+      expect(f('torch').getAttribute('aria-pressed')).toBe('true');
+      f('torch').click();
+      await Promise.resolve();
+      expect(torch.set).toHaveBeenLastCalledWith(false);
+    });
+
+    it('goes off by itself once the scan is done, and when the screen closes', () => {
+      const torch = fakeTorch();
+      const { screen, wizard } = make({ torch });
+      screen.open();
+      torch.on = true;
+      wizard.go('walk'); // the scan decoded: START HERE worked
+      expect(torch.set).toHaveBeenCalledWith(false);
+      torch.on = true;
+      screen.close();
+      expect(torch.set).toHaveBeenLastCalledWith(false);
     });
   });
 });

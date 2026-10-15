@@ -406,3 +406,109 @@ describe('RouteWizard — quality check at the end of a route', () => {
     expect(h2.w.route.quality.verdict).toBe('ok');
   });
 });
+
+describe('RouteWizard — undo last route', () => {
+  const walkTo = (h, w, x, y) => {
+    h.pose = pose(x, y);
+    w.onPose(h.pose);
+  };
+  /** Scan A01 (a new sticker: the origin), walk north, scan the new sticker `end` at the end. */
+  function recordRoute(h, w, end, toY = 12) {
+    w.scanHere();
+    h.decode('A01');
+    walkTo(h, w, 0, 4);
+    walkTo(h, w, 0, 8);
+    walkTo(h, w, 0, toY);
+    w.scanHere();
+    h.decode(end);
+  }
+  const snapshot = (h) => ({
+    nodes: h.draft.nodes.length,
+    edges: h.draft.edges.length,
+    pois: h.draft.pois.length,
+    anchors: h.draft.anchors.length,
+  });
+
+  it("removes the route's points, edges, places and new markers, and returns to the start", () => {
+    const h = host(undefined, { plan: { A01: 'Entrance', A02: 'Ward 7' } });
+    const w = createRouteWizard(h, { chain: false });
+    w.scanHere();
+    h.decode('A01'); // the origin sticker exists before the route begins
+    const base = snapshot(h);
+    walkTo(h, w, 0, 4);
+    walkTo(h, w, 0, 8);
+    walkTo(h, w, 0, 12);
+    w.scanHere();
+    h.decode('A02');
+    expect(w.step).toBe('done');
+    expect(snapshot(h).nodes).toBeGreaterThan(base.nodes + 2);
+    expect(w.canUndo).toBe(true);
+
+    expect(w.undoLastRoute()).toBe(true);
+    expect(w.step).toBe('start');
+    // Only what this route created is gone: the origin's point, place and sticker stay.
+    expect(snapshot(h).edges).toBe(0);
+    expect(snapshot(h).nodes).toBe(base.nodes);
+    expect(snapshot(h).anchors).toBe(base.anchors);
+    expect(snapshot(h).pois).toBe(base.pois);
+    expect(h.draft.pois.some((p) => p.name === 'Ward 7')).toBe(false);
+    expect(w.canUndo).toBe(false);
+    expect(h.toasts.at(-1)).toBe(t('admin.wizard.undone'));
+  });
+
+  it('can be repeated to step back through several routes', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance', A02: 'Ward 7', A03: 'Ward 8' } });
+    const w = createRouteWizard(h, { chain: false });
+    recordRoute(h, w, 'A02');
+    w.nextFromHere(); // walk on from Ward 7
+    walkTo(h, w, 0, 16);
+    walkTo(h, w, 0, 20);
+    w.scanHere();
+    h.decode('A03');
+    expect(w.step).toBe('done');
+    const twoRoutes = snapshot(h);
+
+    w.undoLastRoute(); // takes out only the second route
+    const oneRoute = snapshot(h);
+    expect(oneRoute.nodes).toBeLessThan(twoRoutes.nodes);
+    expect(h.draft.pois.some((p) => p.name === 'Ward 7')).toBe(true);
+    expect(h.draft.pois.some((p) => p.name === 'Ward 8')).toBe(false);
+
+    expect(w.canUndo).toBe(true); // available again at the start screen
+    w.undoLastRoute();
+    expect(h.draft.pois.some((p) => p.name === 'Ward 7')).toBe(false);
+    expect(snapshot(h).edges).toBe(0);
+    expect(w.canUndo).toBe(false);
+  });
+
+  it('leaves alone what the route only passed through (a marker the venue already had)', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance', A02: 'Ward 7' } });
+    const known = h.draft.addAnchor({ x: 0, y: 12, floor: 0, name: 'Known' });
+    known.code = 'A02';
+    const w = createRouteWizard(h, { chain: false });
+    recordRoute(h, w, 'A02');
+    expect(w.step).toBe('done');
+    w.undoLastRoute();
+    expect(h.draft.anchors.some((a) => a.id === known.id)).toBe(true);
+  });
+
+  it('is not available while a route is in progress, or with nothing saved', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance' } });
+    const w = createRouteWizard(h, { chain: false });
+    expect(w.canUndo).toBe(false);
+    expect(w.undoLastRoute()).toBe(false);
+    w.scanHere();
+    h.decode('A01'); // a route begins
+    expect(w.step).toBe('walk');
+    expect(w.undoLastRoute()).toBe(false);
+  });
+
+  it('walk-it-again still works on top of the same record', () => {
+    const h = host(undefined, { plan: { A01: 'Entrance', A02: 'Ward 7' } });
+    const w = createRouteWizard(h, { chain: false });
+    recordRoute(h, w, 'A02');
+    expect(w.rewalk()).toBe(true);
+    expect(w.step).toBe('walk');
+    expect(w.canUndo).toBe(false); // the redone route is not saved until it is finished
+  });
+});

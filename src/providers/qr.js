@@ -142,6 +142,7 @@ export class QrProvider extends PositionProvider {
   #error = null;
 
   #stream = null;
+  #torch = false; // the light goes off with the stream
   #video = null;
   #detector = null;
   #timer = null;
@@ -199,6 +200,42 @@ export class QrProvider extends PositionProvider {
   /** The video element showing the camera, once started. */
   get video() {
     return this.#video;
+  }
+
+  /**
+   * Whether this camera has a torch we can switch (Android Chrome on a rear
+   * camera; iOS Safari exposes none). Only meaningful once scanning.
+   */
+  get torchSupported() {
+    const track = this.#stream?.getVideoTracks?.()[0];
+    try {
+      return Boolean(track?.getCapabilities?.().torch);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Whether the torch is on. */
+  get torchOn() {
+    return this.#torch;
+  }
+
+  /**
+   * Switch the torch, for reading a code in a dim corridor. Returns whether
+   * it is now on; false if unsupported or refused (it never throws).
+   * @param {boolean} on
+   * @returns {Promise<boolean>}
+   */
+  async setTorch(on) {
+    const track = this.#stream?.getVideoTracks?.()[0];
+    if (!this.torchSupported || !track?.applyConstraints) return false;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: Boolean(on) }] });
+      this.#torch = Boolean(on);
+    } catch {
+      this.#torch = false;
+    }
+    return this.#torch;
   }
 
   /**
@@ -309,6 +346,7 @@ export class QrProvider extends PositionProvider {
     this.#clearTimer();
     stopTracks(this.#stream);
     this.#stream = null;
+    this.#torch = false;
     if (this.#video) {
       try {
         this.#video.pause?.();

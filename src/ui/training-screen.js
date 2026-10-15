@@ -37,7 +37,10 @@ const CSS = `
 .train-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--color-text-muted); }
 .train[data-mode='recording'] .train-dot { background: var(--color-poi); animation: train-pulse 1.1s ease-in-out infinite; }
 .train[data-warn='true'] .train-dot { background: var(--color-error); }
-.train-exit { min-height: 40px; padding: 4px 14px; }
+.train-tools { display: inline-flex; gap: 8px; }
+.train-exit, .train-torch { min-height: 40px; padding: 4px 14px; }
+.train-torch[hidden] { display: none; }
+.train-torch[aria-pressed='true'] { background: var(--color-accent); color: var(--color-accent-contrast); }
 .train-count { font-size: clamp(80px, 26vw, 170px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums;
   margin: 2px 0 0; transform-origin: center; }
 .train[data-mode='idle'] .train-count { opacity: 0.45; }
@@ -75,6 +78,9 @@ const CSS = `
  *   scan; the screen keeps its own running total across those resets.
  * @property {() => number} [getStrideM]       Metres per step, for the distance figure.
  * @property {() => object | null} [getPose]   Whether a position exists (offers "start where I am").
+ * @property {{ readonly supported: boolean, readonly on: boolean, set: (on: boolean) => Promise<boolean> } | null} [torch]
+ *   The camera light, for reading a code in a dim corridor. The button only
+ *   appears when the camera has one (Android Chrome; not iOS Safari).
  * @property {() => void} [onExit]
  * @property {(ms: number) => void} [vibrate]
  * @property {{ request: (type: 'screen') => Promise<{ release: () => Promise<void>, addEventListener?: Function }> } | null} [wakeLock]
@@ -113,6 +119,7 @@ export class TrainingScreen {
       steps: null,
       getStrideM: () => 0.73,
       getPose: () => null,
+      torch: null,
       onExit: () => {},
       vibrate: (ms) => globalThis.navigator?.vibrate?.(ms),
       wakeLock: globalThis.navigator?.wakeLock ?? null,
@@ -152,7 +159,10 @@ export class TrainingScreen {
     el.innerHTML = `
       <div class="train-top">
         <span class="train-live"><i class="train-dot"></i><span data-f="live"></span></span>
-        <button type="button" class="btn train-exit" data-f="exit"></button>
+        <span class="train-tools">
+          <button type="button" class="btn train-torch" data-f="torch" aria-pressed="false" hidden></button>
+          <button type="button" class="btn train-exit" data-f="exit"></button>
+        </span>
       </div>
       <div class="train-count" data-f="count" aria-hidden="true">0</div>
       <div class="train-unit" data-f="unit"></div>
@@ -160,6 +170,7 @@ export class TrainingScreen {
       <p class="train-banner" data-f="banner" role="status" aria-live="polite"></p>
       <button type="button" class="btn btn-primary train-main" data-f="main"></button>
       <button type="button" class="train-link" data-f="alt"></button>
+      <button type="button" class="train-link" data-f="undo-last" hidden></button>
       <div class="train-result" data-f="result" hidden>
         <p data-f="result-text" role="status"></p>
         <p class="train-quality" data-f="quality" role="status"></p>
@@ -167,6 +178,7 @@ export class TrainingScreen {
         <button type="button" class="btn btn-primary" data-f="rewalk"></button>
         <button type="button" class="btn btn-primary" data-f="next"></button>
         <button type="button" class="btn" data-f="done"></button>
+        <button type="button" class="train-link" data-f="undo"></button>
       </div>
     `;
     this.#el = el;
@@ -176,6 +188,14 @@ export class TrainingScreen {
     this.#f('next').textContent = t('train.next');
     this.#f('rewalk').textContent = t('train.rewalk');
     this.#f('rewalk').addEventListener('click', () => this.#o.wizard.rewalk());
+    this.#f('undo').textContent = t('train.undo');
+    this.#f('undo-last').textContent = t('train.undoLast');
+    this.#f('undo').addEventListener('click', () => this.#o.wizard.undoLastRoute());
+    this.#f('undo-last').addEventListener('click', () => this.#o.wizard.undoLastRoute());
+    this.#f('torch').addEventListener('click', async () => {
+      await this.#o.torch?.set(!this.#o.torch.on);
+      this.#refresh();
+    });
     this.#f('done').textContent = t('train.done');
     this.#f('exit').addEventListener('click', () => this.close());
     this.#f('main').addEventListener('click', () => this.#o.wizard.scanHere());
@@ -213,6 +233,7 @@ export class TrainingScreen {
     if (this.#timer !== null) this.#o.clearInterval(this.#timer);
     this.#timer = null;
     this.#o.wizard.setChain(true);
+    if (this.#o.torch?.on) void this.#o.torch.set(false);
     this.#doc.removeEventListener?.('visibilitychange', this.#onVisibility);
     void this.#releaseWakeLock();
     this.#o.onExit();
@@ -259,6 +280,8 @@ export class TrainingScreen {
 
   #onWizardStep(step) {
     const now = this.#o.now();
+    // A scan (or stopping) is over: the light would only drain the battery.
+    if (this.#o.torch?.on) void this.#o.torch.set(false);
     if (step === 'walk') {
       if (this.#mode !== 'recording') {
         this.#total = 0; // a route's own steps, from its start scan
@@ -373,8 +396,15 @@ export class TrainingScreen {
     if (route) this.#points = route.nodes;
     this.#f('banner').textContent = t(banner.key);
 
+    const torch = this.#o.torch;
+    const torchEl = this.#f('torch');
+    torchEl.hidden = !torch?.supported;
+    torchEl.textContent = t(torch?.on ? 'train.torch.on' : 'train.torch.off');
+    torchEl.setAttribute('aria-pressed', String(Boolean(torch?.on)));
+
     const recording = mode === 'recording';
     const result = mode === 'result';
+    this.#f('undo-last').hidden = mode !== 'idle' || !this.#o.wizard.canUndo;
     this.#f('main').hidden = result;
     this.#f('main').textContent = t(recording ? 'train.stop' : 'train.start');
     this.#f('alt').hidden = result || (!recording && !this.#o.getPose());

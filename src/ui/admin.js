@@ -169,6 +169,7 @@ export class AdminPanel {
    * @param {{ get: () => number, subscribe: (fn: (steps: number) => void) => (() => void) } | null} [options.stepSource]
    *   Live step count for the training screen's big counter (null: shows it as unavailable).
    * @param {(text: string) => string | null} [options.anchorForCode]  The venue anchor id a scanned payload names, if any.
+   * @param {object | null} [options.torch]  The camera light for the training screen: `{ supported, on, set(on) }`.
    * @param {number} [options.strideM]   Metres per step for the training screen's distance figure.
    * @param {object | null} [options.initialPose]  Last known pose, if positioning started before this panel.
    * @param {Function} [options.getComputedStyle]
@@ -453,6 +454,7 @@ export class AdminPanel {
       mount: options.mount ?? this.#doc.body,
       document: this.#doc,
       steps: options.stepSource ?? null,
+      torch: options.torch ?? null,
       getStrideM: () => this.#draft.frame?.strideM ?? options.strideM ?? 0.73,
       getPose: () => this.#pose,
       onExit: () => (this.#el.hidden = false),

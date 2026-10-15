@@ -319,6 +319,7 @@ export default {
     'admin.wizard.existingNone': '— kāore —',
     'admin.wizard.unnamed': 'ingoa-kore',
     'admin.wizard.autoName': 'Wāhi {n}',
+    'admin.wizard.undone': 'Kua tangohia te ara.',
 
     // Training screen (staff)
     'train.title': 'Whakangungu',
@@ -345,6 +346,10 @@ export default {
     'train.banner.noSensor': 'Kāore e taea te tatau hikoi i tēnei pūrere.',
     'train.banner.saved': 'Kua tiakina te ara.',
     'train.rewalk': 'Hīkoi anō',
+    'train.undo': 'Whakakore i tēnei ara',
+    'train.undoLast': 'Whakakore i te ara whakamutunga',
+    'train.torch.off': 'Rama',
+    'train.torch.on': 'Kua pāho te rama',
     'train.quality.good': 'Pai. {drift} m anake te wehenga i roto i te {len} m.',
     'train.quality.ok': 'Kua whakatikaina. {drift} m te rere kua whakatikaina i roto i te {len} m.',
     'train.quality.check':

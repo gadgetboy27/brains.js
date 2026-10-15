@@ -301,6 +301,7 @@ export default {
     'admin.wizard.existingNone': '— none —',
     'admin.wizard.unnamed': 'unnamed',
     'admin.wizard.autoName': 'Point {n}',
+    'admin.wizard.undone': 'Route removed.',
 
     // Training screen (staff): record routes with a camera, two buttons and a step counter
     'train.title': 'Training',
@@ -326,6 +327,10 @@ export default {
     'train.banner.noSensor': 'Step counting is not available on this device.',
     'train.banner.saved': 'Route saved.',
     'train.rewalk': 'Walk it again',
+    'train.undo': 'Undo this route',
+    'train.undoLast': 'Undo last route',
+    'train.torch.off': 'Torch',
+    'train.torch.on': 'Torch on',
     'train.quality.good': 'Good. Off by only {drift} m over {len} m.',
     'train.quality.ok': 'Fixed up. Corrected {drift} m of drift over {len} m.',
     'train.quality.check': 'Check this one. It ended {drift} m off over {len} m, too far to trust.',
