@@ -49,7 +49,7 @@ const CSS = `
 .train-scan[data-verdict='match'] { border-color: var(--color-ok); }
 .train-scan[data-verdict='check'] { border-color: var(--color-poi); }
 .train-scan[data-verdict='impossible'] { border-color: var(--color-error); color: var(--color-error); }
-.train-torch[aria-pressed='true'], .train-sound[aria-pressed='true'] { background: var(--color-accent); color: var(--color-accent-contrast); }
+.train-torch[aria-pressed='true'], .train-sound[aria-pressed='true'], .train-backup-toggle[aria-pressed='true'] { background: var(--color-accent); color: var(--color-accent-contrast); }
 .train-count { font-size: clamp(80px, 26vw, 170px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums;
   margin: 2px 0 0; transform-origin: center; }
 .train[data-mode='idle'] .train-count { opacity: 0.45; }
@@ -101,6 +101,8 @@ const CSS = `
  * @property {() => Array<{ index: number, name: string }>} [floors]  The venue's floors, for "Changed floor?".
  * @property {() => number} [getFloor]  The floor the position is on now.
  * @property {(pick: { floor: number, kind: 'lift' | 'stairs' }) => void} [onFloorPick]  Staff said which floor they are on, and how they got there.
+ * @property {{ readonly enabled: boolean, setEnabled: (on: boolean) => boolean, saveNow: () => Promise<string | null>, readonly lastName: string | null } | null} [backup]
+ *   Backup files: whether one is saved after each route, saving one now, and the last name saved.
  * @property {() => void} [onExit]
  * @property {(ms: number) => void} [vibrate]
  * @property {{ request: (type: 'screen') => Promise<{ release: () => Promise<void>, addEventListener?: Function }> } | null} [wakeLock]
@@ -145,6 +147,7 @@ export class TrainingScreen {
       getPose: () => null,
       torch: null,
       cues: null,
+      backup: null,
       floors: () => [],
       getFloor: () => 0,
       onFloorPick: () => {},
@@ -188,6 +191,7 @@ export class TrainingScreen {
       <div class="train-top">
         <span class="train-live"><i class="train-dot"></i><span data-f="live"></span></span>
         <span class="train-tools">
+          <button type="button" class="btn train-torch train-backup-toggle" data-f="backup" aria-pressed="false" hidden></button>
           <button type="button" class="btn train-torch" data-f="sound" aria-pressed="false" hidden></button>
           <button type="button" class="btn train-torch" data-f="torch" aria-pressed="false" hidden></button>
           <button type="button" class="btn train-exit" data-f="exit"></button>
@@ -219,6 +223,8 @@ export class TrainingScreen {
         <p data-f="result-text" role="status"></p>
         <p class="train-quality" data-f="quality" role="status"></p>
         <p class="train-quality-note" data-f="quality-note"></p>
+        <p class="train-quality-note" data-f="backup-note"></p>
+        <button type="button" class="btn" data-f="backup-now"></button>
         <button type="button" class="btn btn-primary" data-f="rewalk"></button>
         <button type="button" class="btn btn-primary" data-f="next"></button>
         <button type="button" class="btn" data-f="done"></button>
@@ -235,6 +241,15 @@ export class TrainingScreen {
     this.#f('rewalk').addEventListener('click', () => this.#o.wizard.rewalk());
     this.#f('place').addEventListener('input', () => {
       this.#o.wizard.setPlaceName?.(this.#f('place').value);
+      this.#refresh();
+    });
+    this.#f('backup-now').textContent = t('train.backup.now');
+    this.#f('backup').addEventListener('click', () => {
+      this.#o.backup?.setEnabled(!this.#o.backup.enabled);
+      this.#refresh();
+    });
+    this.#f('backup-now').addEventListener('click', async () => {
+      await this.#o.backup?.saveNow();
       this.#refresh();
     });
     this.#f('floor-link').textContent = t('train.floorLink');
@@ -425,6 +440,11 @@ export class TrainingScreen {
     box.hidden = false;
   }
 
+  /** Redraw from the current state (something outside changed, like a backup being saved). */
+  refresh() {
+    if (this.#open) this.#refresh();
+  }
+
   #onWizardStep(step) {
     const now = this.#o.now();
     // A scan (or stopping) is over: the light would only drain the battery.
@@ -560,6 +580,15 @@ export class TrainingScreen {
         apart: Math.round(this.#scanNote.apartM ?? 0),
       });
     }
+
+    const backup = this.#o.backup;
+    const backupEl = this.#f('backup');
+    backupEl.hidden = !backup;
+    backupEl.textContent = t(backup?.enabled ? 'train.backup.on' : 'train.backup.off');
+    backupEl.setAttribute('aria-pressed', String(Boolean(backup?.enabled)));
+    this.#f('backup-now').hidden = !backup;
+    this.#f('backup-note').textContent =
+      backup?.enabled && backup.lastName ? t('train.backup.note', { name: backup.lastName }) : '';
 
     const cues = this.#o.cues;
     const soundEl = this.#f('sound');

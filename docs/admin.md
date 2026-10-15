@@ -441,3 +441,28 @@ starts and when it is saved, so the next one to type is the next stop).
 Positions without a scannable sticker are dead-reckoned, so they cannot be
 corrected by a scan the way a stickered marker can. They firm up once a sticker
 is installed and walked to from another marker.
+
+### Auto-backup
+
+Recorded routes live in the browser's local storage on that one phone, which a
+browser clear or a long idle can wipe. So the training screen backs them up as
+files on the device:
+
+- **After each saved route**, a `.venue.json` file is saved to Downloads, with
+  any marker planted for a typed place included. This runs right after a camera
+  scan, not a tap, so a browser may block it or ask first: treat it as a bonus.
+- **On Exit** (a real tap, which browsers reliably allow), whatever has not been
+  saved yet: the venue file if it changed since the last backup, and the walk
+  data (`.learning.json`, including each route's outcome) if there is new data.
+  Leaving again with nothing new saves nothing.
+- **Save backup now** on the result card always works: a person pressing it is
+  allowed to download. The card names the last backup so you can look for it in
+  Files, Downloads.
+- **Auto-backup on/off** in the corner of the training screen. It is remembered
+  on the phone, and defaults to on. When off, Exit saves nothing and the
+  per-route file is skipped; Save backup now still works.
+
+Each backup is a new timestamped file, so a long session leaves several; the
+latest is the one to keep. Browsers cannot silently overwrite a file or write
+to a folder you chose (iPhones cannot at all), which is why this is a download
+and not a sync.

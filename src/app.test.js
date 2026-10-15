@@ -1256,6 +1256,122 @@ describe('bootApp — training screen (?train=1)', () => {
   });
 });
 
+describe('bootApp — auto-backup of recorded routes', () => {
+  const stream = { getTracks: () => [{ stop: vi.fn() }] };
+  const step = () => {
+    for (const y of [2.5, 0.2]) {
+      window.dispatchEvent(
+        Object.assign(new Event('devicemotion'), { acceleration: { x: 0, y, z: 0 } })
+      );
+    }
+  };
+  async function bootBackup({ stored = {} } = {}) {
+    const store = new Map(Object.entries(stored));
+    const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+    const download = vi.fn(async () => true);
+    const { app } = await boot({
+      config: { admin: true, train: true, provider: null },
+      options: {
+        storage,
+        adminOptions: { storage, download, copy: vi.fn(), prompt: vi.fn(() => 'x') },
+      },
+      providerOptions: {
+        order: ['qr'],
+        qr: {
+          getUserMedia: async () => stream,
+          BarcodeDetector: class {
+            detect = async () => [];
+          },
+        },
+      },
+    });
+    const f = (n) => document.querySelector(`.train [data-f="${n}"]`);
+    return { app, download, store, f };
+  }
+  /** Start at a known marker, walk, name the destination, stop at my position. */
+  async function recordRoute(app, f, name = 'Neonates') {
+    f('main').click();
+    app.chain.active.handleScan('brains://demo-health-centre/a-entrance');
+    for (let i = 0; i < 10; i += 1) {
+      step();
+      await vi.advanceTimersByTimeAsync(400);
+    }
+    f('place').value = name;
+    f('place').dispatchEvent(new Event('input'));
+    f('alt').click();
+    await vi.advanceTimersByTimeAsync(10);
+  }
+  const venueFiles = (download) =>
+    download.mock.calls.filter(([name]) => name.endsWith('.venue.json'));
+
+  it('saving a route puts a backup file on the device, including a marker planted just after', async () => {
+    const { app, download, f } = await bootBackup();
+    expect(venueFiles(download)).toHaveLength(0);
+    await recordRoute(app, f);
+    expect(app.admin.wizard.step).toBe('done');
+    const files = venueFiles(download);
+    expect(files).toHaveLength(1);
+    const saved = JSON.parse(files[0][1]);
+    expect(saved.id).toBe('demo-health-centre');
+    // The planned marker for the typed place is added right after the route saves: it is in the file.
+    expect(saved.anchors.some((a) => a.name === 'Neonates')).toBe(true);
+    expect(saved.pois.some((p) => p.name === 'Neonates')).toBe(true);
+    // And the card says what was saved.
+    expect(f('backup-note').textContent).toBe(t('train.backup.note', { name: files[0][0] }));
+    await app.destroy();
+  });
+
+  it('leaving training saves what is not saved yet: the walk data, and the venue if it changed', async () => {
+    const { app, download, f } = await bootBackup();
+    await recordRoute(app, f);
+    download.mockClear();
+    f('done').click(); // back to the start
+    f('exit').click(); // a tap: a download is reliably allowed here
+    await vi.advanceTimersByTimeAsync(10);
+    const names = download.mock.calls.map(([n]) => n);
+    expect(names.some((n) => n.endsWith('.learning.json'))).toBe(true); // the route outcomes
+    expect(names.some((n) => n.endsWith('.venue.json'))).toBe(false); // already backed up after the route
+    const report = JSON.parse(download.mock.calls.find(([n]) => n.endsWith('.learning.json'))[1]);
+    expect(report.observations.some((o) => o.k === 'route')).toBe(true);
+
+    // Nothing new since: leaving again saves nothing more.
+    download.mockClear();
+    app.admin.openTraining();
+    f('exit').click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(download).not.toHaveBeenCalled();
+    await app.destroy();
+  });
+
+  it('can be switched off, the choice is remembered, and Save backup now still works', async () => {
+    const { app, download, store, f } = await bootBackup();
+    expect(f('backup').textContent).toBe(t('train.backup.on'));
+    f('backup').click();
+    expect(f('backup').textContent).toBe(t('train.backup.off'));
+    expect(f('backup').getAttribute('aria-pressed')).toBe('false');
+    expect(store.get('brains:autobackup')).toBe('off');
+    expect(app.admin.autoBackup).toBe(false);
+
+    await recordRoute(app, f);
+    expect(venueFiles(download)).toHaveLength(0); // off: nothing automatic
+    expect(f('backup-note').textContent).toBe('');
+    f('backup-now').click(); // a person pressing it is always allowed
+    await vi.advanceTimersByTimeAsync(10);
+    expect(venueFiles(download)).toHaveLength(1);
+    f('exit').click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(download.mock.calls.filter(([n]) => n.endsWith('.learning.json'))).toHaveLength(0);
+    await app.destroy();
+  });
+
+  it('starts off when it was left off last time', async () => {
+    const { app, f } = await bootBackup({ stored: { 'brains:autobackup': 'off' } });
+    expect(app.admin.autoBackup).toBe(false);
+    expect(f('backup').textContent).toBe(t('train.backup.off'));
+    await app.destroy();
+  });
+});
+
 describe('bootApp — a destination with no QR code', () => {
   const stream = { getTracks: () => [{ stop: vi.fn() }] };
   const step = () => {

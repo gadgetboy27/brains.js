@@ -103,6 +103,7 @@ const CSS = `
 const DRAFT_KEY = 'brains:admin-draft';
 const PLAN_KEY = 'brains:survey-plan';
 const TOKEN_KEY = 'brains:admin-token';
+const AUTOBACKUP_KEY = 'brains:autobackup';
 
 export class AdminPanel {
   #doc;
@@ -121,6 +122,11 @@ export class AdminPanel {
   #tab = 'routes';
   #wizard = null;
   #training = null;
+  /** Save a backup file after each route, and when training closes (see {@link setAutoBackup}). */
+  #autoBackup = true;
+  #lastBackupName = null;
+  /** How many walk-data observations were in the last walk-data file saved. */
+  #learningBackedUp = 0;
   /** @type {((text: string) => unknown) | null} */
   #codeHandler = null;
   #published = true;
@@ -454,6 +460,16 @@ export class AdminPanel {
       onRecording: (active, distanceM) => this.#opts.onRecording?.(active, distanceM),
       record: (obs) => recordObservation(this.#opts.storage, this.#draft.id, obs),
     });
+    try {
+      if (this.#opts.storage?.getItem(AUTOBACKUP_KEY) === 'off') this.#autoBackup = false;
+    } catch {
+      // storage unavailable: keep the default
+    }
+    // A route has just been saved: put a backup file on the device. Deferred a
+    // beat so what follows the save (a planned marker for a typed place) is in it.
+    this.#wizard.onStep((step) => {
+      if (step === 'done' && this.#autoBackup) void Promise.resolve().then(() => this.backupNow());
+    });
     this.#training = createTrainingScreen({
       wizard: this.#wizard,
       mount: options.mount ?? this.#doc.body,
@@ -469,7 +485,21 @@ export class AdminPanel {
       },
       getStrideM: () => this.#draft.frame?.strideM ?? options.strideM ?? 0.73,
       getPose: () => this.#pose,
-      onExit: () => (this.#el.hidden = false),
+      backup: {
+        get enabled() {
+          return self.#autoBackup;
+        },
+        setEnabled: (on) => self.setAutoBackup(on),
+        saveNow: () => self.backupNow(),
+        get lastName() {
+          return self.#lastBackupName;
+        },
+      },
+      onExit: () => {
+        this.#el.hidden = false;
+        // Leaving is a tap, which is when a browser reliably allows a download.
+        if (this.#autoBackup) void this.#backupOnExit();
+      },
     });
     this.#f('train-open').textContent = t('train.open');
     this.#f('train-open').addEventListener('click', () => this.openTraining());
@@ -1910,6 +1940,50 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
     if (ok === false) return null;
     this.#toast(t('admin.export.answersSaved', { name: stamp }));
     return stamp;
+  }
+
+  /** Whether a backup file is saved after each route and when training closes. */
+  get autoBackup() {
+    return this.#autoBackup;
+  }
+
+  /** Remembered on the phone, like the sound setting. */
+  setAutoBackup(on) {
+    this.#autoBackup = Boolean(on);
+    try {
+      this.#opts.storage?.setItem(AUTOBACKUP_KEY, this.#autoBackup ? 'on' : 'off');
+    } catch {
+      // best-effort
+    }
+    this.#training?.refresh();
+    return this.#autoBackup;
+  }
+
+  /** The most recent backup file saved from here, for the result card. */
+  get lastBackupName() {
+    return this.#lastBackupName;
+  }
+
+  /**
+   * Save the venue as a file now, and remember its name. Never blocked by
+   * validation problems (see {@link download}).
+   * @returns {Promise<string | null>} The file name, or null if not saved.
+   */
+  async backupNow() {
+    const name = await this.download();
+    if (name) this.#lastBackupName = name;
+    this.#training?.refresh();
+    return name;
+  }
+
+  /** On leaving training: whatever has not been saved yet — the venue if it changed, new walk data. */
+  async #backupOnExit() {
+    if (!this.#backedUp) await this.backupNow();
+    const count = loadObservations(this.#opts.storage, this.#draft.id).length;
+    if (count > this.#learningBackedUp) {
+      const name = await this.downloadLearning();
+      if (name) this.#learningBackedUp = count;
+    }
   }
 
   /**

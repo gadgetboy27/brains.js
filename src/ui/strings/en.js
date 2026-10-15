@@ -326,6 +326,11 @@ export default {
     'train.place.start': 'Name this starting place (optional)',
     'train.place.stop': 'Name the destination (optional)',
     'train.place.hint': 'e.g. Neonates',
+    'train.backup.on': 'Auto-backup on',
+    'train.backup.off': 'Auto-backup off',
+    'train.backup.now': 'Save backup now',
+    'train.backup.note':
+      'Backup file requested: {name}. If it is not in Files, Downloads, tap Save backup now.',
     'train.exit': 'Exit',
     'train.next': 'Walk on from here',
     'train.done': 'Finished',

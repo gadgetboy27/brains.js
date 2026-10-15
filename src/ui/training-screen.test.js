@@ -624,4 +624,81 @@ describe('TrainingScreen', () => {
       expect(f('place').getAttribute('list')).toBe('admin-places');
     });
   });
+
+  describe('backup', () => {
+    function fakeBackup(enabled = true, lastName = null) {
+      const b = {
+        enabled,
+        lastName,
+        setEnabled: vi.fn((on) => (b.enabled = on)),
+        saveNow: vi.fn(async () => {
+          b.lastName = 'brains-demo.venue.json';
+          return b.lastName;
+        }),
+      };
+      return b;
+    }
+
+    it('is absent when the panel offers no backup', () => {
+      const { screen, f } = make();
+      screen.open();
+      expect(f('backup').hidden).toBe(true);
+      expect(f('backup-now').hidden).toBe(true);
+    });
+
+    it('has an on/off switch showing its state', () => {
+      const backup = fakeBackup(true);
+      const { screen, f } = make({ backup });
+      screen.open();
+      expect(f('backup').hidden).toBe(false);
+      expect(f('backup').textContent).toBe(t('train.backup.on'));
+      f('backup').click();
+      expect(backup.setEnabled).toHaveBeenCalledWith(false);
+      expect(f('backup').textContent).toBe(t('train.backup.off'));
+      expect(f('backup').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('names the last backup on the result card, and Save backup now saves another', async () => {
+      const backup = fakeBackup(true, 'brains-demo-0001.venue.json');
+      const { screen, f, wizard } = make({ backup });
+      screen.open();
+      wizard.go('walk');
+      wizard.route = { nodes: 3, distance: 10, scans: 2, edges: [], quality: { verdict: 'good' } };
+      wizard.go('done');
+      expect(f('backup-note').textContent).toBe(
+        t('train.backup.note', { name: 'brains-demo-0001.venue.json' })
+      );
+      f('backup-now').click();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(backup.saveNow).toHaveBeenCalledOnce();
+      expect(f('backup-note').textContent).toBe(
+        t('train.backup.note', { name: 'brains-demo.venue.json' })
+      );
+    });
+
+    it('says nothing about a file when auto-backup is off, though the button remains', () => {
+      const backup = fakeBackup(false, 'old.venue.json');
+      const { screen, f, wizard } = make({ backup });
+      screen.open();
+      wizard.go('walk');
+      wizard.route = { nodes: 3, distance: 10, scans: 2, edges: [], quality: { verdict: 'good' } };
+      wizard.go('done');
+      expect(f('backup-note').textContent).toBe('');
+      expect(f('backup-now').hidden).toBe(false);
+    });
+
+    it('refresh() redraws after something outside changed', () => {
+      const backup = fakeBackup(true, null);
+      const { screen, f, wizard } = make({ backup });
+      screen.open();
+      wizard.go('walk');
+      wizard.route = { nodes: 3, distance: 10, scans: 2, edges: [], quality: { verdict: 'good' } };
+      wizard.go('done');
+      expect(f('backup-note').textContent).toBe('');
+      backup.lastName = 'brains-demo.venue.json';
+      screen.refresh();
+      expect(f('backup-note').textContent).toContain('brains-demo.venue.json');
+    });
+  });
 });

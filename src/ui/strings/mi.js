@@ -344,6 +344,11 @@ export default {
     'train.place.start': 'Hoatu he ingoa ki tēnei wāhi tīmata (kāore e hiahiatia)',
     'train.place.stop': 'Hoatu he ingoa ki te wāhi e haere ana koe (kāore e hiahiatia)',
     'train.place.hint': 'hei tauira, Neonates',
+    'train.backup.on': 'Kua pāho te tārua aunoa',
+    'train.backup.off': 'Kua weto te tārua aunoa',
+    'train.backup.now': 'Penapena i te tārua inaianei',
+    'train.backup.note':
+      'Kua tonoa te kōnae tārua: {name}. Mēnā kāore i Ngā Kōnae, Ngā Tikiake, pāwhiri Penapena i te tārua inaianei.',
     'train.exit': 'Puta',
     'train.next': 'Haere tonu mai i konei',
     'train.done': 'Kua oti',
