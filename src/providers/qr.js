@@ -111,7 +111,10 @@ export function parseQrPayload(text) {
   const fromHash = new URLSearchParams(url.hash.replace(/^#\/?/, ''));
   const venueId =
     fromQuery.get('venue') ?? fromQuery.get('v') ?? fromHash.get('venue') ?? fromHash.get('v');
-  const anchorId = fromQuery.get('anchor') ?? fromHash.get('anchor');
+  // `a` is the short form on stickers printed before `anchor` was settled on
+  // (e.g. https://host/go?v=demo-hospital&a=A02).
+  const anchorId =
+    fromQuery.get('anchor') ?? fromQuery.get('a') ?? fromHash.get('anchor') ?? fromHash.get('a');
   if (!venueId || !anchorId) return null;
   return { venueId, anchorId };
 }

@@ -80,6 +80,13 @@ afterEach(() => {
 });
 
 describe('parseQrPayload', () => {
+  it('reads the short `a` parameter on older printed stickers', () => {
+    expect(parseQrPayload('https://nav.example.nz/go?v=demo-hospital&a=A02')).toEqual({
+      venueId: 'demo-hospital',
+      anchorId: 'A02',
+    });
+  });
+
   it('parses the compact brains:// scheme', () => {
     expect(parseQrPayload('brains://sample-mall/a-entrance')).toEqual({
       venueId: 'sample-mall',
