@@ -375,6 +375,10 @@ export class ProviderChain extends PositionProvider {
   /** Watchdog: fall back after too long without a confident pose. */
   #check() {
     if (this.#status !== 'active') return;
+    // A scanner that waits for the user to hold up a marker is not failing
+    // while nothing is in view; giving up on it would switch the camera off
+    // right as the person lifts their phone to a code.
+    if (this.#active?.waitsForUser) return;
     const since = this.#lastGoodPoseAt ?? this.#activeSince;
     if (this.#opts.now() - since > this.#opts.lowConfidenceMs) {
       void this.#fallback(

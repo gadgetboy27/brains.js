@@ -1241,6 +1241,7 @@ export async function bootApp(options = {}) {
     else hud.hideNotice('marker-note');
   };
 
+  let scanOkTimer = null;
   const watchScans = (provider) => {
     scanOff?.();
     scanOff = null;
@@ -1257,6 +1258,13 @@ export async function bootApp(options = {}) {
           if (scan.result === 'accepted' && admin) admin.takeKnownScan(scan.text);
           hud.hideNotice('scan');
           hud.hideNotice('floor-change');
+          // Say it out loud on screen: the viewfinder flash is 0.2 s and easy to miss.
+          if (scan.result === 'accepted') {
+            const a = venue.anchorById(scan.anchorId);
+            hud.showNotice('scan-ok', t('scan.accepted', { name: a?.name ?? scan.anchorId }));
+            clearTimeout(scanOkTimer);
+            scanOkTimer = setTimeout(() => hud.hideNotice('scan-ok'), 4000);
+          }
           showMarkerNote(scan.anchorId);
           return;
         }

@@ -293,6 +293,7 @@ export default {
     'admin.export.markerCode': 'Waehere: {text}',
     'notice.venueNew':
       'Wāhi hou “{id}” — kāore anō he mea kua whakaputaina. Rūritia, kātahi ka Whakaputa.',
+    'scan.accepted': 'Kua taramahia: {name}. Kua tautuhia te tūnga.',
     'scan.unrecognised': 'Ehara te waehere “{text}” i te tohu mō tēnei wāhi.',
     'scan.wrongVenue': 'Nō tētahi atu wāhi te waehere “{text}”.',
     'scan.check.check':

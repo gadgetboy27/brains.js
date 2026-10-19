@@ -280,6 +280,15 @@ describe('ProviderChain — poses and confidence fallback', () => {
     expect(events[1]).toMatchObject({ from: 'a', to: 'b' });
   });
 
+  it('does not give up on a provider that waits for the user (a QR scanner)', async () => {
+    const { chain, registry } = make({ a: 'ok', b: 'ok' });
+    registry.a.Class.prototype.waitsForUser = true;
+    await chain.start();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(chain.state.active).toBe('a');
+    expect(registry.a.Class.instances[0].stopped).toBe(0);
+  });
+
   it('falls back when confidence stays below minConfidence for too long', async () => {
     const { chain, registry, events } = make({ a: 'ok', b: 'ok' }, { minConfidence: 0.5 });
     await chain.start();

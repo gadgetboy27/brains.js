@@ -280,6 +280,7 @@ export default {
     'admin.export.noMarkers': 'No markers yet — add them with "Add QR marker here".',
     'admin.export.markerCode': 'Code: {text}',
     'notice.venueNew': 'New venue “{id}” — nothing is published yet. Survey it, then Publish.',
+    'scan.accepted': 'Scanned: {name}. Position set.',
     'scan.unrecognised': 'Code “{text}” is not a marker for this venue.',
     'scan.wrongVenue': 'Code “{text}” belongs to a different venue.',
     'scan.check.check': 'That marker is {jump} m from where we thought you were. Position updated.',

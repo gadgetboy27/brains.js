@@ -202,9 +202,15 @@ export class QrProvider extends PositionProvider {
     return this.#video;
   }
 
+  /** True: no pose until the user shows a marker is normal, not a failure. */
+  get waitsForUser() {
+    return true;
+  }
+
   /**
    * Whether this camera has a torch we can switch (Android Chrome on a rear
    * camera; iOS Safari exposes none). Only meaningful once scanning.
+   * @returns {boolean}
    */
   get torchSupported() {
     const track = this.#stream?.getVideoTracks?.()[0];
