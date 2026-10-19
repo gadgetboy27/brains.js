@@ -46,6 +46,10 @@ const CSS = `
   border-radius: 8px; background: var(--color-surface); color: var(--color-text); }
 .train-scan { margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; font-weight: 700; border: 2px solid var(--color-text-muted); }
 .train-scan[hidden] { display: none; }
+.train-ack { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; font-weight: 800; font-size: 1.1em; border: 2px solid var(--color-ok); }
+.train-ack[hidden] { display: none; }
+.train-ack[data-ok='false'] { border-color: var(--color-error); color: var(--color-error); }
+.train-backup-warn { color: var(--color-error); font-weight: 700; }
 .train-scan[data-verdict='match'] { border-color: var(--color-ok); }
 .train-scan[data-verdict='check'] { border-color: var(--color-poi); }
 .train-scan[data-verdict='impossible'] { border-color: var(--color-error); color: var(--color-error); }
@@ -101,7 +105,7 @@ const CSS = `
  * @property {() => Array<{ index: number, name: string }>} [floors]  The venue's floors, for "Changed floor?".
  * @property {() => number} [getFloor]  The floor the position is on now.
  * @property {(pick: { floor: number, kind: 'lift' | 'stairs' }) => void} [onFloorPick]  Staff said which floor they are on, and how they got there.
- * @property {{ readonly enabled: boolean, setEnabled: (on: boolean) => boolean, saveNow: () => Promise<string | null>, readonly lastName: string | null } | null} [backup]
+ * @property {{ readonly enabled: boolean, setEnabled: (on: boolean) => boolean, saveNow: () => Promise<string | null>, readonly lastName: string | null, readonly blocked?: boolean } | null} [backup]
  *   Backup files: whether one is saved after each route, saving one now, and the last name saved.
  * @property {() => void} [onExit]
  * @property {(ms: number) => void} [vibrate]
@@ -128,6 +132,7 @@ export class TrainingScreen {
   #unsubs = [];
   /** The latest marker check shown, and when (it fades after a few seconds). */
   #scanNote = null;
+  #ack = null;
   /** The open "which floor are you on?" question: what was detected (or null for a manual one). */
   #transfer = null;
   #timer = null;
@@ -201,6 +206,7 @@ export class TrainingScreen {
       <div class="train-unit" data-f="unit"></div>
       <p class="train-sub" data-f="sub" role="status"></p>
       <p class="train-banner" data-f="banner" role="status" aria-live="polite"></p>
+ <p class="train-ack" data-f="ack" role="status" aria-live="assertive" hidden></p>
       <p class="train-scan" data-f="scan-note" role="status" aria-live="polite" hidden></p>
       <label class="train-place" data-f="place-row">
         <span data-f="place-label"></span>
@@ -356,6 +362,17 @@ export class TrainingScreen {
   /** The app's final position, for the "position uncertain" line and the start-here offer. */
   onPose() {
     if (this.#open) this.#refresh();
+  }
+
+  /**
+   * The camera decoded a code: say so on the sheet, which covers most of the
+   * camera view, so a scan is never in doubt (recognised or not).
+   * @param {{ ok: boolean, text: string }} scan
+   */
+  showScan(scan) {
+    this.#ack = { ...scan, at: this.#o.now() };
+    this.#o.vibrate(scan.ok ? 15 : 40);
+    this.#refresh();
   }
 
   /**
@@ -569,6 +586,14 @@ export class TrainingScreen {
     if (route) this.#points = route.nodes;
     this.#f('banner').textContent = t(banner.key);
 
+    if (this.#ack && this.#o.now() - this.#ack.at > 6000) this.#ack = null;
+    const ackEl = this.#f('ack');
+    ackEl.hidden = !this.#ack;
+    if (this.#ack) {
+      ackEl.dataset.ok = String(this.#ack.ok);
+      ackEl.textContent = this.#ack.text;
+    }
+
     const note = this.#scanNote;
     if (note && this.#o.now() - note.at > 8000) this.#scanNote = null;
     const noteEl = this.#f('scan-note');
@@ -587,8 +612,13 @@ export class TrainingScreen {
     backupEl.textContent = t(backup?.enabled ? 'train.backup.on' : 'train.backup.off');
     backupEl.setAttribute('aria-pressed', String(Boolean(backup?.enabled)));
     this.#f('backup-now').hidden = !backup;
-    this.#f('backup-note').textContent =
-      backup?.enabled && backup.lastName ? t('train.backup.note', { name: backup.lastName }) : '';
+    const backupNote = this.#f('backup-note');
+    backupNote.classList.toggle('train-backup-warn', Boolean(backup?.blocked));
+    backupNote.textContent = backup?.blocked
+      ? t('train.backup.blocked')
+      : backup?.enabled && backup.lastName
+        ? t('train.backup.note', { name: backup.lastName })
+        : '';
 
     const cues = this.#o.cues;
     const soundEl = this.#f('sound');

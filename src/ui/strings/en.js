@@ -332,6 +332,8 @@ export default {
     'train.backup.now': 'Save backup now',
     'train.backup.note':
       'Backup file requested: {name}. If it is not in Files, Downloads, tap Save backup now.',
+    'train.backup.blocked':
+      'Backup file may NOT have saved (the browser can block it after a scan). Tap Save backup now.',
     'train.exit': 'Exit',
     'train.next': 'Walk on from here',
     'train.done': 'Finished',

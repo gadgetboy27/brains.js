@@ -125,6 +125,8 @@ export class AdminPanel {
   /** Save a backup file after each route, and when training closes (see {@link setAutoBackup}). */
   #autoBackup = true;
   #lastBackupName = null;
+  /** The last automatic backup was refused, failed, or could not be confirmed. */
+  #backupBlocked = false;
   /** How many walk-data observations were in the last walk-data file saved. */
   #learningBackedUp = 0;
   /** @type {((text: string) => unknown) | null} */
@@ -468,7 +470,8 @@ export class AdminPanel {
     // A route has just been saved: put a backup file on the device. Deferred a
     // beat so what follows the save (a planned marker for a typed place) is in it.
     this.#wizard.onStep((step) => {
-      if (step === 'done' && this.#autoBackup) void Promise.resolve().then(() => this.backupNow());
+      if (step === 'done' && this.#autoBackup)
+        void Promise.resolve().then(() => this.#autoBackupRoute());
     });
     this.#training = createTrainingScreen({
       wizard: this.#wizard,
@@ -493,6 +496,9 @@ export class AdminPanel {
         saveNow: () => self.backupNow(),
         get lastName() {
           return self.#lastBackupName;
+        },
+        get blocked() {
+          return self.#backupBlocked;
         },
       },
       onExit: () => {
@@ -1970,10 +1976,31 @@ body{font-family:system-ui,sans-serif;margin:0}.card{page-break-after:always;dis
    * @returns {Promise<string | null>} The file name, or null if not saved.
    */
   async backupNow() {
-    const name = await this.download();
+    let name = null;
+    try {
+      name = await this.download();
+    } catch {
+      // reported below, like a refused download
+    }
     if (name) this.#lastBackupName = name;
+    this.#backupBlocked = !name;
     this.#training?.refresh();
     return name;
+  }
+
+  /**
+   * The backup after a saved route. It follows a camera scan, not a tap, and
+   * browsers may refuse a download that is not from a tap without telling the
+   * page. The page can see whether a tap is still "recent"; when it is not,
+   * or the save fails outright, say so instead of implying a file exists.
+   */
+  async #autoBackupRoute() {
+    const noTap = globalThis.navigator?.userActivation?.isActive === false;
+    const name = await this.backupNow();
+    if (name && noTap) {
+      this.#backupBlocked = true; // requested, but this browser may have dropped it
+      this.#training?.refresh();
+    }
   }
 
   /** On leaving training: whatever has not been saved yet — the venue if it changed, new walk data. */

@@ -350,6 +350,8 @@ export default {
     'train.backup.now': 'Penapena i te tārua inaianei',
     'train.backup.note':
       'Kua tonoa te kōnae tārua: {name}. Mēnā kāore i Ngā Kōnae, Ngā Tikiake, pāwhiri Penapena i te tārua inaianei.',
+    'train.backup.blocked':
+      'Tērā pea kāore i penapena te kōnae tārua (ka aukati pea te pūtirotiro i muri i te taramana). Pāwhiri Penapena i te tārua inaianei.',
     'train.exit': 'Puta',
     'train.next': 'Haere tonu mai i konei',
     'train.done': 'Kua oti',

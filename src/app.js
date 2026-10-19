@@ -1264,6 +1264,11 @@ export async function bootApp(options = {}) {
             hud.showNotice('scan-ok', t('scan.accepted', { name: a?.name ?? scan.anchorId }));
             clearTimeout(scanOkTimer);
             scanOkTimer = setTimeout(() => hud.hideNotice('scan-ok'), 4000);
+            // The training sheet covers the camera and the HUD: say it there too.
+            admin?.training?.showScan({
+              ok: true,
+              text: t('scan.accepted', { name: a?.name ?? scan.anchorId }),
+            });
           }
           showMarkerNote(scan.anchorId);
           return;
@@ -1276,6 +1281,10 @@ export async function bootApp(options = {}) {
             const anchor = admin.registerCode(scan.text);
             nav?.vibrate?.(15);
             cues.play('scan');
+            admin.training?.showScan({
+              ok: true,
+              text: t('scan.accepted', { name: anchor?.name ?? shortCode(scan.text) }),
+            });
             if (anchor) {
               returnToPlanAfterScan = false;
               showView('floorplan', { manual: true });
@@ -1286,6 +1295,10 @@ export async function bootApp(options = {}) {
           if (admin.fixToCode(scan.text)) {
             nav?.vibrate?.(15);
             cues.play('scan');
+            admin.training?.showScan({
+              ok: true,
+              text: t('scan.accepted', { name: shortCode(scan.text) }),
+            });
             return;
           }
         }
@@ -1293,6 +1306,7 @@ export async function bootApp(options = {}) {
         cues.play('problem');
         const key = scan.result === 'wrong-venue' ? 'scan.wrongVenue' : 'scan.unrecognised';
         hud.showNotice('scan', t(key, { text: shortCode(scan.text) }));
+        admin?.training?.showScan({ ok: false, text: t(key, { text: shortCode(scan.text) }) });
       });
     }
   };

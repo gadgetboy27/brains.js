@@ -486,6 +486,22 @@ describe('TrainingScreen', () => {
     });
   });
 
+  describe('scan acknowledgement', () => {
+    it('says a scan was read, good or bad, on the sheet itself, then clears', () => {
+      const { screen, f, advance } = make();
+      screen.open();
+      expect(f('ack').hidden).toBe(true);
+      screen.showScan({ ok: true, text: 'Scanned: Entrance. Position set.' });
+      expect(f('ack').hidden).toBe(false);
+      expect(f('ack').dataset.ok).toBe('true');
+      expect(f('ack').textContent).toBe('Scanned: Entrance. Position set.');
+      screen.showScan({ ok: false, text: 'Not ours' });
+      expect(f('ack').dataset.ok).toBe('false');
+      advance(7000);
+      expect(f('ack').hidden).toBe(true);
+    });
+  });
+
   describe('changing floor', () => {
     const FLOORS = [
       { index: 0, name: 'Ground' },
@@ -638,6 +654,15 @@ describe('TrainingScreen', () => {
       };
       return b;
     }
+
+    it('warns on the result card when the backup may not have saved', () => {
+      const backup = { ...fakeBackup(true, 'brains-demo.venue.json'), blocked: true };
+      const { screen, f, wizard } = make({ backup });
+      screen.open();
+      wizard.go('walk');
+      wizard.go('done');
+      expect(f('backup-note').textContent).toBe(t('train.backup.blocked'));
+    });
 
     it('is absent when the panel offers no backup', () => {
       const { screen, f } = make();
